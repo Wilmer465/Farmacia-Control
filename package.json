@@ -1,0 +1,43 @@
+{
+  "name": "farmacia-control",
+  "version": "1.0.0",
+  "description": "Sistema de gestión y trazabilidad de medicamentos - Fase 1",
+  "main": "electron/main.js",
+  "author": "Wilmer",
+  "scripts": {
+    "dev:react": "vite",
+    "dev:electron": "cross-env NODE_ENV=development electron .",
+    "dev:wait-electron": "wait-on tcp:5173 && npm run dev:electron",
+    "dev": "concurrently -k \"npm:dev:react\" \"npm:dev:wait-electron\"",
+    "build:react": "vite build",
+    "build": "npm run build:react && electron-builder",
+    "migrate": "node backend/database/migrate.js",
+    "seed": "node backend/database/seeds/seed.js",
+    "rebuild:node": "npm rebuild better-sqlite3",
+    "rebuild:electron": "electron-builder install-app-deps",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "bcryptjs": "^2.4.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.2"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "concurrently": "^9.0.1",
+    "cross-env": "^7.0.3",
+    "electron": "^32.1.2",
+    "electron-builder": "^25.0.5",
+    "vite": "^5.4.6",
+    "wait-on": "^8.0.0"
+  },
+  "build": {
+    "appId": "com.farmacia.control",
+    "productName": "Farmacia Control",
+    "files": ["dist/**/*", "electron/**/*", "backend/**/*"],
+    "asarUnpack": ["**/node_modules/better-sqlite3/**"],
+    "win": { "target": "nsis" }
+  }
+}

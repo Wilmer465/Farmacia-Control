@@ -1,0 +1,65 @@
+const { contextBridge, ipcRenderer } = require('electron');
+
+// El renderer (React) NUNCA toca Node ni el backend directamente.
+// Solo puede invocar estos canales explícitos, cada uno mapeado 1:1 a un handler IPC.
+contextBridge.exposeInMainWorld('api', {
+  auth: {
+    login: (credenciales) => ipcRenderer.invoke('auth:login', credenciales),
+    logout: (usuarioSesion) => ipcRenderer.invoke('auth:logout', usuarioSesion)
+  },
+  medicamentos: {
+    listar: () => ipcRenderer.invoke('medicamentos:listar'),
+    crear: (usuarioSesion, data) => ipcRenderer.invoke('medicamentos:crear', usuarioSesion, data),
+    actualizar: (usuarioSesion, id, data) => ipcRenderer.invoke('medicamentos:actualizar', usuarioSesion, id, data)
+  },
+  sedes: {
+    listar: () => ipcRenderer.invoke('sedes:listar')
+  },
+  lotes: {
+    listar: (usuarioSesion, filtros) => ipcRenderer.invoke('lotes:listar', usuarioSesion, filtros),
+    crear: (usuarioSesion, data) => ipcRenderer.invoke('lotes:crear', usuarioSesion, data),
+    ajustar: (usuarioSesion, loteId, data) => ipcRenderer.invoke('lotes:ajustar', usuarioSesion, loteId, data)
+  },
+  ordenes: {
+    listar: (usuarioSesion, filtros) => ipcRenderer.invoke('ordenes:listar', usuarioSesion, filtros),
+    obtener: (usuarioSesion, id) => ipcRenderer.invoke('ordenes:obtener', usuarioSesion, id),
+    crear: (usuarioSesion, data) => ipcRenderer.invoke('ordenes:crear', usuarioSesion, data),
+    cancelar: (usuarioSesion, id, data) => ipcRenderer.invoke('ordenes:cancelar', usuarioSesion, id, data),
+    actualizarDocumentacion: (usuarioSesion, id, data) => ipcRenderer.invoke('ordenes:actualizarDocumentacion', usuarioSesion, id, data)
+  },
+  despachos: {
+    listarPorOrden: (usuarioSesion, ordenId) => ipcRenderer.invoke('despachos:listarPorOrden', usuarioSesion, ordenId),
+    crear: (usuarioSesion, data) => ipcRenderer.invoke('despachos:crear', usuarioSesion, data)
+  },
+  entregas: {
+    listar: (usuarioSesion, filtros) => ipcRenderer.invoke('entregas:listar', usuarioSesion, filtros),
+    crear: (usuarioSesion, data) => ipcRenderer.invoke('entregas:crear', usuarioSesion, data),
+    capturarHuella: () => ipcRenderer.invoke('entregas:capturarHuella')
+  },
+  receptores: {
+    buscar: (documento) => ipcRenderer.invoke('receptores:buscar', documento),
+    listar: () => ipcRenderer.invoke('receptores:listar')
+  },
+  solicitudesEliminacion: {
+    listar: (usuarioSesion, filtros) => ipcRenderer.invoke('solicitudesEliminacion:listar', usuarioSesion, filtros),
+    crear: (usuarioSesion, data) => ipcRenderer.invoke('solicitudesEliminacion:crear', usuarioSesion, data),
+    resolver: (usuarioSesion, id, data) => ipcRenderer.invoke('solicitudesEliminacion:resolver', usuarioSesion, id, data)
+  },
+  auditoria: {
+    listar: (usuarioSesion, filtros) => ipcRenderer.invoke('auditoria:listar', usuarioSesion, filtros)
+  },
+  reportes: {
+    diario: (usuarioSesion, filtros) => ipcRenderer.invoke('reportes:diario', usuarioSesion, filtros),
+    dashboard: (usuarioSesion, filtros) => ipcRenderer.invoke('reportes:dashboard', usuarioSesion, filtros),
+    conciliacion: (usuarioSesion, filtros) => ipcRenderer.invoke('reportes:conciliacion', usuarioSesion, filtros),
+    guardarPdf: (nombreSugerido) => ipcRenderer.invoke('reportes:guardarPdf', nombreSugerido)
+  },
+  backups: {
+    listar: (usuarioSesion) => ipcRenderer.invoke('backups:listar', usuarioSesion),
+    crear: (usuarioSesion) => ipcRenderer.invoke('backups:crear', usuarioSesion),
+    ultimo: (usuarioSesion) => ipcRenderer.invoke('backups:ultimo', usuarioSesion),
+    obtenerConfig: (usuarioSesion) => ipcRenderer.invoke('backups:obtenerConfig', usuarioSesion),
+    guardarConfig: (usuarioSesion, config) => ipcRenderer.invoke('backups:guardarConfig', usuarioSesion, config),
+    restaurar: (usuarioSesion, nombreArchivo) => ipcRenderer.invoke('backups:restaurar', usuarioSesion, nombreArchivo)
+  }
+});

@@ -1,0 +1,8 @@
+{
+  "habilitado": true,
+  "frecuencia": "1_HORA",
+  "hora": "02:00",
+  "dia_semana": 1,
+  "dia_mes": 1,
+  "ultimo_backup_auto": "2026-09-11T20:22:53.423Z"
+}
