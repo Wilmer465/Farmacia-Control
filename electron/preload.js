@@ -38,7 +38,9 @@ contextBridge.exposeInMainWorld('api', {
   },
   receptores: {
     buscar: (documento) => ipcRenderer.invoke('receptores:buscar', documento),
-    listar: () => ipcRenderer.invoke('receptores:listar')
+    listar: () => ipcRenderer.invoke('receptores:listar'),
+    guardar: (data) => ipcRenderer.invoke('receptores:guardar', data),
+    actualizar: (id, data) => ipcRenderer.invoke('receptores:actualizar', id, data)
   },
   solicitudesEliminacion: {
     listar: (usuarioSesion, filtros) => ipcRenderer.invoke('solicitudesEliminacion:listar', usuarioSesion, filtros),

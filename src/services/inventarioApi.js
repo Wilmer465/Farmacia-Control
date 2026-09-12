@@ -30,7 +30,9 @@ export const inventarioApi = {
   },
   receptores: {
     buscar: (documento) => window.api.receptores.buscar(documento),
-    listar: () => window.api.receptores.listar()
+    listar: () => window.api.receptores.listar(),
+    guardar: (data) => window.api.receptores.guardar(data),
+    actualizar: (id, data) => window.api.receptores.actualizar(id, data)
   },
   solicitudesEliminacion: {
     listar: (usuario, filtros) => window.api.solicitudesEliminacion.listar(usuario, filtros),

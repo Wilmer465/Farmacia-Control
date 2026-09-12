@@ -107,6 +107,14 @@ function registerIpcHandlers() {
     return receptorController.listar();
   });
 
+  ipcMain.handle('receptores:guardar', (_event, data) => {
+    return receptorController.guardar(data);
+  });
+
+  ipcMain.handle('receptores:actualizar', (_event, id, data) => {
+    return receptorController.actualizar(id, data);
+  });
+
   ipcMain.handle('solicitudesEliminacion:listar', (_event, usuarioSesion, filtros) => {
     return solicitudEliminacionController.listar(usuarioSesion, filtros);
   });

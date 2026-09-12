@@ -13,8 +13,13 @@ function guardarOActualizar(datos) {
   return receptorRepository.guardarOActualizar(datos);
 }
 
+function actualizar(id, datos) {
+  return receptorRepository.actualizar(id, datos);
+}
+
 module.exports = {
   buscarPorDocumento,
   listar,
-  guardarOActualizar
+  guardarOActualizar,
+  actualizar
 };

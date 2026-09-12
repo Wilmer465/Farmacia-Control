@@ -9,6 +9,7 @@ const Reportes      = lazy(() => import('./Reportes.jsx'));
 const Inventario    = lazy(() => import('./Inventario.jsx'));
 const Ordenes       = lazy(() => import('./Ordenes.jsx'));
 const Entregas      = lazy(() => import('./Entregas.jsx'));
+const Pacientes     = lazy(() => import('./Pacientes.jsx'));
 const Eliminaciones = lazy(() => import('./Eliminaciones.jsx'));
 const Auditoria     = lazy(() => import('./Auditoria.jsx'));
 const Respaldos     = lazy(() => import('./Respaldos.jsx'));
@@ -71,6 +72,14 @@ const ICONS = {
       <circle cx="18.5" cy="18.5" r="2.5" />
     </svg>
   ),
+  pacientes: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  ),
   eliminaciones: (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M3 6h18" />
@@ -116,6 +125,7 @@ const TABS_BASE = [
   { id: 'inventario',    label: 'Inventario',     desc: 'Medicamentos y lotes' },
   { id: 'ordenes',       label: 'Órdenes',        desc: 'Gestión y despachos' },
   { id: 'entregas',      label: 'Entregas',       desc: 'Firmas y recepción' },
+  { id: 'pacientes',     label: 'Documento de Pacientes', desc: 'Prioridad y medicamentos' },
   { id: 'solicitudes',   label: 'Solicitudes',    desc: 'Bajas e intercambios' },
   { id: 'reportes',      label: 'Reportes',       desc: 'Trazabilidad diaria' }
 ];
@@ -343,6 +353,7 @@ export default function AppShell({ usuario, onLogout }) {
             {tab === 'inventario'    && <Inventario    usuario={usuario} sedeActiva={sedeActiva} params={tabParams.inventario} onClearParams={() => limpiarParams('inventario')} />}
             {tab === 'ordenes'       && <Ordenes       usuario={usuario} sedeActiva={sedeActiva} params={tabParams.ordenes} onClearParams={() => limpiarParams('ordenes')} />}
             {tab === 'entregas'      && <Entregas      usuario={usuario} sedeActiva={sedeActiva} params={tabParams.entregas} onClearParams={() => limpiarParams('entregas')} />}
+            {tab === 'pacientes'     && <Pacientes     usuario={usuario} sedeActiva={sedeActiva} />}
             {(tab === 'solicitudes' || tab === 'eliminaciones') && <Eliminaciones usuario={usuario} sedeActiva={sedeActiva} onNavigate={handleNavigate} />}
             {tab === 'auditoria'     && puedeVerAuditoriaYRespaldos && <Auditoria  usuario={usuario} sedeActiva={sedeActiva} />}
             {tab === 'respaldos'     && puedeVerAuditoriaYRespaldos && <Respaldos  usuario={usuario} sedeActiva={sedeActiva} />}

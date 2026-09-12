@@ -1,4 +1,3 @@
-import React, { useRef, useState, useCallback } from 'react';
 import React, { useRef, useState, useCallback, useEffect } from 'react';
 
 export default function SignaturePad({ onChange, valorInicial = null }) {
