@@ -3,10 +3,14 @@ const permisoService = require('./permisoService');
 const { ROLES } = require('../../shared/constants');
 
 function listar(usuarioSesion, filtros = {}) {
-  if (usuarioSesion.rol_nombre !== ROLES.SUPERADMIN) {
-    throw new permisoService.PermisoError('Solo el Superadmin puede consultar la auditoría completa.');
+  if (![ROLES.SUPERADMIN, ROLES.ADMIN].includes(usuarioSesion.rol_nombre)) {
+    throw new permisoService.PermisoError('No tiene permisos para consultar la auditoría.');
   }
-  return auditoriaRepository.findAll(filtros);
+  const sedeEfectiva = permisoService.resolverSedeEfectiva(usuarioSesion, filtros.sedeId);
+  return auditoriaRepository.findAll({
+    ...filtros,
+    sedeId: sedeEfectiva
+  });
 }
 
 module.exports = { listar };

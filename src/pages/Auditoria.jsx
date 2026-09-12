@@ -2,30 +2,54 @@ import React, { useEffect, useState, useCallback, useMemo, useDeferredValue } fr
 import { inventarioApi } from '../services/inventarioApi.js';
 import Pagination from '../components/Pagination.jsx';
 
-export default function Auditoria({ usuario }) {
+export default function Auditoria({ usuario, sedeActiva }) {
+  const esSuperadmin = usuario.rol_nombre === 'SUPERADMIN';
+  const esAdmin = usuario.rol_nombre === 'ADMIN';
+
   const [eventos, setEventos] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState(null);
+  const [sedes, setSedes] = useState([]);
+  const [sedeAuditoria, setSedeAuditoria] = useState(() => sedeActiva ?? 'TODAS');
   const [filtroTexto, setFiltroTexto] = useState('');
   const [pagina, setPagina] = useState(1);
   const [porPagina, setPorPagina] = useState(25);
 
   const deferredTexto = useDeferredValue(filtroTexto);
 
+  useEffect(() => {
+    if (!esSuperadmin) return;
+    let cancelado = false;
+    inventarioApi.sedes.listar().then((res) => {
+      if (!cancelado && res.ok) setSedes(res.data || []);
+    });
+    return () => { cancelado = true; };
+  }, [esSuperadmin]);
+
+  useEffect(() => {
+    if (!esSuperadmin) return;
+    setSedeAuditoria(sedeActiva == null ? 'TODAS' : sedeActiva);
+  }, [esSuperadmin, sedeActiva]);
+
+  const sedeIdConsulta = esSuperadmin
+    ? (sedeAuditoria === 'TODAS' || sedeAuditoria == null ? null : Number(sedeAuditoria))
+    : (sedeActiva || usuario.sede_id);
+
   const cargar = useCallback(async () => {
     setCargando(true);
-    const res = await inventarioApi.auditoria.listar(usuario, {});
+    setError(null);
+    const res = await inventarioApi.auditoria.listar(usuario, { sedeId: sedeIdConsulta });
     if (res.ok) setEventos(res.data);
     else setError(res.error);
     setCargando(false);
-  }, [usuario]);
+  }, [usuario, sedeIdConsulta]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
-  if (usuario.rol_nombre !== 'SUPERADMIN') {
+  if (!esSuperadmin && !esAdmin) {
     return (
       <div className="page-container">
-        <p className="page-scope">Solo el Superadmin puede consultar la auditoría.</p>
+        <p className="page-scope">No tiene permisos para consultar la auditoría.</p>
       </div>
     );
   }
@@ -53,9 +77,29 @@ export default function Auditoria({ usuario }) {
       <div className="page-header-row">
         <div>
           <h2>Auditoría Inmutable de Seguridad</h2>
-          <p className="page-scope">Registro cronológico de eventos en tiempo real (Todas las sedes).</p>
+          <p className="page-scope">
+            {esSuperadmin
+              ? (sedeIdConsulta ? `Eventos de la sede seleccionada (ID ${sedeIdConsulta})` : 'Registro cronológico global (Todas las sedes)')
+              : `Sede: ${usuario.sede_nombre}`}
+          </p>
         </div>
-        <div className="header-actions">
+        <div className="header-actions" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+          {esSuperadmin && (
+            <select
+              className="user-sede-selector"
+              value={sedeAuditoria == null ? 'TODAS' : sedeAuditoria}
+              onChange={(e) => {
+                setSedeAuditoria(e.target.value);
+                setPagina(1);
+              }}
+              style={{ padding: '0.45rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1' }}
+            >
+              <option value="TODAS">Todas las sedes</option>
+              {sedes.map((s) => (
+                <option key={s.id} value={s.id}>{s.nombre}</option>
+              ))}
+            </select>
+          )}
           <button className="btn-refrescar" onClick={cargar} title="Recargar">🔄 Actualizar</button>
         </div>
       </div>

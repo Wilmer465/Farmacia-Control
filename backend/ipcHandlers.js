@@ -9,6 +9,7 @@ const despachoController = require('./controllers/despachoController');
 const entregaController = require('./controllers/entregaController');
 const receptorController = require('./controllers/receptorController');
 const solicitudEliminacionController = require('./controllers/solicitudEliminacionController');
+const solicitudIntercambioController = require('./controllers/solicitudIntercambioController');
 const auditoriaController = require('./controllers/auditoriaController');
 const reporteController = require('./controllers/reporteController');
 const backupController = require('./controllers/backupController');
@@ -118,6 +119,18 @@ function registerIpcHandlers() {
     return solicitudEliminacionController.resolver(usuarioSesion, id, data);
   });
 
+  ipcMain.handle('solicitudesIntercambio:listar', (_event, usuarioSesion, filtros) => {
+    return solicitudIntercambioController.listar(usuarioSesion, filtros);
+  });
+
+  ipcMain.handle('solicitudesIntercambio:crear', (_event, usuarioSesion, data) => {
+    return solicitudIntercambioController.crear(usuarioSesion, data);
+  });
+
+  ipcMain.handle('solicitudesIntercambio:resolver', (_event, usuarioSesion, id, data) => {
+    return solicitudIntercambioController.resolver(usuarioSesion, id, data);
+  });
+
   ipcMain.handle('auditoria:listar', (_event, usuarioSesion, filtros) => {
     return auditoriaController.listar(usuarioSesion, filtros);
   });
@@ -166,16 +179,16 @@ function registerIpcHandlers() {
     }
   });
 
-  ipcMain.handle('backups:listar', (_event, usuarioSesion) => {
-    return backupController.listar(usuarioSesion);
+  ipcMain.handle('backups:listar', (_event, usuarioSesion, filtros) => {
+    return backupController.listar(usuarioSesion, filtros);
   });
 
-  ipcMain.handle('backups:crear', (_event, usuarioSesion) => {
-    return backupController.crear(usuarioSesion);
+  ipcMain.handle('backups:crear', (_event, usuarioSesion, opciones) => {
+    return backupController.crear(usuarioSesion, opciones);
   });
 
-  ipcMain.handle('backups:ultimo', (_event, usuarioSesion) => {
-    return backupController.ultimoRespaldo(usuarioSesion);
+  ipcMain.handle('backups:ultimo', (_event, usuarioSesion, filtros) => {
+    return backupController.ultimoRespaldo(usuarioSesion, filtros);
   });
 
   ipcMain.handle('backups:obtenerConfig', (_event, usuarioSesion) => {

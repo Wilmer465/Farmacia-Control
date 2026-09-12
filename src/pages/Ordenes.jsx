@@ -16,7 +16,7 @@ const ESTADO_CLASE = {
   CANCELADA: 'estado-gris'
 };
 
-export default function Ordenes({ usuario, sedeActiva }) {
+export default function Ordenes({ usuario, sedeActiva, params, onClearParams }) {
   const [ordenes, setOrdenes] = useState([]);
   const [medicamentos, setMedicamentos] = useState([]);
   const [lotes, setLotes] = useState([]);
@@ -40,9 +40,17 @@ export default function Ordenes({ usuario, sedeActiva }) {
   // Estados de interacción
   const [mostrarFormOrden, setMostrarFormOrden] = useState(false);
   const [filtroTexto, setFiltroTexto] = useState('');
-  const [filtroEstado, setFiltroEstado] = useState('TODAS');
+  const [filtroEstado, setFiltroEstado] = useState(() => params?.filtroEstado || 'TODAS');
   const [pagina, setPagina] = useState(1);
   const [porPagina, setPorPagina] = useState(25);
+
+  useEffect(() => {
+    if (params?.filtroEstado) {
+      setFiltroEstado(params.filtroEstado);
+      setPagina(1);
+      onClearParams?.();
+    }
+  }, [params, onClearParams]);
 
   const deferredTexto = useDeferredValue(filtroTexto);
 
@@ -407,7 +415,7 @@ export default function Ordenes({ usuario, sedeActiva }) {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', borderTop: '1px solid #e2e8f0', paddingTop: '1rem' }}>
-              {usuario.rol_nombre === 'SUPERADMIN' && ['PENDIENTE', 'PARCIAL', 'COMPLETADA'].includes(ordenParaVer.estado) && (
+              {['SUPERADMIN', 'ADMIN'].includes(usuario.rol_nombre) && ['PENDIENTE', 'PARCIAL', 'COMPLETADA'].includes(ordenParaVer.estado) && (
                 <button
                   type="button"
                   className="btn-secundario"

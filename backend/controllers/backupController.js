@@ -8,17 +8,17 @@ function manejarError(err) {
   return { ok: false, error: 'Error interno. Intente nuevamente.' };
 }
 
-function listar(usuarioSesion) {
+function listar(usuarioSesion, filtros) {
   try {
-    return { ok: true, data: backupService.listar(usuarioSesion) };
+    return { ok: true, data: backupService.listar(usuarioSesion, filtros) };
   } catch (err) {
     return manejarError(err);
   }
 }
 
-function crear(usuarioSesion) {
+function crear(usuarioSesion, opciones) {
   try {
-    return { ok: true, data: backupService.crear(usuarioSesion) };
+    return { ok: true, data: backupService.crear(usuarioSesion, opciones) };
   } catch (err) {
     return manejarError(err);
   }

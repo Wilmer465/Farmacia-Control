@@ -37,6 +37,11 @@ export const inventarioApi = {
     crear: (usuario, data) => window.api.solicitudesEliminacion.crear(usuario, data),
     resolver: (usuario, id, data) => window.api.solicitudesEliminacion.resolver(usuario, id, data)
   },
+  solicitudesIntercambio: {
+    listar: (usuario, filtros) => window.api.solicitudesIntercambio.listar(usuario, filtros),
+    crear: (usuario, data) => window.api.solicitudesIntercambio.crear(usuario, data),
+    resolver: (usuario, id, data) => window.api.solicitudesIntercambio.resolver(usuario, id, data)
+  },
   auditoria: {
     listar: (usuario, filtros) => window.api.auditoria.listar(usuario, filtros)
   },
@@ -47,9 +52,9 @@ export const inventarioApi = {
     guardarPdf: (nombreSugerido) => window.api.reportes.guardarPdf(nombreSugerido)
   },
   backups: {
-    listar: (usuario) => window.api.backups.listar(usuario),
-    crear: (usuario) => window.api.backups.crear(usuario),
-    ultimo: (usuario) => window.api.backups.ultimo(usuario),
+    listar: (usuario, filtros) => window.api.backups.listar(usuario, filtros),
+    crear: (usuario, opciones) => window.api.backups.crear(usuario, opciones),
+    ultimo: (usuario, filtros) => window.api.backups.ultimo(usuario, filtros),
     obtenerConfig: (usuario) => window.api.backups.obtenerConfig(usuario),
     guardarConfig: (usuario, config) => window.api.backups.guardarConfig(usuario, config),
     restaurar: (usuario, nombreArchivo) => window.api.backups.restaurar(usuario, nombreArchivo)

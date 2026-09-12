@@ -45,6 +45,11 @@ contextBridge.exposeInMainWorld('api', {
     crear: (usuarioSesion, data) => ipcRenderer.invoke('solicitudesEliminacion:crear', usuarioSesion, data),
     resolver: (usuarioSesion, id, data) => ipcRenderer.invoke('solicitudesEliminacion:resolver', usuarioSesion, id, data)
   },
+  solicitudesIntercambio: {
+    listar: (usuarioSesion, filtros) => ipcRenderer.invoke('solicitudesIntercambio:listar', usuarioSesion, filtros),
+    crear: (usuarioSesion, data) => ipcRenderer.invoke('solicitudesIntercambio:crear', usuarioSesion, data),
+    resolver: (usuarioSesion, id, data) => ipcRenderer.invoke('solicitudesIntercambio:resolver', usuarioSesion, id, data)
+  },
   auditoria: {
     listar: (usuarioSesion, filtros) => ipcRenderer.invoke('auditoria:listar', usuarioSesion, filtros)
   },
@@ -55,9 +60,9 @@ contextBridge.exposeInMainWorld('api', {
     guardarPdf: (nombreSugerido) => ipcRenderer.invoke('reportes:guardarPdf', nombreSugerido)
   },
   backups: {
-    listar: (usuarioSesion) => ipcRenderer.invoke('backups:listar', usuarioSesion),
-    crear: (usuarioSesion) => ipcRenderer.invoke('backups:crear', usuarioSesion),
-    ultimo: (usuarioSesion) => ipcRenderer.invoke('backups:ultimo', usuarioSesion),
+    listar: (usuarioSesion, filtros) => ipcRenderer.invoke('backups:listar', usuarioSesion, filtros),
+    crear: (usuarioSesion, opciones) => ipcRenderer.invoke('backups:crear', usuarioSesion, opciones),
+    ultimo: (usuarioSesion, filtros) => ipcRenderer.invoke('backups:ultimo', usuarioSesion, filtros),
     obtenerConfig: (usuarioSesion) => ipcRenderer.invoke('backups:obtenerConfig', usuarioSesion),
     guardarConfig: (usuarioSesion, config) => ipcRenderer.invoke('backups:guardarConfig', usuarioSesion, config),
     restaurar: (usuarioSesion, nombreArchivo) => ipcRenderer.invoke('backups:restaurar', usuarioSesion, nombreArchivo)

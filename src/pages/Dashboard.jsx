@@ -100,34 +100,34 @@ export default function Dashboard({ usuario, sedeActiva, onNavigate }) {
           </div>
         </div>
 
-        <div className="kpi-card card-warning" onClick={() => onNavigate && onNavigate('reportes')}>
+        <div className="kpi-card card-warning" onClick={() => onNavigate && onNavigate('inventario', { filtroEstado: 'PROXIMO_VENCER' })}>
           <div className="kpi-icon-box bg-amber">⏳</div>
           <div className="kpi-info">
             <span className="kpi-label">Próximos a Vencer (90d)</span>
             <span className="kpi-value">{data.proximosAVencer}</span>
-            <span className="kpi-hint text-amber">Atención prioritaria →</span>
+            <span className="kpi-hint text-amber">Ver en inventario →</span>
           </div>
         </div>
 
-        <div className="kpi-card card-danger" onClick={() => onNavigate && onNavigate('reportes')}>
+        <div className="kpi-card card-danger" onClick={() => onNavigate && onNavigate('inventario', { filtroEstado: 'VENCIDO' })}>
           <div className="kpi-icon-box bg-red">🚫</div>
           <div className="kpi-info">
             <span className="kpi-label">Lotes Vencidos</span>
             <span className="kpi-value">{data.vencidos}</span>
-            <span className="kpi-hint text-red">Requieren baja →</span>
+            <span className="kpi-hint text-red">Ver en inventario →</span>
           </div>
         </div>
 
-        <div className="kpi-card" onClick={() => onNavigate && onNavigate('eliminaciones')}>
+        <div className="kpi-card" onClick={() => onNavigate && onNavigate('solicitudes')}>
           <div className="kpi-icon-box bg-purple">📝</div>
           <div className="kpi-info">
             <span className="kpi-label">Solicitudes Pendientes</span>
             <span className="kpi-value">{data.solicitudesPendientes}</span>
-            <span className="kpi-hint">Bajas por autorizar →</span>
+            <span className="kpi-hint">Bajas e intercambios →</span>
           </div>
         </div>
 
-        <div className="kpi-card card-danger" onClick={() => onNavigate && onNavigate('entregas')}>
+        <div className="kpi-card card-danger" onClick={() => onNavigate && onNavigate('entregas', { filtroDoc: 'INCOMPLETA' })}>
           <div className="kpi-icon-box bg-rose">📋</div>
           <div className="kpi-info">
             <span className="kpi-label">Entregas Incompletas</span>
@@ -136,12 +136,12 @@ export default function Dashboard({ usuario, sedeActiva, onNavigate }) {
           </div>
         </div>
 
-        <div className="kpi-card card-action" onClick={() => onNavigate && onNavigate('ordenes')}>
+        <div className="kpi-card card-action" onClick={() => onNavigate && onNavigate('ordenes', { filtroEstado: 'PENDIENTE' })}>
           <div className="kpi-icon-box bg-emerald">📑</div>
           <div className="kpi-info">
-            <span className="kpi-label">Gestión de Órdenes</span>
-            <span className="kpi-value">Pedidos</span>
-            <span className="kpi-hint text-emerald">Despachar o registrar →</span>
+            <span className="kpi-label">Pedidos y Órdenes</span>
+            <span className="kpi-value">{data.ordenesActivas ?? 'Ver'}</span>
+            <span className="kpi-hint text-emerald">Pedidos pendientes →</span>
           </div>
         </div>
       </div>

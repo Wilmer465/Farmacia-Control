@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState, useCallback, useMemo, useDeferredValue } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useDeferredValue } from 'react';
 import { inventarioApi } from '../services/inventarioApi.js';
 import MedicamentoForm from '../components/MedicamentoForm.jsx';
 import LoteForm from '../components/LoteForm.jsx';
@@ -13,7 +13,7 @@ const ESTADO_CLASE = {
   AGOTADO: 'estado-gris'
 };
 
-export default function Inventario({ usuario, sedeActiva }) {
+export default function Inventario({ usuario, sedeActiva, params, onClearParams }) {
   const [medicamentos, setMedicamentos] = useState([]);
   const [lotes, setLotes] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -31,9 +31,17 @@ export default function Inventario({ usuario, sedeActiva }) {
   const [mostrarFormMed, setMostrarFormMed] = useState(false);
   const [mostrarFormLote, setMostrarFormLote] = useState(false);
   const [filtroTexto, setFiltroTexto] = useState('');
-  const [filtroEstado, setFiltroEstado] = useState('TODOS');
+  const [filtroEstado, setFiltroEstado] = useState(() => params?.filtroEstado || 'TODOS');
   const [pagina, setPagina] = useState(1);
   const [porPagina, setPorPagina] = useState(25);
+
+  useEffect(() => {
+    if (params?.filtroEstado) {
+      setFiltroEstado(params.filtroEstado);
+      setPagina(1);
+      onClearParams?.();
+    }
+  }, [params, onClearParams]);
 
   const deferredTexto = useDeferredValue(filtroTexto);
 

@@ -1,9 +1,22 @@
 import React, { useRef, useState, useCallback } from 'react';
 
-export default function SignaturePad({ onChange }) {
+export default function SignaturePad({ onChange, valorInicial = null }) {
   const canvasRef = useRef(null);
   const dibujando = useRef(false);
-  const [tieneTrazo, setTieneTrazo] = useState(false);
+  const [tieneTrazo, setTieneTrazo] = useState(Boolean(valorInicial));
+
+  useEffect(() => {
+    if (!valorInicial || !canvasRef.current) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+    img.onload = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      setTieneTrazo(true);
+    };
+    img.src = valorInicial;
+  }, [valorInicial]);
 
   function coordenadas(e) {
     const rect = canvasRef.current.getBoundingClientRect();

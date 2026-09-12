@@ -1,15 +1,23 @@
-﻿import React, { useEffect, useState, useCallback, useMemo, useDeferredValue } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useDeferredValue } from 'react';
 import { inventarioApi } from '../services/inventarioApi.js';
 import Pagination from '../components/Pagination.jsx';
 import DocumentacionReceptor from '../components/DocumentacionReceptor.jsx';
 
-export default function Entregas({ usuario, sedeActiva }) {
+export default function Entregas({ usuario, sedeActiva, params, onClearParams }) {
   const [ordenes, setOrdenes] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [filtroTexto, setFiltroTexto] = useState('');
-  const [filtroDoc, setFiltroDoc] = useState('TODAS');
+  const [filtroDoc, setFiltroDoc] = useState(() => params?.filtroDoc || 'TODAS');
   const [pagina, setPagina] = useState(1);
   const [porPagina, setPorPagina] = useState(25);
+
+  useEffect(() => {
+    if (params?.filtroDoc) {
+      setFiltroDoc(params.filtroDoc);
+      setPagina(1);
+      onClearParams?.();
+    }
+  }, [params, onClearParams]);
 
   // Modal para ver documentos / firmas
   const [modalVisualizar, setModalVisualizar] = useState(null); // { titulo, tipo: 'IMAGEN'|'PDF', data, nombre }
@@ -249,7 +257,7 @@ export default function Entregas({ usuario, sedeActiva }) {
                     )}
                   </td>
                   <td className="acciones">
-                    {usuario.rol_nombre === 'SUPERADMIN' && ['PENDIENTE', 'PARCIAL', 'COMPLETADA'].includes(o.estado) && (
+                    {['SUPERADMIN', 'ADMIN'].includes(usuario.rol_nombre) && ['PENDIENTE', 'PARCIAL', 'COMPLETADA'].includes(o.estado) && (
                       <button
                         type="button"
                         className="btn-secundario"

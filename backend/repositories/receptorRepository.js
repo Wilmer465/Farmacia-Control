@@ -35,12 +35,11 @@ function guardarOActualizar({
   if (existente) {
     // Si no se envia un nuevo valor para campos opcionales, se conserva el existente
     const telefonoFinal = telefono !== undefined && telefono !== null ? telefono : existente.telefono;
-    const correoFinal = correo_electronico !== undefined && correo_electronico !== null ? correo_electronico : existente.correo_electronico;
-    const firmaFinal = firma_guardada || existente.firma_guardada;
-    const huellaFinal = huella_guardada || existente.huella_guardada;
-    const adjuntoNombreFinal = documento_adjunto_nombre || existente.documento_adjunto_nombre;
-    const adjuntoDataFinal = documento_adjunto_data || existente.documento_adjunto_data;
-    const adjuntoTipoFinal = documento_adjunto_tipo || existente.documento_adjunto_tipo;
+    const firmaFinal = firma_guardada !== undefined ? firma_guardada : existente.firma_guardada;
+    const huellaFinal = huella_guardada !== undefined ? (huella_guardada ? 1 : 0) : existente.huella_guardada;
+    const adjuntoNombreFinal = documento_adjunto_nombre !== undefined ? documento_adjunto_nombre : existente.documento_adjunto_nombre;
+    const adjuntoDataFinal = documento_adjunto_data !== undefined ? documento_adjunto_data : existente.documento_adjunto_data;
+    const adjuntoTipoFinal = documento_adjunto_tipo !== undefined ? documento_adjunto_tipo : existente.documento_adjunto_tipo;
 
     db.prepare(`
       UPDATE receptores SET

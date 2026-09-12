@@ -185,13 +185,14 @@ function actualizarDocumentacion(usuarioSesion, id, {
   firma_data, huella_registrada,
   documento_adjunto_nombre, documento_adjunto_data, documento_adjunto_tipo
 } = {}) {
-  // Modificar la documentación de una orden ya creada requiere autorización del Superadmin.
-  if (usuarioSesion?.rol_nombre !== ROLES.SUPERADMIN) {
-    throw new permisoService.PermisoError('Solo el Superadmin puede modificar la documentación de una orden.');
+  // Modificar la documentación de una orden requiere autorización de Superadmin o Administrador de sede.
+  if (![ROLES.SUPERADMIN, ROLES.ADMIN].includes(usuarioSesion?.rol_nombre)) {
+    throw new permisoService.PermisoError('Solo el Superadmin o el Administrador de sede pueden modificar la documentación de una orden.');
   }
 
   const orden = ordenRepository.findById(id);
   if (!orden) throw new ValidationError('La orden no existe.');
+  permisoService.verificarPerteneceASede(usuarioSesion, orden.sede_id);
 
   // Las órdenes PENDIENTE, PARCIAL o COMPLETADA pueden corregirse; CANCELADA no.
   if (!['PENDIENTE', 'PARCIAL', 'COMPLETADA'].includes(orden.estado)) {

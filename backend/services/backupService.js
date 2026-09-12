@@ -8,9 +8,9 @@ const { AUDIT_ACTIONS, ROLES } = require('../../shared/constants');
 
 class ValidationError extends Error {}
 
-function verificarSuperadmin(usuarioSesion) {
-  if (!usuarioSesion || usuarioSesion.rol_nombre !== ROLES.SUPERADMIN) {
-    throw new permisoService.PermisoError('Solo el Superadmin puede gestionar respaldos.');
+function verificarAccesoRespaldos(usuarioSesion) {
+  if (!usuarioSesion || ![ROLES.SUPERADMIN, ROLES.ADMIN].includes(usuarioSesion.rol_nombre)) {
+    throw new permisoService.PermisoError('Solo el Superadmin y el Administrador de sede pueden gestionar respaldos.');
   }
 }
 
@@ -48,8 +48,10 @@ function validarIntegridad(rutaArchivo) {
   }
 }
 
-function listar(usuarioSesion) {
-  verificarSuperadmin(usuarioSesion);
+function listar(usuarioSesion, filtros = {}) {
+  verificarAccesoRespaldos(usuarioSesion);
+
+  const sedeEfectiva = permisoService.resolverSedeEfectiva(usuarioSesion, filtros?.sedeId);
 
   const dir = carpetaRespaldos();
   const archivos = fs.readdirSync(dir).filter((f) => f.endsWith('.db'));
@@ -57,30 +59,50 @@ function listar(usuarioSesion) {
   const listado = archivos.map((nombre) => {
     const rutaCompleta = path.join(dir, nombre);
     const stats = fs.statSync(rutaCompleta);
+    const match = nombre.match(/_sede_(\d+)/);
+    const sedeIdArchivo = match ? Number(match[1]) : null;
+
     return {
       nombre,
       fecha: stats.mtime.toISOString(),
       tamanoBytes: stats.size,
-      esAutomatico: nombre.includes('_auto_')
+      esAutomatico: nombre.includes('_auto_'),
+      sedeId: sedeIdArchivo
     };
   });
 
-  listado.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
-  return listado;
+  // Filtrado por sede: si se seleccionó una sede, mostrar respaldos de esa sede o globales
+  const filtrados = listado.filter((b) => {
+    if (sedeEfectiva !== null && sedeEfectiva !== undefined) {
+      return b.sedeId === Number(sedeEfectiva) || b.sedeId === null;
+    }
+    return true;
+  });
+
+  filtrados.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+  return filtrados;
 }
 
-function crear(usuarioSesion, esAutomatico = false) {
+function crear(usuarioSesion, opciones = {}) {
+  const esAutomatico = typeof opciones === 'boolean' ? opciones : Boolean(opciones?.esAutomatico);
+  const sedeIdSolicitada = typeof opciones === 'object' ? opciones?.sedeId : null;
+
   if (!esAutomatico) {
-    verificarSuperadmin(usuarioSesion);
+    verificarAccesoRespaldos(usuarioSesion);
   }
 
   const db = getDb();
   db.pragma('wal_checkpoint(FULL)');
 
+  const sedeEfectiva = esAutomatico
+    ? null
+    : permisoService.resolverSedeEfectiva(usuarioSesion, sedeIdSolicitada);
+
   const dbPath = resolveDbPath();
   const dir = carpetaRespaldos();
   const prefijo = esAutomatico ? 'farmacia_backup_auto' : 'farmacia_backup';
-  const nombre = `${prefijo}_${timestampArchivo()}.db`;
+  const tagSede = sedeEfectiva ? `_sede_${sedeEfectiva}` : '_global';
+  const nombre = `${prefijo}${tagSede}_${timestampArchivo()}.db`;
   const destino = path.join(dir, nombre);
 
   fs.copyFileSync(dbPath, destino);
@@ -90,7 +112,7 @@ function crear(usuarioSesion, esAutomatico = false) {
 
   const usuarioId = usuarioSesion?.id || 1;
   const rol = usuarioSesion?.rol_nombre || ROLES.SUPERADMIN;
-  const sedeId = usuarioSesion?.sede_id || null;
+  const sedeId = sedeEfectiva ?? usuarioSesion?.sede_id ?? null;
 
   auditoriaRepository.registrar({
     usuario_id: usuarioId,
@@ -100,7 +122,7 @@ function crear(usuarioSesion, esAutomatico = false) {
     modulo: 'RESPALDOS',
     registro_afectado: nombre,
     resultado: integridad.ok ? 'EXITO' : 'FALLIDO',
-    valores_nuevos: { nombre, integridad: integridad.ok, automatico: esAutomatico }
+    valores_nuevos: { nombre, integridad: integridad.ok, automatico: esAutomatico, sede_id: sedeId }
   });
 
   if (!integridad.ok) {
@@ -112,12 +134,13 @@ function crear(usuarioSesion, esAutomatico = false) {
     fecha: stats.mtime.toISOString(),
     tamanoBytes: stats.size,
     integridad: integridad.ok,
-    esAutomatico
+    esAutomatico,
+    sedeId: sedeEfectiva
   };
 }
 
 function restaurar(usuarioSesion, nombreArchivo) {
-  verificarSuperadmin(usuarioSesion);
+  verificarAccesoRespaldos(usuarioSesion);
 
   if (!nombreArchivo || nombreArchivo.includes('..') || nombreArchivo.includes('/') || nombreArchivo.includes('\\')) {
     throw new ValidationError('Nombre de respaldo inválido.');
@@ -156,8 +179,8 @@ function restaurar(usuarioSesion, nombreArchivo) {
   return { restaurado: true, nombre: nombreArchivo };
 }
 
-function ultimoRespaldo(usuarioSesion) {
-  const listado = listar(usuarioSesion);
+function ultimoRespaldo(usuarioSesion, filtros = {}) {
+  const listado = listar(usuarioSesion, filtros);
   return listado.length > 0 ? listado[0] : null;
 }
 
@@ -175,7 +198,7 @@ const CONFIG_POR_DEFECTO = {
 };
 
 function obtenerConfigAutoBackup(usuarioSesion) {
-  if (usuarioSesion) verificarSuperadmin(usuarioSesion);
+  if (usuarioSesion) verificarAccesoRespaldos(usuarioSesion);
   const ruta = rutaConfigAutoBackup();
   try {
     if (fs.existsSync(ruta)) {
@@ -189,7 +212,7 @@ function obtenerConfigAutoBackup(usuarioSesion) {
 }
 
 function guardarConfigAutoBackup(usuarioSesion, nuevaConfig) {
-  verificarSuperadmin(usuarioSesion);
+  verificarAccesoRespaldos(usuarioSesion);
   const configActual = obtenerConfigAutoBackup();
   const fusion = { ...configActual, ...nuevaConfig };
 

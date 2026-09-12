@@ -26,8 +26,13 @@ const DIAS_SEMANA = [
   { id: 7, label: 'Domingo' }
 ];
 
-export default function Respaldos({ usuario }) {
+export default function Respaldos({ usuario, sedeActiva }) {
+  const esSuperadmin = usuario.rol_nombre === 'SUPERADMIN';
+  const esAdmin = usuario.rol_nombre === 'ADMIN';
+
   const [respaldos, setRespaldos] = useState([]);
+  const [sedes, setSedes] = useState([]);
+  const [sedeRespaldo, setSedeRespaldo] = useState(() => sedeActiva ?? 'TODAS');
   const [error, setError] = useState(null);
   const [creando, setCreando] = useState(false);
   const [restaurando, setRestaurando] = useState(null);
@@ -46,16 +51,35 @@ export default function Respaldos({ usuario }) {
   const [guardandoConfig, setGuardandoConfig] = useState(false);
   const [mensajeConfig, setMensajeConfig] = useState(null);
 
+  useEffect(() => {
+    if (!esSuperadmin) return;
+    let cancelado = false;
+    inventarioApi.sedes.listar().then((res) => {
+      if (!cancelado && res.ok) setSedes(res.data || []);
+    });
+    return () => { cancelado = true; };
+  }, [esSuperadmin]);
+
+  useEffect(() => {
+    if (!esSuperadmin) return;
+    setSedeRespaldo(sedeActiva == null ? 'TODAS' : sedeActiva);
+  }, [esSuperadmin, sedeActiva]);
+
+  const sedeIdConsulta = esSuperadmin
+    ? (sedeRespaldo === 'TODAS' || sedeRespaldo == null ? null : Number(sedeRespaldo))
+    : (sedeActiva || usuario.sede_id);
+
   const cargar = useCallback(async () => {
     setCargando(true);
+    setError(null);
     const [resList, resConfig] = await Promise.all([
-      inventarioApi.backups.listar(usuario),
+      inventarioApi.backups.listar(usuario, { sedeId: sedeIdConsulta }),
       inventarioApi.backups.obtenerConfig(usuario)
     ]);
     if (resList.ok) setRespaldos(resList.data); else setError(resList.error);
     if (resConfig.ok) setConfigAuto(resConfig.data);
     setCargando(false);
-  }, [usuario]);
+  }, [usuario, sedeIdConsulta]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -78,7 +102,7 @@ export default function Respaldos({ usuario }) {
     setCreando(true);
     setError(null);
     setAviso(null);
-    const res = await inventarioApi.backups.crear(usuario);
+    const res = await inventarioApi.backups.crear(usuario, { sedeId: sedeIdConsulta });
     setCreando(false);
     if (!res.ok) { setError(res.error); return; }
     setAviso(`Copia de seguridad manual generada con éxito: ${res.data.nombre}`);
@@ -111,9 +135,26 @@ export default function Respaldos({ usuario }) {
       <div className="page-header-row">
         <div>
           <h2>Copias de Seguridad y Respaldos</h2>
-          <p className="page-scope">Exclusivo Superadmin. Programación automática e historial de copias inmutables.</p>
+          <p className="page-scope">
+            {esSuperadmin
+              ? (sedeIdConsulta ? `Gestión de respaldos para la sede seleccionada` : 'Programación global e historial de copias inmutables')
+              : `Sede asignada: ${usuario.sede_nombre}`}
+          </p>
         </div>
-        <div className="header-actions">
+        <div className="header-actions" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+          {esSuperadmin && (
+            <select
+              className="user-sede-selector"
+              value={sedeRespaldo == null ? 'TODAS' : sedeRespaldo}
+              onChange={(e) => setSedeRespaldo(e.target.value)}
+              style={{ padding: '0.45rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1' }}
+            >
+              <option value="TODAS">Todas las sedes (Global)</option>
+              {sedes.map((s) => (
+                <option key={s.id} value={s.id}>{s.nombre}</option>
+              ))}
+            </select>
+          )}
           <button className="btn-primario" onClick={handleCrear} disabled={creando}>
             {creando ? '⏳ Creando respaldo...' : '💾 Crear Respaldo Ahora'}
           </button>
@@ -254,6 +295,7 @@ export default function Respaldos({ usuario }) {
           <thead>
             <tr>
               <th>Tipo</th>
+              <th>Sede / Alcance</th>
               <th>Archivo de respaldo</th>
               <th>Fecha de creación</th>
               <th>Tamaño</th>
@@ -268,6 +310,15 @@ export default function Respaldos({ usuario }) {
                     <span className="pill estado-verde" style={{ fontSize: '0.74rem' }}>🤖 Automático</span>
                   ) : (
                     <span className="pill estado-gris" style={{ fontSize: '0.74rem' }}>👤 Manual</span>
+                  )}
+                </td>
+                <td>
+                  {r.sedeId ? (
+                    <span className="pill estado-azul" style={{ fontSize: '0.74rem' }}>
+                      📍 {sedes.find(s => s.id === r.sedeId)?.nombre || `Sede #${r.sedeId}`}
+                    </span>
+                  ) : (
+                    <span className="pill estado-gris" style={{ fontSize: '0.74rem' }}>🌐 Global</span>
                   )}
                 </td>
                 <td><strong>{r.nombre}</strong></td>

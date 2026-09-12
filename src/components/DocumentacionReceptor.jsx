@@ -239,28 +239,44 @@ export default function DocumentacionReceptor({ exenta, onChange, valoresInicial
       <>
       {/* FIRMA DIGITAL */}
       <div style={{ marginTop: '1rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem', flexWrap: 'wrap', gap: '0.5rem' }}>
           <label style={{ fontWeight: 600, fontSize: '0.82rem', margin: 0 }}>
             Firma digital del receptor:
           </label>
-          {receptorGuardado?.firma_guardada && (
-            <button
-              type="button"
-              className="filter-chip chip-activo"
-              style={{ padding: '0.2rem 0.5rem', fontSize: '0.74rem' }}
-              onClick={() => {
-                if (usarFirmaGuardada) {
-                  setUsarFirmaGuardada(false);
+          <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+            {firma && (
+              <button
+                type="button"
+                className="filter-chip"
+                style={{ padding: '0.2rem 0.5rem', fontSize: '0.74rem', color: '#dc2626', borderColor: '#fca5a5' }}
+                onClick={() => {
                   setFirma(null);
-                } else {
-                  setUsarFirmaGuardada(true);
-                  setFirma(receptorGuardado.firma_guardada);
-                }
-              }}
-            >
-              {usarFirmaGuardada ? '✏️ Dibujar nueva firma' : '📋 Usar firma guardada'}
-            </button>
-          )}
+                  setUsarFirmaGuardada(false);
+                }}
+                title="Quitar firma actual"
+              >
+                🗑️ Quitar firma
+              </button>
+            )}
+            {receptorGuardado?.firma_guardada && (
+              <button
+                type="button"
+                className="filter-chip chip-activo"
+                style={{ padding: '0.2rem 0.5rem', fontSize: '0.74rem' }}
+                onClick={() => {
+                  if (usarFirmaGuardada) {
+                    setUsarFirmaGuardada(false);
+                    setFirma(null);
+                  } else {
+                    setUsarFirmaGuardada(true);
+                    setFirma(receptorGuardado.firma_guardada);
+                  }
+                }}
+              >
+                {usarFirmaGuardada ? '✏️ Dibujar firma libre' : '📋 Usar firma guardada'}
+              </button>
+            )}
+          </div>
         </div>
 
         {usarFirmaGuardada && receptorGuardado?.firma_guardada ? (
@@ -275,15 +291,28 @@ export default function DocumentacionReceptor({ exenta, onChange, valoresInicial
             </span>
           </div>
         ) : (
-          <SignaturePad onChange={setFirma} />
+          <SignaturePad onChange={setFirma} valorInicial={valoresIniciales?.firma || null} />
         )}
       </div>
 
       {/* HUELLA DACTILAR */}
       <div style={{ marginTop: '1rem' }}>
-        <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: 600, fontSize: '0.82rem' }}>
-          Huella dactilar biométrica:
-        </label>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+          <label style={{ fontWeight: 600, fontSize: '0.82rem', margin: 0 }}>
+            Huella dactilar biométrica:
+          </label>
+          {huella && (
+            <button
+              type="button"
+              className="filter-chip"
+              style={{ padding: '0.2rem 0.5rem', fontSize: '0.74rem', color: '#dc2626', borderColor: '#fca5a5' }}
+              onClick={() => setHuella(false)}
+              title="Remover registro de huella"
+            >
+              ✕ Quitar huella
+            </button>
+          )}
+        </div>
         <div className="huella-row">
           <button
             type="button"
@@ -292,11 +321,11 @@ export default function DocumentacionReceptor({ exenta, onChange, valoresInicial
             onClick={handleCapturarHuella}
             style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
           >
-            {huella ? '✅ Huella registrada ✓' : capturandoHuella ? 'Capturando biométrico...' : '👆 Capturar Huella'}
+            {huella ? '✅ Huella registrada (Clic para recapturar)' : capturandoHuella ? 'Capturando biométrico...' : '👆 Capturar Huella'}
           </button>
           {receptorGuardado?.huella_guardada ? (
             <span style={{ fontSize: '0.78rem', color: '#15803d', fontWeight: 600 }}>
-              ✓ Huella biométrica previamente verificada
+              ✓ Huella biométrica verificada en sistema
             </span>
           ) : (
             <span className="page-scope">Sin lector físico conectado: captura simulada.</span>
