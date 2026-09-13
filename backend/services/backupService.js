@@ -92,7 +92,12 @@ function crear(usuarioSesion, opciones = {}) {
   }
 
   const db = getDb();
-  db.pragma('wal_checkpoint(FULL)');
+  try {
+    db.pragma('wal_checkpoint(FULL)');
+    db.pragma('incremental_vacuum(100)');
+  } catch (errPragma) {
+    console.warn('[backupService] Warning ejecutando pragma de mantenimiento:', errPragma.message);
+  }
 
   const sedeEfectiva = esAutomatico
     ? null

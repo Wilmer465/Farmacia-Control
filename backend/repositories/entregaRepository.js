@@ -11,12 +11,18 @@ function findAll({ sedeId } = {}) {
   const where = condiciones.length ? `WHERE ${condiciones.join(' AND ')}` : '';
 
   return db.prepare(`
-    SELECT e.*, o.numero AS orden_numero, o.tipo_destino AS orden_tipo_destino, o.destino_detalle AS orden_destino_detalle,
+    SELECT e.*,
+           COALESCE(e.firma_data, r.firma_guardada) AS firma_data,
+           COALESCE(e.documento_adjunto_data, r.documento_adjunto_data) AS documento_adjunto_data,
+           COALESCE(e.documento_adjunto_nombre, r.documento_adjunto_nombre) AS documento_adjunto_nombre,
+           COALESCE(e.documento_adjunto_tipo, r.documento_adjunto_tipo) AS documento_adjunto_tipo,
+           o.numero AS orden_numero, o.tipo_destino AS orden_tipo_destino, o.destino_detalle AS orden_destino_detalle,
            s.nombre AS sede_nombre, u.nombre AS entregado_por_nombre
     FROM entregas e
     JOIN ordenes o ON o.id = e.orden_id
     JOIN sedes s ON s.id = e.sede_id
     JOIN usuarios u ON u.id = e.entregado_por
+    LEFT JOIN receptores r ON r.documento = e.receptor_documento
     ${where}
     ORDER BY e.fecha DESC
   `).all(params);

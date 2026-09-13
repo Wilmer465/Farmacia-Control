@@ -1,4 +1,6 @@
-const { getDb } = require('../database/connection');
+const fs = require('fs');
+const path = require('path');
+const { getDb, resolveDbPath } = require('../database/connection');
 const permisoService = require('./permisoService');
 const { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } = require('../config/supabaseConfig');
 const { ROLES } = require('../../shared/constants');
@@ -25,6 +27,32 @@ const SYNC_TABLES = [
   'auditoria'
 ];
 
+function rutaSyncState() {
+  const dbPath = resolveDbPath();
+  return path.join(path.dirname(dbPath), 'cloud_sync_state.json');
+}
+
+function leerSyncState() {
+  try {
+    const ruta = rutaSyncState();
+    if (fs.existsSync(ruta)) {
+      return JSON.parse(fs.readFileSync(ruta, 'utf8'));
+    }
+  } catch (err) {
+    console.warn('[cloudSync] Error leyendo sync_state:', err.message);
+  }
+  return { last_sync_timestamp: null, last_sync_direction: null };
+}
+
+function guardarSyncState(state) {
+  try {
+    const ruta = rutaSyncState();
+    fs.writeFileSync(ruta, JSON.stringify(state, null, 2), 'utf8');
+  } catch (err) {
+    console.warn('[cloudSync] Error guardando sync_state:', err.message);
+  }
+}
+
 function verificarPermiso(usuarioSesion) {
   if (![ROLES.SUPERADMIN, ROLES.ADMIN].includes(usuarioSesion?.rol_nombre)) {
     throw new permisoService.PermisoError('Solo Superadmin o Administrador pueden sincronizar con la nube.');
@@ -40,11 +68,11 @@ function headers(extra = {}) {
   };
 }
 
-async function supabaseRequest(path, options = {}) {
+async function supabaseRequest(pathRequest, options = {}) {
   if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
     throw new CloudSyncError('Falta configurar SUPABASE_URL o SUPABASE_PUBLISHABLE_KEY.');
   }
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${pathRequest}`, {
     ...options,
     headers: headers(options.headers || {})
   });
@@ -57,8 +85,8 @@ async function supabaseRequest(path, options = {}) {
   return text ? JSON.parse(text) : null;
 }
 
-function allRows(db, table) {
-  return db.prepare(`SELECT * FROM "${table}"`).all();
+function getTableColumns(db, table) {
+  return db.prepare(`PRAGMA table_info("${table}")`).all().map((col) => col.name);
 }
 
 function primaryKeyFor(db, table) {
@@ -68,7 +96,7 @@ function primaryKeyFor(db, table) {
 }
 
 function insertOrReplace(db, table, row) {
-  const cols = db.prepare(`PRAGMA table_info("${table}")`).all().map((col) => col.name);
+  const cols = getTableColumns(db, table);
   const names = cols.filter((col) => Object.prototype.hasOwnProperty.call(row, col));
   if (!names.length) return;
   const placeholders = names.map((name) => `@${name}`).join(', ');
@@ -76,12 +104,27 @@ function insertOrReplace(db, table, row) {
   db.prepare(`INSERT OR REPLACE INTO "${table}" (${quoted}) VALUES (${placeholders})`).run(row);
 }
 
-async function subir() {
+// Sincronización incremental (Delta): lee solo registros cambiados si existe last_sync_timestamp
+function getRowsToSync(db, table, lastSyncTimestamp) {
+  const cols = getTableColumns(db, table);
+  const dateCol = ['updated_at', 'fecha_actualizacion', 'fecha', 'created_at', 'fecha_solicitud', 'fecha_creacion'].find((c) => cols.includes(c));
+
+  if (!lastSyncTimestamp || !dateCol) {
+    return db.prepare(`SELECT * FROM "${table}"`).all();
+  }
+
+  return db.prepare(`SELECT * FROM "${table}" WHERE "${dateCol}" >= ?`).all(lastSyncTimestamp);
+}
+
+async function subir(lastSyncTimestamp) {
   const db = getDb();
   const payload = [];
+
   for (const table of SYNC_TABLES) {
     const pk = primaryKeyFor(db, table);
-    for (const row of allRows(db, table)) {
+    const rows = getRowsToSync(db, table, lastSyncTimestamp);
+
+    for (const row of rows) {
       const recordId = String(row[pk]);
       if (!recordId) continue;
       payload.push({
@@ -92,6 +135,8 @@ async function subir() {
       });
     }
   }
+
+  if (payload.length === 0) return 0;
 
   const chunkSize = 300;
   for (let i = 0; i < payload.length; i += chunkSize) {
@@ -104,7 +149,7 @@ async function subir() {
   return payload.length;
 }
 
-async function bajar() {
+async function bajar(lastSyncTimestamp) {
   const db = getDb();
   let recibidos = 0;
 
@@ -123,9 +168,11 @@ async function bajar() {
 
   let offset = 0;
   const limit = 1000;
+  const timeFilter = lastSyncTimestamp ? `&synced_at=gte.${encodeURIComponent(lastSyncTimestamp)}` : '';
+
   while (true) {
     const records = await supabaseRequest(
-      `sync_records?select=table_name,record_id,data&order=table_name.asc&limit=${limit}&offset=${offset}`,
+      `sync_records?select=table_name,record_id,data&order=table_name.asc&limit=${limit}&offset=${offset}${timeFilter}`,
       { method: 'GET' }
     );
     if (!records?.length) break;
@@ -156,19 +203,31 @@ async function sincronizarInterno({ direccion = 'AMBAS' } = {}) {
 
   syncEnCurso = true;
   const inicio = new Date().toISOString();
+  const state = leerSyncState();
+  const lastSync = state.last_sync_timestamp;
   let subidos = 0;
   let bajados = 0;
 
   try {
-    if (direccion === 'SUBIR' || direccion === 'AMBAS') subidos = await subir();
-    if (direccion === 'BAJAR' || direccion === 'AMBAS') bajados = await bajar();
+    if (direccion === 'SUBIR' || direccion === 'AMBAS') subidos = await subir(lastSync);
+    if (direccion === 'BAJAR' || direccion === 'AMBAS') bajados = await bajar(lastSync);
+
+    const fin = new Date().toISOString();
+    guardarSyncState({
+      last_sync_timestamp: inicio,
+      last_sync_direction: direccion,
+      last_run_fin: fin,
+      subidos,
+      bajados
+    });
 
     return {
       inicio,
-      fin: new Date().toISOString(),
+      fin,
       subidos,
       bajados,
-      direccion
+      direccion,
+      esDelta: Boolean(lastSync)
     };
   } finally {
     syncEnCurso = false;
@@ -179,7 +238,7 @@ async function sincronizarAutomaticamente() {
   try {
     const res = await sincronizarInterno({ direccion: 'AMBAS' });
     if (!res.omitida) {
-      console.log(`[cloudSync] Sincronización automática OK: ${res.subidos} subidos, ${res.bajados} bajados.`);
+      console.log(`[cloudSync] Sincronización automática OK (${res.esDelta ? 'Delta' : 'Total'}): ${res.subidos} subidos, ${res.bajados} bajados.`);
     }
   } catch (err) {
     console.warn(`[cloudSync] Sincronización automática omitida: ${err.message}`);

@@ -28,8 +28,8 @@ function resumenPorLote({ sedeId, hasta } = {}) {
   return db.prepare(`
     SELECT
       m.lote_id,
-      SUM(CASE WHEN m.tipo = 'ENTRADA' THEN m.cantidad ELSE 0 END) AS total_entradas,
-      SUM(CASE WHEN m.tipo = 'SALIDA_ORDEN' THEN m.cantidad ELSE 0 END) AS total_salidas,
+      SUM(CASE WHEN m.tipo IN ('ENTRADA', 'TRASLADO_ENTRADA') THEN m.cantidad ELSE 0 END) AS total_entradas,
+      SUM(CASE WHEN m.tipo IN ('SALIDA_ORDEN', 'TRASLADO_SALIDA') THEN m.cantidad ELSE 0 END) AS total_salidas,
       SUM(CASE WHEN m.tipo = 'AJUSTE' THEN m.cantidad ELSE 0 END) AS total_ajustes,
       SUM(CASE WHEN m.tipo = 'AJUSTE' AND m.cantidad < 0 THEN 1 ELSE 0 END) AS ajustes_a_la_baja,
       SUM(m.cantidad) AS stock_esperado

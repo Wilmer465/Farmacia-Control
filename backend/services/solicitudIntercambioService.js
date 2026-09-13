@@ -108,11 +108,17 @@ function resolver(usuarioSesion, id, { decision, observacion }) {
     throw new ValidationError(`Esta solicitud ya fue resuelta anteriormente (${solicitud.estado}).`);
   }
 
-  // Si es ADMIN, debe pertenecer a la sede origen o sede destino
+  // Regla de seguridad multi-sede: Si es ADMIN, debe pertenecer a la sede involucrada.
+  // Además, para aprobar, el usuario que solicita no puede auto-aprobarse salvo que sea Superadmin.
   if (usuarioSesion.rol_nombre === ROLES.ADMIN) {
     if (Number(usuarioSesion.sede_id) !== Number(solicitud.sede_origen_id) &&
-        Number(usuarioSesion.sede_id) !== Number(solicitud.sede_destino_id)) {
+        Number(usuarioSesion.sede_id) !== Number(solicitud.sede_destino_id) &&
+        Number(usuarioSesion.sede_id) !== Number(solicitud.sede_recibe_id)) {
       throw new permisoService.PermisoError('No tiene permisos para resolver solicitudes de sedes ajenas.');
+    }
+
+    if (decision === 'APROBADA' && usuarioSesion.id === solicitud.usuario_solicitante_id) {
+      throw new permisoService.PermisoError('Por seguridad, una solicitud de traslado no puede ser auto-aprobada por el mismo usuario que la solicitó.');
     }
   }
 
@@ -169,7 +175,7 @@ function resolver(usuarioSesion, id, { decision, observacion }) {
       lote_id: loteOrigen.id,
       medicamento_id: loteOrigen.medicamento_id,
       sede_id: solicitud.sede_origen_id,
-      tipo: 'AJUSTE',
+      tipo: 'TRASLADO_SALIDA',
       cantidad: -solicitud.cantidad_total_unidades,
       usuario_id: usuarioSesion.id
     });
@@ -214,7 +220,7 @@ function resolver(usuarioSesion, id, { decision, observacion }) {
       lote_id: loteDestinoId,
       medicamento_id: solicitud.medicamento_id,
       sede_id: solicitud.sede_destino_id,
-      tipo: 'ENTRADA',
+      tipo: 'TRASLADO_ENTRADA',
       cantidad: solicitud.cantidad_total_unidades,
       usuario_id: usuarioSesion.id
     });
@@ -242,7 +248,7 @@ function resolver(usuarioSesion, id, { decision, observacion }) {
         lote_id: loteRecibe.id,
         medicamento_id: loteRecibe.medicamento_id,
         sede_id: loteRecibe.sede_id,
-        tipo: 'AJUSTE',
+        tipo: 'TRASLADO_SALIDA',
         cantidad: -solicitud.cantidad_recibe_total_unidades,
         usuario_id: usuarioSesion.id
       });
@@ -279,7 +285,7 @@ function resolver(usuarioSesion, id, { decision, observacion }) {
         lote_id: loteRecibeDestinoId,
         medicamento_id: loteRecibe.medicamento_id,
         sede_id: solicitud.sede_origen_id,
-        tipo: 'ENTRADA',
+        tipo: 'TRASLADO_ENTRADA',
         cantidad: solicitud.cantidad_recibe_total_unidades,
         usuario_id: usuarioSesion.id
       });
