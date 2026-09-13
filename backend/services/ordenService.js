@@ -11,6 +11,26 @@ class ValidationError extends Error {}
 
 const ESTADOS_CANCELABLES = ['PENDIENTE', 'PARCIAL'];
 
+function medicamentosDesdeDb(valor) {
+  if (!valor) return [];
+  try {
+    const parsed = JSON.parse(valor);
+    return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function mezclarMedicamentosUsuario(existentes, nuevos) {
+  const mapa = new Map();
+  for (const med of [...existentes, ...nuevos]) {
+    const clave = String(med.medicamento_id || med.nombre || med.medicamento_nombre || '').toLowerCase();
+    if (!clave) continue;
+    mapa.set(clave, { ...mapa.get(clave), ...med });
+  }
+  return [...mapa.values()];
+}
+
 function listar(usuarioSesion, { sedeId } = {}) {
   const sedeEfectiva = permisoService.resolverSedeEfectiva(usuarioSesion, sedeId);
   return ordenRepository.findAll({ sedeId: sedeEfectiva });
@@ -88,6 +108,8 @@ function crear(usuarioSesion, {
 
     return {
       medicamento_id: medicamento.id,
+      medicamento_codigo: medicamento.codigo,
+      medicamento_nombre: medicamento.nombre,
       cantidad_cajas_solicitada: cajas,
       cantidad_unidades_solicitada: sueltas,
       cantidad_total_solicitada: total
@@ -97,17 +119,30 @@ function crear(usuarioSesion, {
   // Guardar/actualizar en el catálogo de receptores para reutilización futura (autocompletado).
   if (receptorDocumento && receptorNombre) {
     try {
-      receptorService.guardarOActualizar({
+      const datosReceptor = {
         documento: receptorDocumento,
         nombre: receptorNombre,
         telefono: receptorTelefono,
         correo_electronico: receptorCorreo,
-        firma_guardada: esMunicipioVereda ? null : firma,
-        huella_guardada: esMunicipioVereda ? 0 : (huella ? 1 : 0),
         documento_adjunto_nombre,
         documento_adjunto_data,
         documento_adjunto_tipo
-      });
+      };
+      if (!esMunicipioVereda) {
+        datosReceptor.firma_guardada = firma;
+        datosReceptor.huella_guardada = huella ? 1 : 0;
+      }
+      const receptorExistente = receptorService.buscarPorDocumento(receptorDocumento);
+      const medicamentosExistentes = medicamentosDesdeDb(receptorExistente?.medicamentos_uso);
+      const medicamentosOrden = itemsPreparados.map((item) => ({
+        medicamento_id: item.medicamento_id,
+        medicamento_codigo: item.medicamento_codigo,
+        medicamento_nombre: item.medicamento_nombre,
+        cantidad_unidades: item.cantidad_total_solicitada,
+        origen: 'ORDEN'
+      }));
+      datosReceptor.medicamentos_uso = mezclarMedicamentosUsuario(medicamentosExistentes, medicamentosOrden);
+      receptorService.guardarOActualizar(datosReceptor);
     } catch (err) {
       console.warn('[ordenService] Error no bloqueante al guardar receptor:', err.message);
     }
@@ -116,7 +151,12 @@ function crear(usuarioSesion, {
   const orden = ordenRepository.crearConDetalles({
     sede_id: sedeId,
     usuario_creador_id: usuarioSesion.id,
-    items: itemsPreparados,
+    items: itemsPreparados.map((item) => ({
+      medicamento_id: item.medicamento_id,
+      cantidad_cajas_solicitada: item.cantidad_cajas_solicitada,
+      cantidad_unidades_solicitada: item.cantidad_unidades_solicitada,
+      cantidad_total_solicitada: item.cantidad_total_solicitada
+    })),
     tipo_destino: esMunicipioVereda ? 'MUNICIPIO_VEREDA' : 'LOCAL',
     destino_detalle: destino_detalle ? destino_detalle.trim() : null,
     receptor_nombre: receptorNombre,
@@ -226,17 +266,20 @@ function actualizarDocumentacion(usuarioSesion, id, {
 
   if (receptor_documento && nombre) {
     try {
-      receptorService.guardarOActualizar({
+      const datosReceptor = {
         documento,
         nombre,
         telefono,
         correo_electronico: correo,
-        firma_guardada: esMunicipioVereda ? null : firma,
-        huella_guardada: esMunicipioVereda ? 0 : (huella ? 1 : 0),
         documento_adjunto_nombre,
         documento_adjunto_data,
         documento_adjunto_tipo
-      });
+      };
+      if (!esMunicipioVereda) {
+        datosReceptor.firma_guardada = firma;
+        datosReceptor.huella_guardada = huella ? 1 : 0;
+      }
+      receptorService.guardarOActualizar(datosReceptor);
     } catch (err) {
       console.warn('[ordenService] Error no bloqueante al guardar receptor:', err.message);
     }

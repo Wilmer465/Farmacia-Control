@@ -4,6 +4,7 @@ const { registerIpcHandlers } = require('../backend/ipcHandlers');
 const { runMigrations } = require('../backend/database/migrate');
 const { seed } = require('../backend/database/seeds/seed');
 const { iniciarPlanificadorAutoBackup } = require('../backend/services/backupService');
+const { iniciarPlanificadorCloudSync, detenerPlanificadorCloudSync } = require('../backend/services/cloudSyncService');
 
 const isDev = process.env.NODE_ENV === 'development';
 
@@ -63,6 +64,7 @@ app.whenReady().then(() => {
   seed(); // idempotente: si ya existen roles/sede/superadmin, no hace nada
   registerIpcHandlers();
   iniciarPlanificadorAutoBackup();
+  iniciarPlanificadorCloudSync();
   createWindow();
 
   app.on('activate', () => {
@@ -71,5 +73,6 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  detenerPlanificadorCloudSync();
   if (process.platform !== 'darwin') app.quit();
 });

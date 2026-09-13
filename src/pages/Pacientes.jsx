@@ -217,14 +217,13 @@ export default function Pacientes({ usuario, sedeActiva }) {
   }
 
   const totalAlta = pacientes.filter((p) => p.prioridad === 'ALTA').length;
-  const detalle = seleccionado || pacientesFiltrados[0] || null;
-  const medsDetalle = medicamentosDesdeDb(detalle?.medicamentos_uso);
+  const detalle = seleccionado || null;
 
   return (
     <div className="page-container pacientes-view">
       <div className="page-header-row">
         <div>
-          <h2>Documento de Pacientes</h2>
+          <h2>Documento de Usuarios</h2>
           <p className="page-scope">Registro de personas, prioridad, medicamentos por lote, firma y huella.</p>
         </div>
         <div className="header-actions">
@@ -241,7 +240,7 @@ export default function Pacientes({ usuario, sedeActiva }) {
 
       <div className="filtros-card">
         <div className="search-bar-wrap">
-          <span className="search-icon">Buscar</span>
+          <span className="search-icon">🔍</span>
           <input
             type="text"
             className="search-input"
@@ -249,10 +248,10 @@ export default function Pacientes({ usuario, sedeActiva }) {
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
           />
-          {busqueda && <button type="button" className="btn-clear-search" onClick={() => setBusqueda('')}>x</button>}
+          {busqueda && <button type="button" className="btn-clear-search" onClick={() => setBusqueda('')}>×</button>}
         </div>
         <div className="pills-filter-group">
-          {['TODAS', 'ALTA', 'MEDIA', 'BAJA'].map((prioridad) => (
+          {['TODAS', 'BAJA', 'MEDIA', 'ALTA'].map((prioridad) => (
             <button
               key={prioridad}
               type="button"
@@ -265,8 +264,7 @@ export default function Pacientes({ usuario, sedeActiva }) {
         </div>
       </div>
 
-      <div className="pacientes-layout">
-        <div className="table-responsive pacientes-lista">
+      <div className="table-responsive pacientes-lista">
           <table className="tabla">
             <thead>
               <tr>
@@ -274,6 +272,7 @@ export default function Pacientes({ usuario, sedeActiva }) {
                 <th>Paciente</th>
                 <th>Documento</th>
                 <th>Medicamentos y lotes</th>
+                <th className="text-right">Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -300,74 +299,26 @@ export default function Pacientes({ usuario, sedeActiva }) {
                         <span className="text-muted">Sin medicamentos registrados</span>
                       )}
                     </td>
+                    <td className="tabla-acciones">
+                      <button
+                        type="button"
+                        className="btn-secundario btn-tabla"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          abrirModal(p);
+                        }}
+                      >
+                        Editar
+                      </button>
+                    </td>
                   </tr>
                 );
               })}
               {pacientesFiltrados.length === 0 && (
-                <tr><td colSpan="4" className="tabla-vacia">{cargando ? 'Cargando pacientes...' : 'No se encontraron pacientes.'}</td></tr>
+                <tr><td colSpan="5" className="tabla-vacia">{cargando ? 'Cargando pacientes...' : 'No se encontraron pacientes.'}</td></tr>
               )}
             </tbody>
           </table>
-        </div>
-
-        <aside className="paciente-panel paciente-detalle">
-          {detalle ? (
-            <>
-              <div className="panel-heading paciente-detalle-header">
-                <div>
-                  <h3>{detalle.nombre}</h3>
-                  <span>{detalle.documento}</span>
-                </div>
-                <span className={`pill ${prioridadInfo(detalle.prioridad).className}`}>{prioridadInfo(detalle.prioridad).label}</span>
-              </div>
-
-              <div className="paciente-datos">
-                <div><span>Telefono</span><strong>{detalle.telefono || 'Sin registrar'}</strong></div>
-                <div><span>Correo</span><strong>{detalle.correo_electronico || 'Sin registrar'}</strong></div>
-                <div><span>Huella</span><strong>{detalle.huella_guardada ? 'Registrada' : 'Sin registrar'}</strong></div>
-                <div><span>Firma</span><strong>{detalle.firma_guardada ? 'Registrada' : 'Sin registrar'}</strong></div>
-              </div>
-
-              {detalle.firma_guardada && (
-                <div className="firma-preview">
-                  <span>Firma guardada</span>
-                  <img src={detalle.firma_guardada} alt="Firma guardada del paciente" />
-                </div>
-              )}
-
-              <div>
-                <label>Medicamentos con lote</label>
-                {medsDetalle.length ? (
-                  <div className="medicamentos-detalle-lista">
-                    {medsDetalle.map((med, idx) => (
-                      <div key={`${textoMedicamento(med)}-${idx}`} className="medicamento-detalle-item">
-                        <strong>{textoMedicamento(med)}</strong>
-                        <span>Lote: {med.numero_lote || 'Sin lote'} | Cantidad: {med.cantidad_unidades || 0} unidades</span>
-                        {med.fecha_vencimiento && <span>Vence: {med.fecha_vencimiento}</span>}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="page-scope">No tiene medicamentos asociados.</p>
-                )}
-              </div>
-
-              <div>
-                <label>Notas</label>
-                <p className="paciente-notas">{detalle.notas || 'Sin notas registradas.'}</p>
-              </div>
-
-              <div className="form-actions">
-                <button type="button" className="btn-primario" onClick={() => abrirModal(detalle)}>Editar informacion</button>
-              </div>
-            </>
-          ) : (
-            <div className="panel-heading">
-              <h3>Seleccione un paciente</h3>
-              <span>La informacion completa aparecera aqui.</span>
-            </div>
-          )}
-        </aside>
       </div>
 
       {modalAbierto && (

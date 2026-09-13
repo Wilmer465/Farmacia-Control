@@ -12,6 +12,17 @@ function validarSolicitudIntercambio(data) {
   if (!data.motivo || !data.motivo.trim()) {
     errores.push('Debe indicar el motivo o justificación del envío o intercambio.');
   }
+  if (data.tipo === 'INTERCAMBIO') {
+    if (!data.sede_recibe_id) errores.push('Debe seleccionar la sede que entrega el medicamento a recibir.');
+    if (!data.lote_recibe_id) errores.push('Debe seleccionar el medicamento y lote que se va a recibir.');
+    if (Number(data.sede_recibe_id) === Number(data.sede_origen_id)) {
+      errores.push('La sede que entrega el medicamento recibido debe ser diferente a la sede de origen.');
+    }
+    const totalRecibe = Number(data.cantidad_recibe_total_unidades ?? data.cantidad_total_unidades ?? 0);
+    if (!Number.isFinite(totalRecibe) || totalRecibe <= 0) {
+      errores.push('La cantidad a recibir debe ser mayor a 0.');
+    }
+  }
   return { valido: errores.length === 0, errores };
 }
 

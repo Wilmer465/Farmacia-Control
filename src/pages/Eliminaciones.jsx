@@ -37,6 +37,9 @@ export default function Eliminaciones({ usuario, sedeActiva }) {
     sede_destino_id: '',
     lote_id: '',
     cantidad_total_unidades: '',
+    sede_recibe_id: '',
+    lote_recibe_id: '',
+    cantidad_recibe_total_unidades: '',
     motivo: ''
   });
   const [guardandoIntercambio, setGuardandoIntercambio] = useState(false);
@@ -158,6 +161,9 @@ export default function Eliminaciones({ usuario, sedeActiva }) {
       sede_destino_id: '',
       lote_id: '',
       cantidad_total_unidades: '',
+      sede_recibe_id: '',
+      lote_recibe_id: '',
+      cantidad_recibe_total_unidades: '',
       motivo: ''
     });
     setErrorIntercambio(null);
@@ -188,6 +194,20 @@ export default function Eliminaciones({ usuario, sedeActiva }) {
       setErrorIntercambio('Ingrese el motivo de la transferencia o intercambio.');
       return;
     }
+    if (formIntercambio.tipo === 'INTERCAMBIO') {
+      if (!formIntercambio.sede_recibe_id) {
+        setErrorIntercambio('Seleccione la sede que entrega el medicamento a recibir.');
+        return;
+      }
+      if (!formIntercambio.lote_recibe_id) {
+        setErrorIntercambio('Seleccione el medicamento y lote que se va a recibir.');
+        return;
+      }
+      if (Number(formIntercambio.sede_recibe_id) === Number(formIntercambio.sede_origen_id)) {
+        setErrorIntercambio('La sede que entrega el medicamento recibido debe ser diferente a la sede de origen.');
+        return;
+      }
+    }
 
     setGuardandoIntercambio(true);
     setErrorIntercambio(null);
@@ -198,6 +218,11 @@ export default function Eliminaciones({ usuario, sedeActiva }) {
       sede_destino_id: Number(formIntercambio.sede_destino_id),
       lote_id: Number(formIntercambio.lote_id),
       cantidad_total_unidades: cant,
+      sede_recibe_id: formIntercambio.tipo === 'INTERCAMBIO' ? Number(formIntercambio.sede_recibe_id) : null,
+      lote_recibe_id: formIntercambio.tipo === 'INTERCAMBIO' ? Number(formIntercambio.lote_recibe_id) : null,
+      cantidad_recibe_total_unidades: formIntercambio.tipo === 'INTERCAMBIO'
+        ? Number(formIntercambio.cantidad_recibe_total_unidades || cant)
+        : null,
       motivo: formIntercambio.motivo.trim()
     });
 
@@ -224,6 +249,16 @@ export default function Eliminaciones({ usuario, sedeActiva }) {
     return lotesParaForm.find((l) => Number(l.id) === Number(formIntercambio.lote_id));
   }, [lotesParaForm, formIntercambio.lote_id]);
 
+  const lotesRecibeParaForm = useMemo(() => {
+    const sedeRecibe = Number(formIntercambio.sede_recibe_id);
+    if (!sedeRecibe) return [];
+    return lotesDisponibles.filter((l) => Number(l.sede_id) === sedeRecibe);
+  }, [lotesDisponibles, formIntercambio.sede_recibe_id]);
+
+  const loteRecibeSeleccionadoObj = useMemo(() => {
+    return lotesRecibeParaForm.find((l) => Number(l.id) === Number(formIntercambio.lote_recibe_id));
+  }, [lotesRecibeParaForm, formIntercambio.lote_recibe_id]);
+
   // Lista combinada de solicitudes para vista unificada
   const listaUnificada = useMemo(() => {
     const bajasEstandarizadas = solicitudesBaja.map((s) => ({
@@ -241,6 +276,9 @@ export default function Eliminaciones({ usuario, sedeActiva }) {
       tipo_solicitud: i.tipo, // 'ENVIO' | 'INTERCAMBIO'
       etiqueta_tipo: i.tipo === 'INTERCAMBIO' ? 'Intercambio' : 'Envío Sede',
       cantidad_texto: `${i.cantidad_total_unidades} unidades (${i.cantidad_cajas} cajas)`,
+      recibe_texto: i.tipo === 'INTERCAMBIO' && i.medicamento_recibe_nombre
+        ? `${i.medicamento_recibe_codigo} - ${i.medicamento_recibe_nombre} | ${i.cantidad_recibe_total_unidades || i.cantidad_total_unidades} unidades desde ${i.sede_recibe_nombre}`
+        : null,
       icono: i.tipo === 'INTERCAMBIO' ? '🔄' : '🚚'
     }));
 
@@ -408,6 +446,11 @@ export default function Eliminaciones({ usuario, sedeActiva }) {
                     <td>
                       <div><strong>{s.medicamento_codigo}</strong> - {s.medicamento_nombre}</div>
                       <span className="mono-tag" style={{ fontSize: '0.72rem' }}>Lote: {s.numero_lote}</span>
+                      {s.recibe_texto && (
+                        <div style={{ fontSize: '0.74rem', color: '#047857', fontWeight: 600, marginTop: '0.25rem' }}>
+                          Recibe: {s.recibe_texto}
+                        </div>
+                      )}
                     </td>
                     <td><strong>{s.cantidad_texto}</strong></td>
                     <td>
@@ -614,7 +657,13 @@ export default function Eliminaciones({ usuario, sedeActiva }) {
                   <label>Tipo de operación:</label>
                   <select
                     value={formIntercambio.tipo}
-                    onChange={(e) => setFormIntercambio((prev) => ({ ...prev, tipo: e.target.value }))}
+                    onChange={(e) => setFormIntercambio((prev) => ({
+                      ...prev,
+                      tipo: e.target.value,
+                      sede_recibe_id: '',
+                      lote_recibe_id: '',
+                      cantidad_recibe_total_unidades: ''
+                    }))}
                   >
                     <option value="ENVIO">🚚 Envío de medicamentos (Traspaso regular)</option>
                     <option value="INTERCAMBIO">🔄 Intercambio de medicamentos</option>
@@ -690,6 +739,77 @@ export default function Eliminaciones({ usuario, sedeActiva }) {
                   <div>Stock actual en sede: <strong>{loteSeleccionadoObj.cantidad_total_unidades} unidades</strong> ({loteSeleccionadoObj.cantidad_cajas} cajas)</div>
                   <div>Vence: <strong>{loteSeleccionadoObj.fecha_vencimiento}</strong></div>
                 </div>
+              )}
+
+              {formIntercambio.tipo === 'INTERCAMBIO' && (
+                <>
+                  <div style={{ borderTop: '1px solid #e2e8f0', marginTop: '1rem', paddingTop: '1rem' }}>
+                    <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.95rem', color: '#0f172a' }}>
+                      Medicamento que se va a recibir
+                    </h4>
+                  </div>
+
+                  <div className="form-grid">
+                    <div>
+                      <label>Sede que entrega el medicamento recibido:</label>
+                      <select
+                        value={formIntercambio.sede_recibe_id}
+                        onChange={(e) => setFormIntercambio((prev) => ({ ...prev, sede_recibe_id: e.target.value, lote_recibe_id: '' }))}
+                        required
+                      >
+                        <option value="">Seleccione sede...</option>
+                        {sedes
+                          .filter((s) => Number(s.id) !== Number(formIntercambio.sede_origen_id))
+                          .map((s) => (
+                            <option key={s.id} value={s.id}>{s.nombre}</option>
+                          ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label>Medicamento y lote a recibir:</label>
+                      <select
+                        value={formIntercambio.lote_recibe_id}
+                        onChange={(e) => setFormIntercambio((prev) => ({ ...prev, lote_recibe_id: e.target.value }))}
+                        required
+                      >
+                        <option value="">Seleccione medicamento y lote...</option>
+                        {lotesRecibeParaForm.map((l) => (
+                          <option key={l.id} value={l.id}>
+                            {l.medicamento_nombre} (Lote: {l.numero_lote}) — {l.cantidad_total_unidades} disp.
+                          </option>
+                        ))}
+                      </select>
+                      {lotesRecibeParaForm.length === 0 && formIntercambio.sede_recibe_id && (
+                        <span style={{ fontSize: '0.73rem', color: '#dc2626', display: 'block', marginTop: '0.2rem' }}>
+                          No hay lotes con stock disponibles en esa sede.
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {loteRecibeSeleccionadoObj && (
+                    <div style={{ background: '#f0fdf4', padding: '0.75rem', borderRadius: '8px', border: '1px solid #bbf7d0', marginTop: '0.75rem', fontSize: '0.82rem' }}>
+                      <div>Recibe: <strong>{loteRecibeSeleccionadoObj.medicamento_codigo} - {loteRecibeSeleccionadoObj.medicamento_nombre}</strong></div>
+                      <div>Stock en sede: <strong>{loteRecibeSeleccionadoObj.cantidad_total_unidades} unidades</strong> ({loteRecibeSeleccionadoObj.cantidad_cajas} cajas)</div>
+                      <div>Vence: <strong>{loteRecibeSeleccionadoObj.fecha_vencimiento}</strong></div>
+                    </div>
+                  )}
+
+                  <div className="form-grid" style={{ marginTop: '0.75rem' }}>
+                    <div>
+                      <label>Cantidad de unidades a recibir:</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max={loteRecibeSeleccionadoObj?.cantidad_total_unidades || 99999}
+                        placeholder="Si se deja vacío, usa la misma cantidad enviada"
+                        value={formIntercambio.cantidad_recibe_total_unidades}
+                        onChange={(e) => setFormIntercambio((prev) => ({ ...prev, cantidad_recibe_total_unidades: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+                </>
               )}
 
               <div className="form-grid" style={{ marginTop: '0.75rem' }}>

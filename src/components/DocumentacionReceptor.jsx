@@ -63,11 +63,16 @@ export default function DocumentacionReceptor({ exenta, onChange, valoresInicial
           setNombre((prev) => prev || res.data.nombre || '');
           setTelefono((prev) => prev || res.data.telefono || '');
           setCorreo((prev) => prev || res.data.correo_electronico || '');
-          if (!exenta && res.data.firma_guardada) {
-            setUsarFirmaGuardada(true);
-            setFirma(res.data.firma_guardada);
+          if (!exenta) {
+            if (res.data.firma_guardada) {
+              setUsarFirmaGuardada(true);
+              setFirma(res.data.firma_guardada);
+            } else {
+              setUsarFirmaGuardada(false);
+              setFirma(null);
+            }
+            setHuella(Boolean(res.data.huella_guardada));
           }
-          if (!exenta && res.data.huella_guardada) setHuella(true);
           if (res.data.documento_adjunto_data) {
             setAdjunto((prev) => prev || {
               nombre: res.data.documento_adjunto_nombre || 'Documento_identidad.pdf',
@@ -77,6 +82,11 @@ export default function DocumentacionReceptor({ exenta, onChange, valoresInicial
           }
         } else {
           setReceptorGuardado(null);
+          setUsarFirmaGuardada(false);
+          if (!exenta) {
+            setFirma(null);
+            setHuella(false);
+          }
         }
       } catch (err) {
         console.error('Error buscando receptor:', err);

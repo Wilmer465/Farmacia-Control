@@ -38,6 +38,7 @@ export default function Respaldos({ usuario, sedeActiva }) {
   const [restaurando, setRestaurando] = useState(null);
   const [aviso, setAviso] = useState(null);
   const [cargando, setCargando] = useState(true);
+  const [sincronizando, setSincronizando] = useState(false);
 
   // Configuración de respaldo automático
   const [configAuto, setConfigAuto] = useState({
@@ -130,6 +131,19 @@ export default function Respaldos({ usuario, sedeActiva }) {
     setAviso('Restauración completada con éxito. Los datos han sido actualizados.');
   }
 
+  async function handleSincronizarNube(direccion = 'AMBAS') {
+    setSincronizando(true);
+    setError(null);
+    setAviso(null);
+    const res = await inventarioApi.cloudSync.sincronizar(usuario, { direccion });
+    setSincronizando(false);
+    if (!res.ok) {
+      setError(res.error);
+      return;
+    }
+    setAviso(`Sincronización Supabase lista: ${res.data.subidos} registros subidos, ${res.data.bajados} registros bajados.`);
+  }
+
   return (
     <div className="page-container respaldos-view">
       <div className="page-header-row">
@@ -157,6 +171,9 @@ export default function Respaldos({ usuario, sedeActiva }) {
           )}
           <button className="btn-primario" onClick={handleCrear} disabled={creando}>
             {creando ? '⏳ Creando respaldo...' : '💾 Crear Respaldo Ahora'}
+          </button>
+          <button className="btn-secundario" onClick={() => handleSincronizarNube('AMBAS')} disabled={sincronizando}>
+            {sincronizando ? 'Sincronizando...' : '☁️ Sincronizar Supabase'}
           </button>
         </div>
       </div>

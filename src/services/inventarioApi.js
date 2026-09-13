@@ -60,5 +60,8 @@ export const inventarioApi = {
     obtenerConfig: (usuario) => window.api.backups.obtenerConfig(usuario),
     guardarConfig: (usuario, config) => window.api.backups.guardarConfig(usuario, config),
     restaurar: (usuario, nombreArchivo) => window.api.backups.restaurar(usuario, nombreArchivo)
+  },
+  cloudSync: {
+    sincronizar: (usuario, opciones) => window.api.cloudSync.sincronizar(usuario, opciones)
   }
 };

@@ -68,5 +68,8 @@ contextBridge.exposeInMainWorld('api', {
     obtenerConfig: (usuarioSesion) => ipcRenderer.invoke('backups:obtenerConfig', usuarioSesion),
     guardarConfig: (usuarioSesion, config) => ipcRenderer.invoke('backups:guardarConfig', usuarioSesion, config),
     restaurar: (usuarioSesion, nombreArchivo) => ipcRenderer.invoke('backups:restaurar', usuarioSesion, nombreArchivo)
+  },
+  cloudSync: {
+    sincronizar: (usuarioSesion, opciones) => ipcRenderer.invoke('cloudSync:sincronizar', usuarioSesion, opciones)
   }
 });

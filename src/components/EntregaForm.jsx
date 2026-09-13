@@ -50,10 +50,11 @@ export default function EntregaForm({ despachoId, tipoDestinoInicial, onCompleta
           if (res.data.firma_guardada) {
             setUsarFirmaGuardada(true);
             setFirma(res.data.firma_guardada);
+          } else {
+            setUsarFirmaGuardada(false);
+            setFirma(null);
           }
-          if (res.data.huella_guardada) {
-            setHuella(true);
-          }
+          setHuella(Boolean(res.data.huella_guardada));
           if (res.data.documento_adjunto_data && !docAdjunto) {
             setDocAdjunto({
               nombre: res.data.documento_adjunto_nombre || 'Documento_identidad.pdf',
@@ -63,6 +64,9 @@ export default function EntregaForm({ despachoId, tipoDestinoInicial, onCompleta
           }
         } else {
           setReceptorGuardado(null);
+          setUsarFirmaGuardada(false);
+          setFirma(null);
+          setHuella(false);
         }
       } catch (err) {
         console.error('Error buscando receptor:', err);

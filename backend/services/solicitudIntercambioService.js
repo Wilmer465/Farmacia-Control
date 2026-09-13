@@ -43,9 +43,27 @@ function crear(usuarioSesion, data) {
   const unidadesPorCaja = medicamento?.unidades_por_caja || 1;
   const cajas = Number(data.cantidad_cajas ?? Math.floor(cantidadTotal / unidadesPorCaja));
   const unidadesSueltas = Number(data.cantidad_unidades ?? (cantidadTotal % unidadesPorCaja));
+  const esIntercambio = data.tipo === 'INTERCAMBIO';
+  const loteRecibe = esIntercambio ? loteRepository.findById(data.lote_recibe_id) : null;
+  const cantidadRecibeTotal = esIntercambio
+    ? Number(data.cantidad_recibe_total_unidades ?? cantidadTotal)
+    : null;
+
+  if (esIntercambio) {
+    if (!loteRecibe) throw new ValidationError('El lote del medicamento a recibir no existe.');
+    if (Number(loteRecibe.sede_id) !== Number(data.sede_recibe_id)) {
+      throw new ValidationError('El lote a recibir no pertenece a la sede seleccionada.');
+    }
+    if (Number(loteRecibe.sede_id) === Number(lote.sede_id)) {
+      throw new ValidationError('La sede que entrega el medicamento recibido debe ser diferente a la sede de origen.');
+    }
+    if (cantidadRecibeTotal > loteRecibe.cantidad_total_unidades) {
+      throw new ValidationError(`Stock insuficiente en el lote a recibir (${loteRecibe.cantidad_total_unidades} unidades disponibles, solicitadas: ${cantidadRecibeTotal}).`);
+    }
+  }
 
   const nuevaSolicitud = solicitudRepository.create({
-    tipo: data.tipo === 'INTERCAMBIO' ? 'INTERCAMBIO' : 'ENVIO',
+    tipo: esIntercambio ? 'INTERCAMBIO' : 'ENVIO',
     sede_origen_id: lote.sede_id,
     sede_destino_id: Number(data.sede_destino_id),
     lote_id: lote.id,
@@ -53,6 +71,10 @@ function crear(usuarioSesion, data) {
     cantidad_cajas: cajas,
     cantidad_unidades: unidadesSueltas,
     cantidad_total_unidades: cantidadTotal,
+    sede_recibe_id: esIntercambio ? Number(data.sede_recibe_id) : null,
+    lote_recibe_id: esIntercambio ? loteRecibe.id : null,
+    medicamento_recibe_id: esIntercambio ? loteRecibe.medicamento_id : null,
+    cantidad_recibe_total_unidades: esIntercambio ? cantidadRecibeTotal : null,
     motivo: data.motivo.trim(),
     usuario_solicitante_id: usuarioSesion.id
   });
@@ -197,6 +219,72 @@ function resolver(usuarioSesion, id, { decision, observacion }) {
       usuario_id: usuarioSesion.id
     });
 
+    let loteRecibeDestinoId = null;
+    if (solicitud.tipo === 'INTERCAMBIO') {
+      const loteRecibe = loteRepository.findById(solicitud.lote_recibe_id);
+      if (!loteRecibe) throw new ValidationError('El lote del medicamento a recibir ya no existe.');
+      if (loteRecibe.cantidad_total_unidades < solicitud.cantidad_recibe_total_unidades) {
+        throw new ValidationError(
+          `No hay existencias suficientes del medicamento a recibir (${loteRecibe.cantidad_total_unidades} disponibles, requeridas: ${solicitud.cantidad_recibe_total_unidades}).`
+        );
+      }
+
+      const medicamentoRecibe = medicamentoRepository.findById(solicitud.medicamento_recibe_id);
+      const unidadesPorCajaRecibe = medicamentoRecibe?.unidades_por_caja || 1;
+      const nuevasUnidadesRecibeOrigen = loteRecibe.cantidad_total_unidades - solicitud.cantidad_recibe_total_unidades;
+      loteRepository.updateCantidades(loteRecibe.id, {
+        cantidad_cajas: Math.floor(nuevasUnidadesRecibeOrigen / unidadesPorCajaRecibe),
+        cantidad_unidades_sueltas: nuevasUnidadesRecibeOrigen % unidadesPorCajaRecibe,
+        cantidad_total_unidades: nuevasUnidadesRecibeOrigen
+      });
+
+      movimientoRepository.registrar({
+        lote_id: loteRecibe.id,
+        medicamento_id: loteRecibe.medicamento_id,
+        sede_id: loteRecibe.sede_id,
+        tipo: 'AJUSTE',
+        cantidad: -solicitud.cantidad_recibe_total_unidades,
+        usuario_id: usuarioSesion.id
+      });
+
+      const loteRecibeDestino = loteRepository.findByClaveUnica(
+        loteRecibe.medicamento_id,
+        solicitud.sede_origen_id,
+        loteRecibe.numero_lote
+      );
+
+      if (loteRecibeDestino) {
+        const nuevasUnidades = loteRecibeDestino.cantidad_total_unidades + solicitud.cantidad_recibe_total_unidades;
+        loteRepository.updateCantidades(loteRecibeDestino.id, {
+          cantidad_cajas: Math.floor(nuevasUnidades / unidadesPorCajaRecibe),
+          cantidad_unidades_sueltas: nuevasUnidades % unidadesPorCajaRecibe,
+          cantidad_total_unidades: nuevasUnidades
+        });
+        loteRecibeDestinoId = loteRecibeDestino.id;
+      } else {
+        const nuevoLote = loteRepository.create({
+          medicamento_id: loteRecibe.medicamento_id,
+          sede_id: solicitud.sede_origen_id,
+          numero_lote: loteRecibe.numero_lote,
+          fecha_expedicion: loteRecibe.fecha_expedicion,
+          fecha_vencimiento: loteRecibe.fecha_vencimiento,
+          cantidad_cajas: Math.floor(solicitud.cantidad_recibe_total_unidades / unidadesPorCajaRecibe),
+          cantidad_unidades_sueltas: solicitud.cantidad_recibe_total_unidades % unidadesPorCajaRecibe,
+          cantidad_total_unidades: solicitud.cantidad_recibe_total_unidades
+        });
+        loteRecibeDestinoId = nuevoLote.id;
+      }
+
+      movimientoRepository.registrar({
+        lote_id: loteRecibeDestinoId,
+        medicamento_id: loteRecibe.medicamento_id,
+        sede_id: solicitud.sede_origen_id,
+        tipo: 'ENTRADA',
+        cantidad: solicitud.cantidad_recibe_total_unidades,
+        usuario_id: usuarioSesion.id
+      });
+    }
+
     // 3. Marcar solicitud resuelta
     const resuelta = solicitudRepository.resolver(id, {
       estado: 'APROBADA',
@@ -217,7 +305,9 @@ function resolver(usuarioSesion, id, { decision, observacion }) {
         estado: 'APROBADA',
         lote_origen_id: loteOrigen.id,
         lote_destino_id: loteDestinoId,
-        cantidad_transferida: solicitud.cantidad_total_unidades
+        cantidad_transferida: solicitud.cantidad_total_unidades,
+        lote_recibe_destino_id: loteRecibeDestinoId,
+        cantidad_recibida: solicitud.cantidad_recibe_total_unidades
       }
     });
 

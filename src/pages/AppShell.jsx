@@ -125,7 +125,7 @@ const TABS_BASE = [
   { id: 'inventario',    label: 'Inventario',     desc: 'Medicamentos y lotes' },
   { id: 'ordenes',       label: 'Órdenes',        desc: 'Gestión y despachos' },
   { id: 'entregas',      label: 'Entregas',       desc: 'Firmas y recepción' },
-  { id: 'pacientes',     label: 'Documento de Pacientes', desc: 'Prioridad y medicamentos' },
+  { id: 'pacientes',     label: 'Documento de Usuarios', desc: 'Prioridad y medicamentos' },
   { id: 'solicitudes',   label: 'Solicitudes',    desc: 'Bajas e intercambios' },
   { id: 'reportes',      label: 'Reportes',       desc: 'Trazabilidad diaria' }
 ];

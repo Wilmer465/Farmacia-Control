@@ -961,6 +961,10 @@ body {
   border-bottom: 1px solid #f1f5f9;
 }
 
+.text-right {
+  text-align: right;
+}
+
 .tabla th {
   background: #f8fafc;
   color: #475569;
@@ -1289,6 +1293,16 @@ body {
 
 .pacientes-lista {
   min-width: 0;
+}
+
+.tabla-acciones {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.btn-tabla {
+  padding: 0.38rem 0.8rem;
+  font-size: 0.78rem;
 }
 
 .fila-seleccionada {
