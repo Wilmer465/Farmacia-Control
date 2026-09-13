@@ -1,0 +1,123 @@
+1. Seguridad (Privacidad y Control de Acceso)
+Credenciales de Supabase en código fuente (
+backend/config/supabaseConfig.js
+):
+
+Se encuentran hardcodeadas la URL (https://upghzhklufexfxyldptt.supabase.co) y la Publishable Key (sb_publishable_hvUNAhYyZJDmDx-fSH7iQg_7Qci8syg).
+Aunque es una clave pública/anon, si este repositorio se sube a un control de versiones público (GitHub/GitLab), cualquier persona puede consultar o saturar tu proyecto en Supabase a menos que las políticas RLS estén blindadas.
+Recomendación: Mantenerlas en variables de entorno .env en producción.
+Politica RLS permisiva en Supabase (
+supabase_schema.sql
+):
+
+En supabase_schema.sql, las políticas sync_records_select, sync_records_insert y sync_records_update tienen using (true) y with check (true) para el rol anon.
+Riesgo: Cualquier usuario anónimo con la Publishable Key puede leer, modificar o sobreescribir todos los registros sincronizados de las sedes.
+Recomendación: Requerir autenticación (authenticated) o restringir la subida de sincronización únicamente a usuarios autenticados con tokens JWT de Supabase.
+Sin límite de intentos fallidos en login (
+backend/services/authService.js
+):
+
+
+
+
+
+
+
+
+
+
+
+Fase 1: Optimización de Almacenamiento y Archivos (Para no agotar los 500 MB)
+ 1. Eliminar duplicidad de documentos y firmas en entregas:
+Modificar 
+backend/repositories/entregaRepository.js
+ para que guarde las imágenes pesadas (documento_adjunto_data y firma_data) únicamente en la tabla receptores.
+En entregas, almacenar solo la referencia (receptor_documento o receptor_id).
+Al consultar entregas, obtener la imagen mediante un LEFT JOIN receptores.
+ 2. Compresión automática de fotos de cédula antes de guardar:
+En 
+src/components/EntregaForm.jsx
+, implementar una función ligera en Canvas que redimensione cualquier foto a un máximo de 1280px de ancho y la comprima a formato WebP (calidad 75-80%).
+Esto reduce las fotos de ~3 MB a ~100 KB (un ahorro del 95% de espacio).
+Fase 2: Sincronización Incremental (Para no agotar los 5 GB/mes de ancho de banda)
+ 3. Implementar Delta Sync (Sincronización solo de cambios):
+En 
+backend/services/cloudSyncService.js
+, cambiar la consulta SELECT * FROM table por una consulta incremental:
+SELECT * FROM table WHERE updated_at > last_sync_time.
+Guardar localmente la marca de tiempo de la última sincronización exitosa (last_sync_timestamp).
+Enviar solo las filas modificadas o creadas recientemente en lugar de la base de datos entera cada 5 minutos.
+ 4. Control de sincronización selectiva:
+Evitar sincronizar a la nube datos binarios masivos de forma innecesaria en cada polling de 5 minutos; sincronizar solo registros operacionales (órdenes, lotes, movimientos).
+Fase 3: Blindaje Multi-Sede (5 Sedes sin colisiones de datos)
+ 5. Prevención de colisión de IDs entre sedes:
+Para tablas como ordenes, despachos, movimientos_inventario y auditoria, asegurar que la clave única incluya la sede (ejemplo: MED-ORD-00012 o UUID v4) para evitar que dos sedes que crean registros fuera de línea choquen al sincronizar.
+ 6. Corrección en la aprobación de traslados/intercambios:
+En 
+backend/services/solicitudIntercambioService.js
+, corregir la regla para que el Administrador de una sede solicitante no pueda auto-aprobarse un envío de medicamentos; la aprobación debe requerir al Superadmin o al Administrador de la sede que cede el stock.
+ 7. Ajuste de tipo de movimiento para no desconciliar inventario:
+En los traspasos entre sedes, cambiar el tipo de movimiento de 'AJUSTE' a 'TRASLADO_SALIDA' / 'TRASLADO_ENTRADA', evitando que 
+conciliacionService.js
+ genere falsos positivos de "ajustes irregulares a la baja".
+Fase 4: Seguridad y Protección de Acceso
+ 8. Asegurar credenciales y variables de entorno:
+Mover SUPABASE_URL y SUPABASE_PUBLISHABLE_KEY a un archivo .env o configuración segura en lugar de dejarlas expuestas en el código fuente de 
+backend/config/supabaseConfig.js
+.
+ 9. Reforzar las políticas RLS en Supabase:
+En 
+supabase_schema.sql
+, retirar las políticas públicas de anon con acceso libre (using (true)) y exigir autenticación o validación de cabecera de sede segura.
+ 10. Protección contra fuerza bruta en Login:
+En 
+backend/services/authService.js
+, agregar un bloqueo temporal de 5 a 10 minutos tras 5 intentos fallidos consecutivos de contraseña.
+Fase 5: Mantenimiento y Ciclo de Vida de Datos
+ 11. Política de purga/archivo de auditoría:
+Crear una tarea de mantenimiento programada que archive localmente registros de auditoría de más de 6 meses y libere espacio en Supabase.
+23:21
+
+Aunque se registra en auditoría (LOGIN_FALLIDO), no hay bloqueo de cuenta temporal (rate-limiting o retardo exponencial) tras N intentos fallidos, lo que permite ataques de fuerza bruta locales.
+2. Errores y Bugs Potenciales
+Falso Positivo en la Conciliación de Inventario tras un Intercambio entre Sedes (
+backend/services/solicitudIntercambioService.js
+ vs 
+backend/services/conciliacionService.js
+):
+
+El problema: Al aprobar un traslado o intercambio entre sedes, la salida del lote de origen se registra como tipo: 'AJUSTE' con cantidad negativa (-solicitud.cantidad_total_unidades).
+La consecuencia: En conciliacionService.js, cualquier movimiento de tipo AJUSTE a la baja se considera un "ajuste irregular sin respaldo de orden", marcando el lote y la sede automáticamente como NO_CONCILIADO.
+Solución: Crear un tipo de movimiento formal ('TRASLADO_SALIDA' y 'TRASLADO_ENTRADA') o registrar la referencia a la solicitud de intercambio para que el módulo de conciliación no lo marque falsamente como irregular.
+Resolución de Intercambios por Administradores de Sede (
+backend/services/solicitudIntercambioService.js
+):
+
+Si la sede A solicita medicamentos a la sede B, el Administrador de la sede A (el solicitante) tiene permisos para aprobarse su propia solicitud porque su sede_id coincide con solicitud.sede_origen_id.
+Solución: Una solicitud de envío o intercambio debería ser aprobada por el Superadmin o por el Administrador de la sede que entrega/cede los medicamentos, no por quien la solicitó.
+Restauración de Respaldos y Sincronización en la Nube:
+
+En 
+backend/services/backupService.js
+, al restaurar un respaldo anterior, la base de datos local SQLite se reemplaza con éxito; sin embargo, el servicio de sincronización con Supabase (
+cloudSyncService.js
+) podría sobreescribir la restauración con los datos más recientes que quedaron en la nube (sync_records), o viceversa.
+3. Optimización y Rendimiento
+Estrategia de Sincronización con Supabase (
+backend/services/cloudSyncService.js
+):
+
+Cuello de botella: Cada vez que se ejecuta subir(), el servicio lee todas las filas de todas las tablas (SELECT * FROM table) y las envía en lotes de 300 a Supabase mediante fetch.
+A medida que el historial de auditoria, movimientos_inventario y entregas crezca con miles de registros, esto consumirá alto ancho de banda y tiempo de CPU innecesario.
+Optimización recomendada: Implementar sincronización delta/incremental: subir únicamente los registros cuyo updated_at sea posterior a la última fecha de sincronización exitosa (last_sync_timestamp).
+Almacenamiento de Firmas y Documentos en SQLite:
+
+Las firmas y fotos de cédulas se guardan en Base64 en las tablas receptores y entregas.
+Para bases de datos de alto volumen, guardar archivos binarios grandes en SQLite puede inflar el archivo .db rápidamente.
+Optimización recomendada: En el futuro, guardar imágenes en disco o en un bucket de Storage de Supabase y almacenar solo la ruta o ID en SQLite.
+Resumen
+El proyecto cuenta con una base sólida (transacciones atómicas con SQLite WAL, verificación estricta de roles, preload seguro en Electron sin nodeIntegration). Los puntos prioritarios a corregir son:
+
+Evitar que los intercambios desconcilien el inventario (ajuste a la baja).
+Impedir auto-aprobación de traslados por el mismo solicitante.
+Optimizar la sincronización en la nube para que sea incremental y no suba toda la base de datos cada vez.
