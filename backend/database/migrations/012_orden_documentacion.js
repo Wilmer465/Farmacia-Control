@@ -1,6 +1,6 @@
 // Migración 012: la documentación de quien recibe se captura al GENERAR la orden
-// (no al despachar). Se agrega al catálogo de la propia orden y se elimina el estado
-// PENDIENTE: las órdenes nacen directamente como CONFIRMADA.
+// (no al despachar). Las órdenes nacen directamente en estado PENDIENTE
+// (sin flujo de confirmación previo).
 module.exports = {
   name: '012_orden_documentacion',
   up(db) {
@@ -18,8 +18,8 @@ module.exports = {
     if (!cols.includes('documentacion_completa')) db.exec("ALTER TABLE ordenes ADD COLUMN documentacion_completa INTEGER NOT NULL DEFAULT 0;");
     if (!cols.includes('elementos_faltantes')) db.exec("ALTER TABLE ordenes ADD COLUMN elementos_faltantes TEXT;");
 
-    // Ya no existe el estado PENDIENTE: las órdenes pendientes pasan a CONFIRMADA.
-    db.exec("UPDATE ordenes SET estado = 'CONFIRMADA' WHERE estado = 'PENDIENTE';");
+    // Las órdenes nacen en estado PENDIENTE (sin flujo de confirmación previo).
+    db.exec("UPDATE ordenes SET estado = 'PENDIENTE' WHERE estado = 'CONFIRMADA';");
 
     db.exec("CREATE INDEX IF NOT EXISTS idx_ordenes_documentacion ON ordenes(documentacion_completa);");
   }

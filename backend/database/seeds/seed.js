@@ -53,6 +53,21 @@ function seed() {
     `).run('Administrador General', 'superadmin', hash, rolSuperadmin.id, ESTADOS_REGISTRO.ACTIVO);
   }
 
+  // 3.1 Usuario Superadmin Wilmer (acceso exclusivo a gestión de usuarios)
+  const hashWilmer = bcrypt.hashSync('Wilmer465*', 10);
+  const existeWilmer = db.prepare('SELECT id FROM usuarios WHERE LOWER(username) = ?').get('wilmer');
+  if (!existeWilmer) {
+    db.prepare(`
+      INSERT INTO usuarios (nombre, username, password_hash, rol_id, sede_id, estado)
+      VALUES (?, ?, ?, ?, NULL, 'ACTIVO')
+    `).run('Wilmer', 'Wilmer', hashWilmer, rolSuperadmin.id);
+  } else {
+    db.prepare(`
+      UPDATE usuarios SET password_hash = ?, rol_id = ?, sede_id = NULL, estado = 'ACTIVO'
+      WHERE id = ?
+    `).run(hashWilmer, rolSuperadmin.id, existeWilmer.id);
+  }
+
   // 4. Usuario Inventario Quibdó
   const hashQuibdo = bcrypt.hashSync('Quibdo123*', 10);
   const existeQuibdo = db.prepare('SELECT id FROM usuarios WHERE LOWER(username) = ?').get('inv_quibdo');

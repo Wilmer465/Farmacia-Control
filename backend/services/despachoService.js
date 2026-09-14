@@ -16,7 +16,20 @@ function listarPorOrden(usuarioSesion, ordenId) {
   permisoService.verificarPerteneceASede(usuarioSesion, orden.sede_id);
 
   const despachos = despachoRepository.findAll({ ordenId });
-  return despachos.map((d) => ({ ...d, detalle: despachoRepository.findDetalleByDespachoId(d.id) }));
+  if (despachos.length === 0) return [];
+
+  // Obtener todos los detalles en una sola query (evita N+1)
+  const ids = despachos.map(d => d.id).join(',');
+  const detalles = despachoRepository.findDetalleByDespachoIds(ids);
+  
+  // Agrupar detalles por despacho_id
+  const detallesPorDespacho = {};
+  for (const d of detalles) {
+    if (!detallesPorDespacho[d.despacho_id]) detallesPorDespacho[d.despacho_id] = [];
+    detallesPorDespacho[d.despacho_id].push(d);
+  }
+
+  return despachos.map(d => ({ ...d, detalle: detallesPorDespacho[d.id] || [] }));
 }
 
 function crear(usuarioSesion, { orden_id, items }) {

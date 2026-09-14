@@ -2,7 +2,7 @@ const { getDb } = require('../database/connection');
 const movimientoRepository = require('./movimientoRepository');
 
 // sedeId === null significa "sin filtro" (solo permitido para visión global, ya resuelto en el service).
-function findAll({ sedeId, medicamentoId } = {}) {
+function findAll({ sedeId, medicamentoId, limit, offset } = {}) {
   const db = getDb();
   const condiciones = [];
   const params = {};
@@ -17,6 +17,8 @@ function findAll({ sedeId, medicamentoId } = {}) {
   }
 
   const where = condiciones.length ? `WHERE ${condiciones.join(' AND ')}` : '';
+  const limitClause = limit ? `LIMIT ${limit}` : '';
+  const offsetClause = offset ? `OFFSET ${offset}` : '';
 
   return db.prepare(`
     SELECT l.*, m.nombre AS medicamento_nombre, m.codigo AS medicamento_codigo,
@@ -26,6 +28,7 @@ function findAll({ sedeId, medicamentoId } = {}) {
     JOIN sedes s ON s.id = l.sede_id
     ${where}
     ORDER BY l.fecha_vencimiento ASC
+    ${limitClause} ${offsetClause}
   `).all(params);
 }
 
@@ -63,9 +66,16 @@ function create(data) {
 
 // Crea el lote y registra su movimiento de ENTRADA en una sola transacción —
 // nunca puede existir un lote sin el rastro de entrada que lo originó (sección 30).
+// Incluye verificación de unicidad atómica para evitar race conditions.
 function crearConMovimiento(data, usuarioId) {
   const db = getDb();
   const tx = db.transaction(() => {
+    const existente = db.prepare(`
+      SELECT 1 FROM lotes WHERE medicamento_id = ? AND sede_id = ? AND numero_lote = ?
+    `).get(data.medicamento_id, data.sede_id, data.numero_lote);
+    if (existente) {
+      throw new Error('DUPLICATE_LOTE');
+    }
     const lote = create(data);
     movimientoRepository.registrar({
       lote_id: lote.id,
@@ -116,7 +126,12 @@ function ajustarConMovimiento(id, nuevasCantidades, usuarioId) {
   return tx();
 }
 
+const ESTADOS_MANUALES_VALIDOS = ['DADO_DE_BAJA'];
+
 function setEstadoManual(id, estadoManual) {
+  if (!ESTADOS_MANUALES_VALIDOS.includes(estadoManual)) {
+    throw new Error(`Estado manual inválido: ${estadoManual}. Valores permitidos: ${ESTADOS_MANUALES_VALIDOS.join(', ')}`);
+  }
   const db = getDb();
   db.prepare(`UPDATE lotes SET estado_manual = ?, updated_at = datetime('now') WHERE id = ?`)
     .run(estadoManual, id);

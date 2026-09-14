@@ -1,3 +1,5 @@
+const path = require('path');
+const { getDb } = require(path.join(__dirname, '..', 'database', 'connection'));
 const bcrypt = require('bcryptjs');
 const usuarioRepository = require('../repositories/usuarioRepository');
 const auditoriaRepository = require('../repositories/auditoriaRepository');
@@ -5,44 +7,60 @@ const { AUDIT_ACTIONS, ESTADOS_REGISTRO, ROLES } = require('../../shared/constan
 
 class AuthError extends Error {}
 
-// Protección contra ataques de fuerza bruta en login local:
-// Máximo 5 intentos fallidos dentro de una ventana de 10 minutos.
-const INTENTOS_FALLIDOS = new Map();
 const MAX_INTENTOS = 5;
-const TIEMPO_BLOQUEO_MS = 10 * 60 * 1000;
+const TIEMPO_BLOQUEO_MS = 10 * 60 * 1000; // 10 minutos
+
+function getDbConnection() {
+  return getDb();
+}
 
 function verificarBloqueo(username) {
+  const db = getDbConnection();
   const clave = username.toLowerCase().trim();
-  const registro = INTENTOS_FALLIDOS.get(clave);
-  if (!registro) return;
+  const row = db.prepare('SELECT * FROM rate_limit_login WHERE username = ?').get(clave);
+  if (!row) return;
 
   const ahora = Date.now();
-  if (ahora - registro.primerIntento > TIEMPO_BLOQUEO_MS) {
-    INTENTOS_FALLIDOS.delete(clave);
+  const primerIntento = new Date(row.primer_intento).getTime();
+  if (ahora - primerIntento > TIEMPO_BLOQUEO_MS) {
+    db.prepare('DELETE FROM rate_limit_login WHERE username = ?').run(clave);
     return;
   }
 
-  if (registro.conteo >= MAX_INTENTOS) {
-    const minutosRestantes = Math.ceil((TIEMPO_BLOQUEO_MS - (ahora - registro.primerIntento)) / 60000);
+  if (row.intento_count >= MAX_INTENTOS) {
+    const bloqueadoHasta = row.bloqueado_hasta ? new Date(row.bloqueado_hasta).getTime() : (primerIntento + TIEMPO_BLOQUEO_MS);
+    const minutosRestantes = Math.ceil((bloqueadoHasta - ahora) / 60000);
     throw new AuthError(`Demasiados intentos fallidos. Por seguridad, la cuenta está temporalmente bloqueada por ${minutosRestantes} minuto(s).`);
   }
 }
 
 function registrarFallo(username) {
+  const db = getDbConnection();
   const clave = username.toLowerCase().trim();
-  const ahora = Date.now();
-  const registro = INTENTOS_FALLIDOS.get(clave);
+  const ahora = new Date().toISOString();
+  const row = db.prepare('SELECT * FROM rate_limit_login WHERE username = ?').get(clave);
 
-  if (!registro || (ahora - registro.primerIntento > TIEMPO_BLOQUEO_MS)) {
-    INTENTOS_FALLIDOS.set(clave, { conteo: 1, primerIntento: ahora });
+  if (!row) {
+    db.prepare('INSERT INTO rate_limit_login (username, intento_count, primer_intento, ultimo_intento) VALUES (?, 1, ?, ?)')
+      .run(clave, ahora, ahora);
   } else {
-    registro.conteo += 1;
+    const primerIntento = new Date(row.primer_intento).getTime();
+    const ahoraMs = Date.now();
+    if (ahoraMs - primerIntento > TIEMPO_BLOQUEO_MS) {
+      // Ventana expirada, reiniciar contador
+      db.prepare('UPDATE rate_limit_login SET intento_count = 1, primer_intento = ?, ultimo_intento = ? WHERE username = ?')
+        .run(ahora, ahora, clave);
+    } else {
+      db.prepare('UPDATE rate_limit_login SET intento_count = intento_count + 1, ultimo_intento = ? WHERE username = ?')
+        .run(ahora, clave);
+    }
   }
 }
 
 function limpiarFallo(username) {
+  const db = getDbConnection();
   const clave = username.toLowerCase().trim();
-  INTENTOS_FALLIDOS.delete(clave);
+  db.prepare('DELETE FROM rate_limit_login WHERE username = ?').run(clave);
 }
 
 function login(username, password) {

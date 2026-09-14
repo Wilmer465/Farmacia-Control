@@ -37,12 +37,16 @@ function createWindow() {
     win.show();
   });
 
-  // CSP básica vía headers
+  // CSP estricta en producción; en desarrollo permite 'unsafe-inline' y 'unsafe-eval' para HMR de Vite
+  const csp = isDev
+    ? "default-src 'self' 'unsafe-inline' data:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' ws: http://localhost:5173; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+    : "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
+
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     callback({
       responseHeaders: {
         ...details.responseHeaders,
-        'Content-Security-Policy': ["default-src 'self' 'unsafe-inline' data:"]
+        'Content-Security-Policy': [csp]
       }
     });
   });
@@ -69,6 +73,15 @@ app.whenReady().then(() => {
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  });
+  
+  // Prevenir cierre inesperado del proceso
+  process.on('uncaughtException', (err) => {
+    console.error('[main] Uncaught exception:', err);
+  });
+  
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error('[main] Unhandled rejection at:', promise, 'reason:', reason);
   });
 });
 

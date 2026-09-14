@@ -49,6 +49,20 @@ function findDetalleByDespachoId(despachoId) {
   `).all(despachoId);
 }
 
+// Obtiene detalles de múltiples despachos en una sola query (evita N+1)
+function findDetalleByDespachoIds(despachoIds) {
+  if (!despachoIds || despachoIds.length === 0) return [];
+  const db = getDb();
+  const placeholders = despachoIds.map(() => '?').join(',');
+  return db.prepare(`
+    SELECT dd.*, m.nombre AS medicamento_nombre, m.codigo AS medicamento_codigo, l.numero_lote
+    FROM despacho_detalle dd
+    JOIN medicamentos m ON m.id = dd.medicamento_id
+    JOIN lotes l ON l.id = dd.lote_id
+    WHERE dd.despacho_id IN (${placeholders})
+  `).all(...despachoIds);
+}
+
 // Ejecuta TODO el despacho en una única transacción SQLite:
 // 1) valida (en frío, dentro de la tx, para evitar condiciones de carrera) que cada
 //    lote tenga stock suficiente y no esté vencido/bloqueado,
@@ -96,7 +110,7 @@ function crearConDetalles({ orden_id, sede_id, despachado_por, items }) {
       if (lote.sede_id !== sede_id) {
         throw new Error(`El lote ${lote.numero_lote} pertenece a otra sede y no puede despacharse en esta orden.`);
       }
-      if (lote.estado_manual === 'DADO_DE_BAJA' || lote.estado_manual === 'BLOQUEADO') {
+      if (lote.estado_manual === 'DADO_DE_BAJA') {
         throw new Error(`El lote ${lote.numero_lote} fue dado de baja y no puede despacharse.`);
       }
 

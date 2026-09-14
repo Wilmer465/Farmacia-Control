@@ -97,11 +97,6 @@ function crear(usuarioSesion, {
     const medicamento = medicamentoRepository.findById(item.medicamento_id);
     if (!medicamento) throw new ValidationError(`El medicamento seleccionado no existe.`);
 
-    // Seguridad: el medicamento debe tener lotes con stock en la sede del usuario.
-    if (!loteRepository.existeEnSede(medicamento.id, sedeId)) {
-      throw new ValidationError(`El medicamento "${medicamento.nombre}" no tiene stock disponible en su sede.`);
-    }
-
     const total = Number(item.cantidad_unidades_solicitada ?? item.cantidad_total_solicitada ?? (Number(item.cantidad_cajas_solicitada || 0) * (medicamento.unidades_por_caja || 1) + Number(item.cantidad_unidades_solicitada || 0)));
     const cajas = 0;
     const sueltas = total;
@@ -148,29 +143,39 @@ function crear(usuarioSesion, {
     }
   }
 
-  const orden = ordenRepository.crearConDetalles({
-    sede_id: sedeId,
-    usuario_creador_id: usuarioSesion.id,
-    items: itemsPreparados.map((item) => ({
-      medicamento_id: item.medicamento_id,
-      cantidad_cajas_solicitada: item.cantidad_cajas_solicitada,
-      cantidad_unidades_solicitada: item.cantidad_unidades_solicitada,
-      cantidad_total_solicitada: item.cantidad_total_solicitada
-    })),
-    tipo_destino: esMunicipioVereda ? 'MUNICIPIO_VEREDA' : 'LOCAL',
-    destino_detalle: destino_detalle ? destino_detalle.trim() : null,
-    receptor_nombre: receptorNombre,
-    receptor_documento: receptorDocumento,
-    receptor_telefono: receptorTelefono,
-    receptor_correo: receptorCorreo,
-    firma_data: esMunicipioVereda ? null : firma,
-    huella_registrada: esMunicipioVereda ? 0 : (huella ? 1 : 0),
-    documento_adjunto_nombre,
-    documento_adjunto_data,
-    documento_adjunto_tipo,
-    documentacion_completa: documentacionCompleta ? 1 : 0,
-    elementos_faltantes: elementosFaltantes.length ? JSON.stringify(elementosFaltantes) : null
-  });
+  let orden;
+  try {
+    orden = ordenRepository.crearConDetalles({
+      sede_id: sedeId,
+      usuario_creador_id: usuarioSesion.id,
+      items: itemsPreparados.map((item) => ({
+        medicamento_id: item.medicamento_id,
+        cantidad_cajas_solicitada: item.cantidad_cajas_solicitada,
+        cantidad_unidades_solicitada: item.cantidad_unidades_solicitada,
+        cantidad_total_solicitada: item.cantidad_total_solicitada
+      })),
+      tipo_destino: esMunicipioVereda ? 'MUNICIPIO_VEREDA' : 'LOCAL',
+      destino_detalle: destino_detalle ? destino_detalle.trim() : null,
+      receptor_nombre: receptorNombre,
+      receptor_documento: receptorDocumento,
+      receptor_telefono: receptorTelefono,
+      receptor_correo: receptorCorreo,
+      firma_data: esMunicipioVereda ? null : firma,
+      huella_registrada: esMunicipioVereda ? 0 : (huella ? 1 : 0),
+      documento_adjunto_nombre,
+      documento_adjunto_data,
+      documento_adjunto_tipo,
+      documentacion_completa: documentacionCompleta ? 1 : 0,
+      elementos_faltantes: elementosFaltantes.length ? JSON.stringify(elementosFaltantes) : null
+    });
+  } catch (err) {
+    if (err.message.startsWith('STOCK_INSUFICIENTE:')) {
+      const medId = err.message.split(':')[1];
+      const med = medicamentoRepository.findById(Number(medId));
+      throw new ValidationError(`El medicamento "${med?.nombre || medId}" no tiene stock disponible en su sede.`);
+    }
+    throw err;
+  }
 
   auditoriaRepository.registrar({
     usuario_id: usuarioSesion.id,

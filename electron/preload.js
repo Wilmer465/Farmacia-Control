@@ -71,5 +71,12 @@ contextBridge.exposeInMainWorld('api', {
   },
   cloudSync: {
     sincronizar: (usuarioSesion, opciones) => ipcRenderer.invoke('cloudSync:sincronizar', usuarioSesion, opciones)
+  },
+  usuarios: {
+    listar: (usuarioSesion) => ipcRenderer.invoke('usuarios:listar', usuarioSesion),
+    listarRoles: (usuarioSesion) => ipcRenderer.invoke('usuarios:listarRoles', usuarioSesion),
+    crear: (usuarioSesion, data) => ipcRenderer.invoke('usuarios:crear', usuarioSesion, data),
+    actualizar: (usuarioSesion, id, data) => ipcRenderer.invoke('usuarios:actualizar', usuarioSesion, id, data),
+    cambiarEstado: (usuarioSesion, id, estado) => ipcRenderer.invoke('usuarios:cambiarEstado', usuarioSesion, id, estado)
   }
 });

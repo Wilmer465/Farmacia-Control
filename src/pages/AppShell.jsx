@@ -13,6 +13,7 @@ const Pacientes     = lazy(() => import('./Pacientes.jsx'));
 const Eliminaciones = lazy(() => import('./Eliminaciones.jsx'));
 const Auditoria     = lazy(() => import('./Auditoria.jsx'));
 const Respaldos     = lazy(() => import('./Respaldos.jsx'));
+const Usuarios      = lazy(() => import('./Usuarios.jsx'));
 
 // ─── Spinner de carga mientras el módulo se descarga ──────────────────────
 const CargandoModulo = memo(function CargandoModulo() {
@@ -111,6 +112,14 @@ const ICONS = {
       <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
     </svg>
   ),
+  usuarios: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  ),
   logout: (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
@@ -199,14 +208,22 @@ export default function AppShell({ usuario, onLogout }) {
     : usuario.sede_nombre;
 
   const puedeVerAuditoriaYRespaldos = ['SUPERADMIN', 'ADMIN'].includes(usuario.rol_nombre);
+  const esWilmer = esSuperadmin && String(usuario.username || '').toLowerCase().trim() === 'wilmer';
 
-  const tabs = puedeVerAuditoriaYRespaldos
+  let tabs = puedeVerAuditoriaYRespaldos
     ? [
         ...TABS_BASE,
         { id: 'auditoria', label: 'Auditoría',  desc: 'Seguridad inmutable' },
         { id: 'respaldos', label: 'Respaldos',   desc: 'Copias de seguridad' }
       ]
     : TABS_BASE;
+
+  if (esWilmer) {
+    tabs = [
+      ...tabs,
+      { id: 'usuarios', label: 'Usuarios', desc: 'Control de accesos' }
+    ];
+  }
 
   const tabActual = tabs.find((t) => t.id === tab);
 
@@ -357,6 +374,7 @@ export default function AppShell({ usuario, onLogout }) {
             {(tab === 'solicitudes' || tab === 'eliminaciones') && <Eliminaciones usuario={usuario} sedeActiva={sedeActiva} onNavigate={handleNavigate} />}
             {tab === 'auditoria'     && puedeVerAuditoriaYRespaldos && <Auditoria  usuario={usuario} sedeActiva={sedeActiva} />}
             {tab === 'respaldos'     && puedeVerAuditoriaYRespaldos && <Respaldos  usuario={usuario} sedeActiva={sedeActiva} />}
+            {tab === 'usuarios'      && esWilmer && <Usuarios usuario={usuario} />}
           </Suspense>
         </main>
       </div>

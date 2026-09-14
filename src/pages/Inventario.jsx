@@ -51,12 +51,12 @@ export default function Inventario({ usuario, sedeActiva, params, onClearParams 
     setCargando(true);
     const [medRes, loteRes] = await Promise.all([
       inventarioApi.medicamentos.listar(),
-      inventarioApi.lotes.listar(usuario, { sedeId: sedeActiva })
+      inventarioApi.lotes.listar(usuario, { sedeId: sedeActiva, limit: porPagina, offset: (pagina - 1) * porPagina })
     ]);
     if (medRes.ok) setMedicamentos(medRes.data);
     if (loteRes.ok) setLotes(loteRes.data);
     setCargando(false);
-  }, [usuario, sedeActiva]);
+  }, [usuario, sedeActiva, pagina, porPagina]);
 
   useEffect(() => { cargar(); }, [cargar]);
 

@@ -115,20 +115,23 @@ function crear(usuarioSesion, opciones = {}) {
   const integridad = validarIntegridad(destino);
   const stats = fs.statSync(destino);
 
-  const usuarioId = usuarioSesion?.id || 1;
-  const rol = usuarioSesion?.rol_nombre || ROLES.SUPERADMIN;
-  const sedeId = sedeEfectiva ?? usuarioSesion?.sede_id ?? null;
+  // Para respaldos automáticos, no hay usuario real; no registrar en auditoría para evitar FK constraint
+  if (!esAutomatico && usuarioSesion) {
+    const usuarioId = usuarioSesion.id;
+    const rol = usuarioSesion.rol_nombre;
+    const sedeId = sedeEfectiva ?? usuarioSesion.sede_id ?? null;
 
-  auditoriaRepository.registrar({
-    usuario_id: usuarioId,
-    rol: rol,
-    sede_id: sedeId,
-    accion: AUDIT_ACTIONS.CREAR_RESPALDO,
-    modulo: 'RESPALDOS',
-    registro_afectado: nombre,
-    resultado: integridad.ok ? 'EXITO' : 'FALLIDO',
-    valores_nuevos: { nombre, integridad: integridad.ok, automatico: esAutomatico, sede_id: sedeId }
-  });
+    auditoriaRepository.registrar({
+      usuario_id: usuarioId,
+      rol: rol,
+      sede_id: sedeId,
+      accion: AUDIT_ACTIONS.CREAR_RESPALDO,
+      modulo: 'RESPALDOS',
+      registro_afectado: nombre,
+      resultado: integridad.ok ? 'EXITO' : 'FALLIDO',
+      valores_nuevos: { nombre, integridad: integridad.ok, automatico: esAutomatico, sede_id: sedeId }
+    });
+  }
 
   if (!integridad.ok) {
     throw new ValidationError('El respaldo se creó pero falló la validación de integridad.');
@@ -147,12 +150,24 @@ function crear(usuarioSesion, opciones = {}) {
 function restaurar(usuarioSesion, nombreArchivo) {
   verificarAccesoRespaldos(usuarioSesion);
 
-  if (!nombreArchivo || nombreArchivo.includes('..') || nombreArchivo.includes('/') || nombreArchivo.includes('\\')) {
+  if (!nombreArchivo || typeof nombreArchivo !== 'string') {
+    throw new ValidationError('Nombre de respaldo inválido.');
+  }
+  const nombreLimpio = path.basename(nombreArchivo);
+  if (nombreLimpio !== nombreArchivo || nombreLimpio.includes('..') || nombreLimpio.length === 0) {
     throw new ValidationError('Nombre de respaldo inválido.');
   }
 
   const dir = carpetaRespaldos();
-  const rutaRespaldo = path.join(dir, nombreArchivo);
+  const rutaRespaldo = path.join(dir, nombreLimpio);
+
+  // Validación adicional: asegurar que la ruta resuelta esté DENTRO del directorio de respaldos
+  const dirResuelto = path.resolve(dir);
+  const rutaResuelta = path.resolve(rutaRespaldo);
+  if (!rutaResuelta.startsWith(dirResuelto + path.sep) && rutaResuelta !== dirResuelto) {
+    throw new ValidationError('Nombre de respaldo inválido (intento de path traversal).');
+  }
+
   if (!fs.existsSync(rutaRespaldo)) {
     throw new ValidationError('El respaldo indicado no existe.');
   }

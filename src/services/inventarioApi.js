@@ -63,5 +63,12 @@ export const inventarioApi = {
   },
   cloudSync: {
     sincronizar: (usuario, opciones) => window.api.cloudSync.sincronizar(usuario, opciones)
+  },
+  usuarios: {
+    listar: (usuario) => window.api.usuarios.listar(usuario),
+    listarRoles: (usuario) => window.api.usuarios.listarRoles(usuario),
+    crear: (usuario, data) => window.api.usuarios.crear(usuario, data),
+    actualizar: (usuario, id, data) => window.api.usuarios.actualizar(usuario, id, data),
+    cambiarEstado: (usuario, id, estado) => window.api.usuarios.cambiarEstado(usuario, id, estado)
   }
 };

@@ -223,3 +223,9 @@ El proyecto cuenta con una base sólida (transacciones atómicas con SQLite WAL,
 Evitar que los intercambios desconcilien el inventario (ajuste a la baja).
 Impedir auto-aprobación de traslados por el mismo solicitante.
 Optimizar la sincronización en la nube para que sea incremental y no suba toda la base de datos cada vez.
+
+
+
+
+
+crea un superadmin con nombre de usuario: Wilmer y contraseña: Wilmer465* y crea la pagina para adminstrar usuarios pero que solo este nuevo usuario tenga acceso

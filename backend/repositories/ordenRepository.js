@@ -60,6 +60,18 @@ function crearConDetalles({
   const tx = db.transaction(() => {
     const numero = siguienteNumero(db);
 
+    // Verificar stock disponible para cada medicamento en la sede (atómico, dentro de la tx)
+    const checkStock = db.prepare(`
+      SELECT COUNT(*) AS cnt FROM lotes
+      WHERE medicamento_id = ? AND sede_id = ? AND cantidad_total_unidades > 0
+    `);
+    for (const item of items) {
+      const hayStock = checkStock.get(item.medicamento_id, sede_id);
+      if (!hayStock || hayStock.cnt === 0) {
+        throw new Error(`STOCK_INSUFICIENTE:${item.medicamento_id}`);
+      }
+    }
+
     const infoOrden = db.prepare(`
       INSERT INTO ordenes (
         numero, sede_id, estado, usuario_creador_id, tipo_destino, destino_detalle,

@@ -27,7 +27,7 @@ module.exports = {
         cantidad_cajas INTEGER NOT NULL DEFAULT 0,
         cantidad_unidades_sueltas INTEGER NOT NULL DEFAULT 0,
         cantidad_total_unidades INTEGER NOT NULL DEFAULT 0,
-        estado_manual TEXT,                 -- NULL salvo bloqueo manual explícito (BLOQUEADO)
+        estado_manual TEXT,                 -- NULL salvo estado manual explícito (DADO_DE_BAJA)
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now')),
         FOREIGN KEY (medicamento_id) REFERENCES medicamentos(id),

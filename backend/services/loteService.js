@@ -32,9 +32,9 @@ function conEstadoCalculado(lote) {
   return { ...lote, estado: calcularEstado(lote) };
 }
 
-function listar(usuarioSesion, { sedeId, medicamentoId } = {}) {
+function listar(usuarioSesion, { sedeId, medicamentoId, limit, offset } = {}) {
   const sedeEfectiva = permisoService.resolverSedeEfectiva(usuarioSesion, sedeId);
-  const lotes = loteRepository.findAll({ sedeId: sedeEfectiva, medicamentoId });
+  const lotes = loteRepository.findAll({ sedeId: sedeEfectiva, medicamentoId, limit, offset });
   return lotes.map(conEstadoCalculado);
 }
 
@@ -67,10 +67,15 @@ function crear(usuarioSesion, data) {
   const { valido, errores } = validarLote(payload);
   if (!valido) throw new ValidationError(errores.join(' '));
 
-  const existente = loteRepository.findByClaveUnica(payload.medicamento_id, payload.sede_id, payload.numero_lote);
-  if (existente) throw new ValidationError('Ya existe un lote con ese número para este medicamento y sede.');
-
-  const creado = loteRepository.crearConMovimiento(payload, usuarioSesion.id);
+  let creado;
+  try {
+    creado = loteRepository.crearConMovimiento(payload, usuarioSesion.id);
+  } catch (err) {
+    if (err.message === 'DUPLICATE_LOTE') {
+      throw new ValidationError('Ya existe un lote con ese número para este medicamento y sede.');
+    }
+    throw err;
+  }
 
   auditoriaRepository.registrar({
     usuario_id: usuarioSesion.id,
