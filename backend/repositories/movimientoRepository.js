@@ -68,4 +68,27 @@ function findByRango({ sedeId, fechaInicio, fechaFin, tipo } = {}) {
   `).all(params);
 }
 
-module.exports = { registrar, resumenPorLote, findByRango };
+// Agregados SQL para reportes/dashboard: totales sin traer el detalle.
+function resumenPorRango({ sedeId, fechaInicio, fechaFin } = {}) {
+  const db = getDb();
+  const condiciones = [];
+  const params = {};
+  if (sedeId !== null && sedeId !== undefined) {
+    condiciones.push('sede_id = @sedeId');
+    params.sedeId = sedeId;
+  }
+  if (fechaInicio) { condiciones.push('fecha >= @fechaInicio'); params.fechaInicio = fechaInicio; }
+  if (fechaFin) { condiciones.push('fecha <= @fechaFin'); params.fechaFin = fechaFin; }
+  const where = condiciones.length ? `WHERE ${condiciones.join(' AND ')}` : '';
+  return db.prepare(`
+    SELECT
+      COALESCE(SUM(CASE WHEN tipo = 'ENTRADA' THEN cantidad ELSE 0 END), 0) AS total_entradas,
+      COALESCE(SUM(CASE WHEN tipo = 'SALIDA_ORDEN' THEN cantidad ELSE 0 END), 0) AS total_salidas_orden,
+      COALESCE(SUM(CASE WHEN tipo = 'AJUSTE' AND cantidad < 0 THEN cantidad ELSE 0 END), 0) AS total_ajustes_negativos,
+      COUNT(CASE WHEN tipo = 'AJUSTE' AND cantidad < 0 THEN 1 END) AS conteo_salidas_sin_orden
+    FROM movimientos_inventario
+    ${where}
+  `).get(params);
+}
+
+module.exports = { registrar, resumenPorLote, findByRango, resumenPorRango };

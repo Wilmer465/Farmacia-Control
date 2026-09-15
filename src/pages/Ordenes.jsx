@@ -61,7 +61,7 @@ export default function Ordenes({ usuario, sedeActiva, params, onClearParams }) 
     setCargando(true);
     const [ordRes, medRes, loteRes] = await Promise.all([
       inventarioApi.ordenes.listar(usuario, { sedeId: sedeActiva }),
-      inventarioApi.medicamentos.listar(),
+      inventarioApi.medicamentos.listar(usuario),
       inventarioApi.lotes.listar(usuario, { sedeId: sedeActiva })
     ]);
     if (ordRes.ok) setOrdenes(ordRes.data);

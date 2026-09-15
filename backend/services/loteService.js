@@ -32,10 +32,16 @@ function conEstadoCalculado(lote) {
   return { ...lote, estado: calcularEstado(lote) };
 }
 
-function listar(usuarioSesion, { sedeId, medicamentoId, limit, offset } = {}) {
+function listar(usuarioSesion, { sedeId, medicamentoId, limit, offset, conTotal = false } = {}) {
   const sedeEfectiva = permisoService.resolverSedeEfectiva(usuarioSesion, sedeId);
   const lotes = loteRepository.findAll({ sedeId: sedeEfectiva, medicamentoId, limit, offset });
-  return lotes.map(conEstadoCalculado);
+  const data = lotes.map(conEstadoCalculado);
+  // conTotal=true devuelve { data, total } con COUNT(*) real para paginación correcta.
+  if (conTotal) {
+    const total = loteRepository.contar({ sedeId: sedeEfectiva, medicamentoId });
+    return { data, total };
+  }
+  return data;
 }
 
 function crear(usuarioSesion, data) {

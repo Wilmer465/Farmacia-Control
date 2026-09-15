@@ -1,11 +1,11 @@
 export const inventarioApi = {
   medicamentos: {
-    listar: () => window.api.medicamentos.listar(),
+    listar: (usuario) => window.api.medicamentos.listar(usuario),
     crear: (usuario, data) => window.api.medicamentos.crear(usuario, data),
     actualizar: (usuario, id, data) => window.api.medicamentos.actualizar(usuario, id, data)
   },
   sedes: {
-    listar: () => window.api.sedes.listar()
+    listar: (usuario) => window.api.sedes.listar(usuario)
   },
   lotes: {
     listar: (usuario, filtros) => window.api.lotes.listar(usuario, filtros),
@@ -26,13 +26,13 @@ export const inventarioApi = {
   entregas: {
     listar: (usuario, filtros) => window.api.entregas.listar(usuario, filtros),
     crear: (usuario, data) => window.api.entregas.crear(usuario, data),
-    capturarHuella: () => window.api.entregas.capturarHuella()
+    capturarHuella: (usuario) => window.api.entregas.capturarHuella(usuario)
   },
   receptores: {
-    buscar: (documento) => window.api.receptores.buscar(documento),
-    listar: () => window.api.receptores.listar(),
-    guardar: (data) => window.api.receptores.guardar(data),
-    actualizar: (id, data) => window.api.receptores.actualizar(id, data)
+    buscar: (usuario, documento) => window.api.receptores.buscar(usuario, documento),
+    listar: (usuario) => window.api.receptores.listar(usuario),
+    guardar: (usuario, data) => window.api.receptores.guardar(usuario, data),
+    actualizar: (usuario, id, data) => window.api.receptores.actualizar(usuario, id, data)
   },
   solicitudesEliminacion: {
     listar: (usuario, filtros) => window.api.solicitudesEliminacion.listar(usuario, filtros),
@@ -51,7 +51,7 @@ export const inventarioApi = {
     diario: (usuario, filtros) => window.api.reportes.diario(usuario, filtros),
     dashboard: (usuario, filtros) => window.api.reportes.dashboard(usuario, filtros),
     conciliacion: (usuario, filtros) => window.api.reportes.conciliacion(usuario, filtros),
-    guardarPdf: (nombreSugerido) => window.api.reportes.guardarPdf(nombreSugerido)
+    guardarPdf: (usuario, nombreSugerido) => window.api.reportes.guardarPdf(usuario, nombreSugerido)
   },
   backups: {
     listar: (usuario, filtros) => window.api.backups.listar(usuario, filtros),

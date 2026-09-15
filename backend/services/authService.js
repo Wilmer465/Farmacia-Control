@@ -3,6 +3,7 @@ const { getDb } = require(path.join(__dirname, '..', 'database', 'connection'));
 const bcrypt = require('bcryptjs');
 const usuarioRepository = require('../repositories/usuarioRepository');
 const auditoriaRepository = require('../repositories/auditoriaRepository');
+const sessionService = require('./sessionService');
 const { AUDIT_ACTIONS, ESTADOS_REGISTRO, ROLES } = require('../../shared/constants');
 
 class AuthError extends Error {}
@@ -116,10 +117,12 @@ function login(username, password) {
   });
 
   const { password_hash, ...usuarioSeguro } = usuario;
-  return usuarioSeguro;
+  const session_token = sessionService.crearSesion(usuario.id);
+  return { ...usuarioSeguro, session_token };
 }
 
 function logout(usuarioSesion) {
+  sessionService.invalidar(usuarioSesion?.session_token);
   auditoriaRepository.registrar({
     usuario_id: usuarioSesion.id,
     rol: usuarioSesion.rol_nombre,

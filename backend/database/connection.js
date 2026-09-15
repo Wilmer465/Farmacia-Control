@@ -39,7 +39,18 @@ function getDb() {
   dbInstance.pragma('mmap_size = 268435456'); // 256 MB memory-mapped I/O
   dbInstance.pragma('foreign_keys = ON');
   dbInstance.pragma('busy_timeout = 5000');
+  // Mantenimiento: auto_vacuum incremental para que el archivo no crezca sin
+  // control con los blobs; el vacuum real se hace al cerrar (ver main.js).
+  try { dbInstance.pragma('auto_vacuum = INCREMENTAL'); } catch (_) {}
+  try { dbInstance.pragma('optimize'); } catch (_) {}
   return dbInstance;
+}
+
+function mantenimientoAlCerrar() {
+  if (!dbInstance) return;
+  try { dbInstance.pragma('optimize'); } catch (_) {}
+  try { dbInstance.pragma('incremental_vacuum(100)'); } catch (_) {}
+  try { dbInstance.exec('ANALYZE'); } catch (_) {}
 }
 
 function closeDb() {
@@ -49,4 +60,4 @@ function closeDb() {
   }
 }
 
-module.exports = { getDb, resolveDbPath, closeDb };
+module.exports = { getDb, resolveDbPath, closeDb, mantenimientoAlCerrar };

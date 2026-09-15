@@ -3,6 +3,7 @@ const path = require('path');
 const { registerIpcHandlers } = require('../backend/ipcHandlers');
 const { runMigrations } = require('../backend/database/migrate');
 const { seed } = require('../backend/database/seeds/seed');
+const { mantenimientoAlCerrar } = require('../backend/database/connection');
 const { iniciarPlanificadorAutoBackup } = require('../backend/services/backupService');
 const { iniciarPlanificadorCloudSync, detenerPlanificadorCloudSync } = require('../backend/services/cloudSyncService');
 
@@ -28,7 +29,7 @@ function createWindow() {
       nodeIntegration: false,
       sandbox: true,
       spellcheck: false, // Desactivar corrector ortográfico para ahorrar CPU/RAM
-      backgroundThrottling: false // Mantiene rendimiento óptimo
+      backgroundThrottling: true // Permitir throttling en segundo plano: menos CPU
     }
   });
 
@@ -87,5 +88,10 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   detenerPlanificadorCloudSync();
+  try { mantenimientoAlCerrar(); } catch (_) {}
   if (process.platform !== 'darwin') app.quit();
+});
+
+app.on('before-quit', () => {
+  try { mantenimientoAlCerrar(); } catch (_) {}
 });

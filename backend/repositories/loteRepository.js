@@ -2,6 +2,13 @@ const { getDb } = require('../database/connection');
 const movimientoRepository = require('./movimientoRepository');
 
 // sedeId === null significa "sin filtro" (solo permitido para visión global, ya resuelto en el service).
+function sanitizarEntero(valor, defecto, maximo = 500) {
+  if (valor === null || valor === undefined || valor === '') return defecto;
+  const n = Number.parseInt(valor, 10);
+  if (!Number.isInteger(n) || n < 0) return defecto;
+  return Math.min(n, maximo);
+}
+
 function findAll({ sedeId, medicamentoId, limit, offset } = {}) {
   const db = getDb();
   const condiciones = [];
@@ -17,8 +24,12 @@ function findAll({ sedeId, medicamentoId, limit, offset } = {}) {
   }
 
   const where = condiciones.length ? `WHERE ${condiciones.join(' AND ')}` : '';
-  const limitClause = limit ? `LIMIT ${limit}` : '';
-  const offsetClause = offset ? `OFFSET ${offset}` : '';
+  // SEGURIDAD: LIMIT/OFFSET siempre como enteros sanitizados — nunca interpolar
+  // crudo lo que venga del renderer.
+  const limpio = sanitizarEntero(limit, null);
+  const desplazamiento = sanitizarEntero(offset, null, 1000000);
+  const limitClause = limpio !== null ? `LIMIT ${limpio}` : '';
+  const offsetClause = desplazamiento !== null ? `OFFSET ${desplazamiento}` : '';
 
   return db.prepare(`
     SELECT l.*, m.nombre AS medicamento_nombre, m.codigo AS medicamento_codigo,
@@ -148,5 +159,64 @@ function existeEnSede(medicamentoId, sedeId) {
   return row.cnt > 0;
 }
 
-module.exports = { findAll, findById, findByClaveUnica, create, crearConMovimiento, updateCantidades, ajustarConMovimiento, setEstadoManual, existeEnSede };
+// Agregados SQL para dashboard: evita traer todos los lotes y calcular en JS.
+function resumenStock({ sedeId } = {}) {
+  const db = getDb();
+  const condiciones = [];
+  const params = {};
+  if (sedeId !== null && sedeId !== undefined) {
+    condiciones.push('l.sede_id = @sedeId');
+    params.sedeId = sedeId;
+  }
+  const where = condiciones.length ? `WHERE ${condiciones.join(' AND ')}` : '';
+  return db.prepare(`
+    SELECT
+      COUNT(DISTINCT l.medicamento_id) AS total_medicamentos,
+      COALESCE(SUM(l.cantidad_total_unidades), 0) AS stock_total_unidades,
+      COALESCE(SUM(l.cantidad_cajas), 0) AS cajas_totales,
+      COUNT(*) AS total_lotes
+    FROM lotes l
+    ${where}
+  `).get(params);
+}
+
+function contar({ sedeId, medicamentoId } = {}) {
+  const db = getDb();
+  const condiciones = [];
+  const params = {};
+  if (sedeId !== null && sedeId !== undefined) {
+    condiciones.push('sede_id = @sedeId');
+    params.sedeId = sedeId;
+  }
+  if (medicamentoId) {
+    condiciones.push('medicamento_id = @medicamentoId');
+    params.medicamentoId = medicamentoId;
+  }
+  const where = condiciones.length ? `WHERE ${condiciones.join(' AND ')}` : '';
+  return db.prepare(`SELECT COUNT(*) AS total FROM lotes ${where}`).get(params).total;
+}
+
+// Conteo de vencidos/próximos en SQL (misma regla que calcularEstado en JS:
+// AGOTADO se excluye por stock<=0 o DADO_DE_BAJA; VENCIDO si fecha < hoy;
+// PROXIMO si fecha <= hoy+90 días). Evita traer todos los lotes al dashboard.
+function resumenVencimientos({ sedeId } = {}) {
+  const db = getDb();
+  const condiciones = [`(estado_manual IS NULL OR estado_manual != 'DADO_DE_BAJA')`, `cantidad_total_unidades > 0`];
+  const params = {};
+  if (sedeId !== null && sedeId !== undefined) {
+    condiciones.push('sede_id = @sedeId');
+    params.sedeId = sedeId;
+  }
+  const where = `WHERE ${condiciones.join(' AND ')}`;
+  return db.prepare(`
+    SELECT
+      COUNT(CASE WHEN date(fecha_vencimiento) < date('now') THEN 1 END) AS vencidos,
+      COUNT(CASE WHEN date(fecha_vencimiento) >= date('now')
+                  AND date(fecha_vencimiento) <= date('now', '+90 days') THEN 1 END) AS proximos
+    FROM lotes
+    ${where}
+  `).get(params);
+}
+
+module.exports = { findAll, findById, findByClaveUnica, create, crearConMovimiento, updateCantidades, ajustarConMovimiento, setEstadoManual, existeEnSede, resumenStock, contar, resumenVencimientos };
 

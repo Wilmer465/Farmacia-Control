@@ -378,32 +378,31 @@ function reporteDiario(usuarioSesion, filtros = {}) {
 function dashboard(usuarioSesion, { sedeId } = {}) {
   const sedeEfectiva = permisoService.resolverSedeEfectiva(usuarioSesion, sedeId);
 
-  const lotesConEstado = loteRepository.findAll({ sedeId: sedeEfectiva }).map((l) => ({
-    ...l, estado: loteService.calcularEstado(l)
-  }));
+  // RENDIMIENTO: todo en agregados SQL (COUNT/SUM), sin findAll ni filtros en JS.
+  // Una sola llamada a conciliación ligera (estadoGeneral en SQL, sin detalle).
+  const stock = loteRepository.resumenStock({ sedeId: sedeEfectiva });
+  const venc = loteRepository.resumenVencimientos({ sedeId: sedeEfectiva });
+  const solicitudesPendientes = solicitudEliminacionRepository.contar
+    ? solicitudEliminacionRepository.contar({ sedeId: sedeEfectiva, estado: 'PENDIENTE' })
+    : solicitudEliminacionRepository.findAll({ sedeId: sedeEfectiva, estado: 'PENDIENTE' }).length;
+  const entregasIncompletas = ordenRepository.contar
+    ? ordenRepository.contar({ sedeId: sedeEfectiva, estadoNot: 'CANCELADA', documentacionCompleta: 0, tipoDestinoNot: 'MUNICIPIO_VEREDA' })
+    : ordenRepository.findAll({ sedeId: sedeEfectiva })
+      .filter((o) => o.estado !== 'CANCELADA' && o.tipo_destino !== 'MUNICIPIO_VEREDA' && o.documentacion_completa === 0).length;
 
-  const totalMedicamentos = new Set(lotesConEstado.map((l) => l.medicamento_id)).size;
-  const stockTotalUnidades = lotesConEstado.reduce((acc, l) => acc + l.cantidad_total_unidades, 0);
-  const cajasTotales = lotesConEstado.reduce((acc, l) => acc + l.cantidad_cajas, 0);
-
-  const solicitudesPendientes = solicitudEliminacionRepository
-    .findAll({ sedeId: sedeEfectiva, estado: 'PENDIENTE' }).length;
-
-  const entregasIncompletas = ordenRepository
-    .findAll({ sedeId: sedeEfectiva })
-    .filter((o) => o.estado !== 'CANCELADA' && o.tipo_destino !== 'MUNICIPIO_VEREDA' && o.documentacion_completa === 0).length;
-
-  const conciliacion = conciliacionService.conciliar(usuarioSesion, { sedeId: sedeEfectiva });
+  const { estadoGeneral } = conciliacionService.conciliarResumen
+    ? conciliacionService.conciliarResumen(usuarioSesion, { sedeId: sedeEfectiva })
+    : conciliacionService.conciliar(usuarioSesion, { sedeId: sedeEfectiva });
 
   return {
-    totalMedicamentos,
-    stockTotalUnidades,
-    cajasTotales,
-    proximosAVencer: lotesConEstado.filter((l) => l.estado === 'PROXIMO_VENCER').length,
-    vencidos: lotesConEstado.filter((l) => l.estado === 'VENCIDO').length,
+    totalMedicamentos: stock.total_medicamentos || 0,
+    stockTotalUnidades: stock.stock_total_unidades || 0,
+    cajasTotales: stock.cajas_totales || 0,
+    proximosAVencer: venc.proximos || 0,
+    vencidos: venc.vencidos || 0,
     solicitudesPendientes,
     entregasIncompletas,
-    estadoConciliacion: conciliacion.estadoGeneral
+    estadoConciliacion: estadoGeneral
   };
 }
 

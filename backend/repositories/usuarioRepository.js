@@ -27,7 +27,8 @@ function listar() {
   const db = getDb();
   return db.prepare(`
     SELECT u.id, u.nombre, u.username, u.rol_id, r.nombre AS rol_nombre,
-           u.sede_id, s.nombre AS sede_nombre, u.estado, u.created_at
+           u.sede_id, s.nombre AS sede_nombre, u.estado, u.created_at,
+           COALESCE(u.es_superadmin_principal, 0) AS es_superadmin_principal
     FROM usuarios u
     JOIN roles r ON r.id = u.rol_id
     LEFT JOIN sedes s ON s.id = u.sede_id

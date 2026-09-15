@@ -31,8 +31,14 @@ function mezclarMedicamentosUsuario(existentes, nuevos) {
   return [...mapa.values()];
 }
 
-function listar(usuarioSesion, { sedeId } = {}) {
+function listar(usuarioSesion, { sedeId, estado, fechaInicio, fechaFin, limit, offset } = {}) {
   const sedeEfectiva = permisoService.resolverSedeEfectiva(usuarioSesion, sedeId);
+  // Si piden paginación (limit/offset), usar COUNT(*) real + filas sin blobs.
+  if (limit !== undefined || offset !== undefined || estado || fechaInicio || fechaFin) {
+    return ordenRepository.findAllPaginated({
+      sedeId: sedeEfectiva, estado, fechaInicio, fechaFin, limit, offset
+    });
+  }
   return ordenRepository.findAll({ sedeId: sedeEfectiva });
 }
 

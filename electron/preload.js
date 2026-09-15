@@ -8,12 +8,12 @@ contextBridge.exposeInMainWorld('api', {
     logout: (usuarioSesion) => ipcRenderer.invoke('auth:logout', usuarioSesion)
   },
   medicamentos: {
-    listar: () => ipcRenderer.invoke('medicamentos:listar'),
+    listar: (usuarioSesion) => ipcRenderer.invoke('medicamentos:listar', usuarioSesion),
     crear: (usuarioSesion, data) => ipcRenderer.invoke('medicamentos:crear', usuarioSesion, data),
     actualizar: (usuarioSesion, id, data) => ipcRenderer.invoke('medicamentos:actualizar', usuarioSesion, id, data)
   },
   sedes: {
-    listar: () => ipcRenderer.invoke('sedes:listar')
+    listar: (usuarioSesion) => ipcRenderer.invoke('sedes:listar', usuarioSesion)
   },
   lotes: {
     listar: (usuarioSesion, filtros) => ipcRenderer.invoke('lotes:listar', usuarioSesion, filtros),
@@ -34,13 +34,13 @@ contextBridge.exposeInMainWorld('api', {
   entregas: {
     listar: (usuarioSesion, filtros) => ipcRenderer.invoke('entregas:listar', usuarioSesion, filtros),
     crear: (usuarioSesion, data) => ipcRenderer.invoke('entregas:crear', usuarioSesion, data),
-    capturarHuella: () => ipcRenderer.invoke('entregas:capturarHuella')
+    capturarHuella: (usuarioSesion) => ipcRenderer.invoke('entregas:capturarHuella', usuarioSesion)
   },
   receptores: {
-    buscar: (documento) => ipcRenderer.invoke('receptores:buscar', documento),
-    listar: () => ipcRenderer.invoke('receptores:listar'),
-    guardar: (data) => ipcRenderer.invoke('receptores:guardar', data),
-    actualizar: (id, data) => ipcRenderer.invoke('receptores:actualizar', id, data)
+    buscar: (usuarioSesion, documento) => ipcRenderer.invoke('receptores:buscar', usuarioSesion, documento),
+    listar: (usuarioSesion) => ipcRenderer.invoke('receptores:listar', usuarioSesion),
+    guardar: (usuarioSesion, data) => ipcRenderer.invoke('receptores:guardar', usuarioSesion, data),
+    actualizar: (usuarioSesion, id, data) => ipcRenderer.invoke('receptores:actualizar', usuarioSesion, id, data)
   },
   solicitudesEliminacion: {
     listar: (usuarioSesion, filtros) => ipcRenderer.invoke('solicitudesEliminacion:listar', usuarioSesion, filtros),
@@ -59,7 +59,7 @@ contextBridge.exposeInMainWorld('api', {
     diario: (usuarioSesion, filtros) => ipcRenderer.invoke('reportes:diario', usuarioSesion, filtros),
     dashboard: (usuarioSesion, filtros) => ipcRenderer.invoke('reportes:dashboard', usuarioSesion, filtros),
     conciliacion: (usuarioSesion, filtros) => ipcRenderer.invoke('reportes:conciliacion', usuarioSesion, filtros),
-    guardarPdf: (nombreSugerido) => ipcRenderer.invoke('reportes:guardarPdf', nombreSugerido)
+    guardarPdf: (usuarioSesion, nombreSugerido) => ipcRenderer.invoke('reportes:guardarPdf', usuarioSesion, nombreSugerido)
   },
   backups: {
     listar: (usuarioSesion, filtros) => ipcRenderer.invoke('backups:listar', usuarioSesion, filtros),

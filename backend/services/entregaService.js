@@ -12,6 +12,11 @@ class ValidationError extends Error {}
 
 function listar(usuarioSesion, filtros = {}) {
   const sedeEfectiva = permisoService.resolverSedeEfectiva(usuarioSesion, filtros.sedeId);
+  if (filtros.limit !== undefined || filtros.offset !== undefined) {
+    return entregaRepository.findAllPaginated({
+      sedeId: sedeEfectiva, limit: filtros.limit, offset: filtros.offset
+    });
+  }
   return entregaRepository.findAll({ sedeId: sedeEfectiva });
 }
 
@@ -41,7 +46,11 @@ function crear(usuarioSesion, data) {
   const receptorTelefono = data.receptor_telefono?.trim() || null;
   const receptorCorreo = data.receptor_correo?.trim() || null;
   const firma = data.firma_data || null;
+  // HUELLA: sin lector real no hay verificación biométrica. Si el cliente declara
+  // huella_registrada=true se acepta como "declaración manual pendiente de
+  // verificación", NUNCA como evidencia biométrica. La auditoría lo registra así.
   const huella = Boolean(data.huella_registrada);
+  const huellaOrigen = huella ? 'DECLARACION_MANUAL_SIN_LECTOR' : null;
   const docAdjuntoNombre = data.documento_adjunto_nombre || null;
   const docAdjuntoData = data.documento_adjunto_data || null;
   const docAdjuntoTipo = data.documento_adjunto_tipo || null;
@@ -111,7 +120,8 @@ function crear(usuarioSesion, data) {
       accion: AUDIT_ACTIONS.REGISTRAR_HUELLA,
       modulo: 'ENTREGAS',
       registro_afectado: `entrega:${entrega.id}`,
-      resultado: 'EXITO'
+      resultado: 'EXITO',
+      valores_nuevos: { origen: huellaOrigen, verificada_biometricamente: false }
     });
   }
   if (firma) {

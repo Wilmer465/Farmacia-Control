@@ -17,37 +17,22 @@ const cloudSyncController = require('./controllers/cloudSyncController');
 const usuarioController = require('./controllers/usuarioController');
 const { sincronizarEnSegundoPlano } = require('./services/cloudSyncService');
 const sedeService = require('./services/sedeService');
+const sessionService = require('./services/sessionService');
 
-// Valida la estructura mínima de usuarioSesion para prevenir escalación de privilegios
-// desde un frontend comprometido.
-function validarUsuarioSesion(usuarioSesion) {
-  if (!usuarioSesion || typeof usuarioSesion !== 'object') {
-    throw new Error('Sesión de usuario inválida: objeto faltante o malformado');
-  }
-  // Para SUPERADMIN, sede_id es null intencionalmente (acceso global a todas las sedes)
-  const required = ['id', 'username', 'rol_nombre', 'estado'];
-  for (const field of required) {
-    if (usuarioSesion[field] === undefined || usuarioSesion[field] === null) {
-      throw new Error(`Sesión de usuario inválida: campo '${field}' faltante`);
-    }
-  }
-  if (!('sede_id' in usuarioSesion)) {
-    throw new Error("Sesión de usuario inválida: campo 'sede_id' faltante");
-  }
-  if (
-    typeof usuarioSesion.id !== 'number' ||
-    (usuarioSesion.sede_id !== null && typeof usuarioSesion.sede_id !== 'number')
-  ) {
-    throw new Error('Sesión de usuario inválida: tipos de campos incorrectos');
-  }
-  return true;
+function responderErrorSesion(err) {
+  return { ok: false, error: err.message || 'Sesión inválida.' };
 }
 
-// Wrapper que valida usuarioSesion antes de pasar al controlador
+// Resuelve la sesión en el proceso main (token opaco). El rol y la sede salen de la BD,
+// nunca de lo que mande el renderer.
 function conValidacionSesion(accion) {
   return (_event, usuarioSesion, ...args) => {
-    validarUsuarioSesion(usuarioSesion);
-    return accion(usuarioSesion, ...args);
+    try {
+      const sesion = sessionService.resolverUsuarioDesdeSesion(usuarioSesion);
+      return accion(sesion, ...args);
+    } catch (err) {
+      return responderErrorSesion(err);
+    }
   };
 }
 
@@ -76,18 +61,18 @@ ipcMain.handle('auth:logout', conSyncDespuesDeCambio('auth:logout', conValidacio
     return authController.logout(usuarioSesion);
   })));
 
-  ipcMain.handle('medicamentos:listar', () => {
+  ipcMain.handle('medicamentos:listar', conValidacionSesion(() => {
     return medicamentoController.listar();
-  });
+  }));
 
-  ipcMain.handle('sedes:listar', () => {
+  ipcMain.handle('sedes:listar', conValidacionSesion(() => {
     try {
       return { ok: true, data: sedeService.listar() };
     } catch (err) {
       console.error('[ipcHandlers] sedes:listar error:', err);
       return { ok: false, error: 'Error interno. Intente nuevamente.' };
     }
-  });
+  }));
 
   ipcMain.handle('medicamentos:crear', conSyncDespuesDeCambio('medicamentos:crear', conValidacionSesion((usuarioSesion, data) => {
     return medicamentoController.crear(usuarioSesion, data);
@@ -145,25 +130,25 @@ ipcMain.handle('auth:logout', conSyncDespuesDeCambio('auth:logout', conValidacio
     return entregaController.crear(usuarioSesion, data);
   })));
 
-  ipcMain.handle('entregas:capturarHuella', () => {
+  ipcMain.handle('entregas:capturarHuella', conValidacionSesion(() => {
     return entregaController.capturarHuella();
-  });
+  }));
 
-  ipcMain.handle('receptores:buscar', (_event, documento) => {
+  ipcMain.handle('receptores:buscar', conValidacionSesion((_usuarioSesion, documento) => {
     return receptorController.buscar(documento);
-  });
+  }));
 
-  ipcMain.handle('receptores:listar', () => {
+  ipcMain.handle('receptores:listar', conValidacionSesion(() => {
     return receptorController.listar();
-  });
+  }));
 
-  ipcMain.handle('receptores:guardar', conSyncDespuesDeCambio('receptores:guardar', (data) => {
+  ipcMain.handle('receptores:guardar', conSyncDespuesDeCambio('receptores:guardar', conValidacionSesion((_usuarioSesion, data) => {
     return receptorController.guardar(data);
-  }));
+  })));
 
-  ipcMain.handle('receptores:actualizar', conSyncDespuesDeCambio('receptores:actualizar', (id, data) => {
+  ipcMain.handle('receptores:actualizar', conSyncDespuesDeCambio('receptores:actualizar', conValidacionSesion((_usuarioSesion, id, data) => {
     return receptorController.actualizar(id, data);
-  }));
+  })));
 
   ipcMain.handle('solicitudesEliminacion:listar', conValidacionSesion((usuarioSesion, filtros) => {
     return solicitudEliminacionController.listar(usuarioSesion, filtros);
@@ -205,8 +190,9 @@ ipcMain.handle('auth:logout', conSyncDespuesDeCambio('auth:logout', conValidacio
     return reporteController.conciliacion(usuarioSesion, filtros);
   }));
 
-  ipcMain.handle('reportes:guardarPdf', async (event, nombreSugerido) => {
+  ipcMain.handle('reportes:guardarPdf', async (event, usuarioSesion, nombreSugerido) => {
     try {
+      sessionService.resolverUsuarioDesdeSesion(usuarioSesion);
       const win = BrowserWindow.fromWebContents(event.sender);
       if (!win) return { ok: false, error: 'No se encontró la ventana activa.' };
 
@@ -232,12 +218,15 @@ ipcMain.handle('auth:logout', conSyncDespuesDeCambio('auth:logout', conValidacio
       fs.writeFileSync(filePath, pdfBuffer);
       return { ok: true, data: { filePath } };
     } catch (err) {
+      if (err instanceof sessionService.SesionError) {
+        return { ok: false, error: err.message };
+      }
       console.error('[ipcHandlers] reportes:guardarPdf error:', err);
       return { ok: false, error: 'No se pudo generar el PDF. Intente nuevamente.' };
     }
   });
 
-  ipcMain.handle('backups:listar', conValidacionSesion((_event, usuarioSesion, filtros) => {
+  ipcMain.handle('backups:listar', conValidacionSesion((usuarioSesion, filtros) => {
     return backupController.listar(usuarioSesion, filtros);
   }));
 

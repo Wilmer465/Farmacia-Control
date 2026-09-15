@@ -8,6 +8,25 @@ const { ROLES } = require('../../shared/constants');
 class CloudSyncError extends Error {}
 let syncInterval = null;
 let syncEnCurso = false;
+let syncDebounceTimer = null;
+
+// SEGURIDAD: columnas que NUNCA salen a la nube. password_hash no se sincroniza:
+// cada sede gestiona credenciales en local. Agregar aquí futuros secretos.
+const COLUMNAS_SENSIBLES = new Set(['password_hash', 'password', 'token', 'secret']);
+
+function sanitizarFila(row) {
+  if (!row || typeof row !== 'object') return row;
+  let limpia = null;
+  for (const key of Object.keys(row)) {
+    if (COLUMNAS_SENSIBLES.has(key.toLowerCase())) {
+      if (!limpia) limpia = { ...row };
+      delete limpia[key];
+    }
+  }
+  return limpia || row;
+}
+
+const RECENT_UPLOAD_WINDOW_MS = 30 * 60 * 1000;
 
 const SYNC_TABLES = [
   'roles',
@@ -116,13 +135,18 @@ function getRowsToSync(db, table, lastSyncTimestamp) {
   return db.prepare(`SELECT * FROM "${table}" WHERE "${dateCol}" >= ?`).all(lastSyncTimestamp);
 }
 
-async function subir(lastSyncTimestamp) {
+function recentTimestamp() {
+  return new Date(Date.now() - RECENT_UPLOAD_WINDOW_MS).toISOString();
+}
+
+async function subir(lastSyncTimestamp, { permitirSubidaTotal = true } = {}) {
   const db = getDb();
   const payload = [];
+  const since = lastSyncTimestamp || (permitirSubidaTotal ? null : recentTimestamp());
 
   for (const table of SYNC_TABLES) {
     const pk = primaryKeyFor(db, table);
-    const rows = getRowsToSync(db, table, lastSyncTimestamp);
+    const rows = getRowsToSync(db, table, since);
 
     for (const row of rows) {
       const recordId = String(row[pk]);
@@ -130,7 +154,7 @@ async function subir(lastSyncTimestamp) {
       payload.push({
         table_name: table,
         record_id: recordId,
-        data: row,
+        data: sanitizarFila(row),
         local_updated_at: row.updated_at || row.fecha_actualizacion || row.fecha || row.created_at || new Date().toISOString()
       });
     }
@@ -149,7 +173,9 @@ async function subir(lastSyncTimestamp) {
   return payload.length;
 }
 
-async function bajar(lastSyncTimestamp) {
+async function bajar(lastSyncTimestamp, { permitirBajadaTotal = true } = {}) {
+  if (!lastSyncTimestamp && !permitirBajadaTotal) return 0;
+
   const db = getDb();
   let recibidos = 0;
 
@@ -159,7 +185,21 @@ async function bajar(lastSyncTimestamp) {
       const tableRecords = records.filter((item) => item.table_name === table);
       for (const item of tableRecords) {
         if (item.data && typeof item.data === 'object') {
-          insertOrReplace(db, table, item.data);
+          let fila = sanitizarFila(item.data);
+          // SEGURIDAD: al bajar usuarios, nunca sobrescribir el hash local con
+          // dato de nube (que viene sin password_hash). Preservar el local.
+          if (table === 'usuarios' && fila.id != null) {
+            try {
+              const local = db.prepare('SELECT password_hash FROM usuarios WHERE id = ?').get(fila.id);
+              if (local && local.password_hash) {
+                fila = { ...fila, password_hash: local.password_hash };
+              } else if (!fila.password_hash) {
+                // Usuario nuevo sin hash en nube: no se puede crear sin credencial.
+                continue;
+              }
+            } catch (_) { /* si falla, se inserta sanitizado */ }
+          }
+          insertOrReplace(db, table, fila);
           recibidos += 1;
         }
       }
@@ -186,10 +226,14 @@ async function bajar(lastSyncTimestamp) {
 
 async function sincronizar(usuarioSesion, { direccion = 'AMBAS' } = {}) {
   verificarPermiso(usuarioSesion);
-  return sincronizarInterno({ direccion });
+  return sincronizarInterno({ direccion, permitirSubidaTotal: true, permitirBajadaTotal: true });
 }
 
-async function sincronizarInterno({ direccion = 'AMBAS' } = {}) {
+async function sincronizarInterno({
+  direccion = 'AMBAS',
+  permitirSubidaTotal = false,
+  permitirBajadaTotal = false
+} = {}) {
   if (syncEnCurso) {
     return {
       inicio: new Date().toISOString(),
@@ -209,8 +253,8 @@ async function sincronizarInterno({ direccion = 'AMBAS' } = {}) {
   let bajados = 0;
 
   try {
-    if (direccion === 'SUBIR' || direccion === 'AMBAS') subidos = await subir(lastSync);
-    if (direccion === 'BAJAR' || direccion === 'AMBAS') bajados = await bajar(lastSync);
+    if (direccion === 'SUBIR' || direccion === 'AMBAS') subidos = await subir(lastSync, { permitirSubidaTotal });
+    if (direccion === 'BAJAR' || direccion === 'AMBAS') bajados = await bajar(lastSync, { permitirBajadaTotal });
 
     const fin = new Date().toISOString();
     guardarSyncState({
@@ -236,7 +280,11 @@ async function sincronizarInterno({ direccion = 'AMBAS' } = {}) {
 
 async function sincronizarAutomaticamente() {
   try {
-    const res = await sincronizarInterno({ direccion: 'AMBAS' });
+    const res = await sincronizarInterno({
+      direccion: 'AMBAS',
+      permitirSubidaTotal: false,
+      permitirBajadaTotal: false
+    });
     if (!res.omitida) {
       console.log(`[cloudSync] Sincronización automática OK (${res.esDelta ? 'Delta' : 'Total'}): ${res.subidos} subidos, ${res.bajados} bajados.`);
     }
@@ -248,16 +296,22 @@ async function sincronizarAutomaticamente() {
 function iniciarPlanificadorCloudSync({ intervaloMs = 5 * 60 * 1000, ejecutarAlInicio = true } = {}) {
   if (syncInterval) return;
   if (ejecutarAlInicio) {
-    setTimeout(sincronizarAutomaticamente, 15 * 1000);
+    setTimeout(sincronizarAutomaticamente, 90 * 1000);
   }
   syncInterval = setInterval(sincronizarAutomaticamente, intervaloMs);
   console.log(`[cloudSync] Planificador Supabase iniciado cada ${Math.round(intervaloMs / 1000)} segundos.`);
 }
 
 function sincronizarEnSegundoPlano(motivo = 'cambio-local') {
-  setTimeout(async () => {
+  if (syncDebounceTimer) clearTimeout(syncDebounceTimer);
+  syncDebounceTimer = setTimeout(async () => {
+    syncDebounceTimer = null;
     try {
-      const res = await sincronizarInterno({ direccion: 'SUBIR' });
+      const res = await sincronizarInterno({
+        direccion: 'SUBIR',
+        permitirSubidaTotal: false,
+        permitirBajadaTotal: false
+      });
       if (!res.omitida) {
         console.log(`[cloudSync] Cambio local sincronizado (${motivo}): ${res.subidos} registros subidos.`);
       }

@@ -175,7 +175,7 @@ export default function AppShell({ usuario, onLogout }) {
     if (!esSuperadmin) return;
     let cancelado = false;
     (async () => {
-      const res = await inventarioApi.sedes.listar();
+      const res = await inventarioApi.sedes.listar(usuario);
       if (!res.ok || cancelado || res.data.length === 0) return;
       setSedes(res.data);
       setSedeActiva((actual) => {
@@ -188,7 +188,7 @@ export default function AppShell({ usuario, onLogout }) {
       });
     })();
     return () => { cancelado = true; };
-  }, [esSuperadmin]);
+  }, [esSuperadmin, usuario]);
 
   function handleCambiarSede(e) {
     const valor = e.target.value;

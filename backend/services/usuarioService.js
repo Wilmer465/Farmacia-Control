@@ -9,10 +9,13 @@ function verificarAccesoWilmer(usuarioSesion) {
   if (!usuarioSesion) {
     throw new UsuarioError('Sesión requerida.');
   }
-  // Exclusividad: Solo el superadmin 'Wilmer' tiene acceso a la administración de usuarios
-  const username = String(usuarioSesion.username || '').toLowerCase().trim();
-  if (username !== 'wilmer' || usuarioSesion.rol_nombre !== ROLES.SUPERADMIN) {
-    throw new UsuarioError('Acceso denegado: solo el superadministrador principal Wilmer puede gestionar usuarios.');
+  // SEGURIDAD: usuarioSesion viene de resolverUsuarioDesdeSesion() que carga el
+  // usuario desde la BD en main usando solo el token opaco. Nunca se confía en
+  // rol_nombre/username que mande el renderer. La autorización exige el flag
+  // es_superadmin_principal=1 en BD + rol SUPERADMIN vigente.
+  const esPrincipal = Number(usuarioSesion.es_superadmin_principal) === 1;
+  if (!esPrincipal || usuarioSesion.rol_nombre !== ROLES.SUPERADMIN) {
+    throw new UsuarioError('Acceso denegado: solo el superadministrador principal puede gestionar usuarios.');
   }
 }
 
@@ -32,7 +35,7 @@ function crear(usuarioSesion, datos) {
 
   if (!nombre || !nombre.trim()) throw new UsuarioError('El nombre completo es requerido.');
   if (!username || !username.trim()) throw new UsuarioError('El nombre de usuario es requerido.');
-  if (!password || password.length < 6) throw new UsuarioError('La contraseña debe tener al menos 6 caracteres.');
+  if (!password || password.length < 8) throw new UsuarioError('La contraseña debe tener al menos 8 caracteres.');
   if (!rol_id) throw new UsuarioError('Debe seleccionar un rol.');
 
   const usernameLimpio = username.trim();
@@ -41,7 +44,7 @@ function crear(usuarioSesion, datos) {
     throw new UsuarioError(`El nombre de usuario '${usernameLimpio}' ya existe.`);
   }
 
-  const password_hash = bcrypt.hashSync(password, 10);
+  const password_hash = bcrypt.hashSync(password, 12);
   const nuevo = usuarioRepository.crear({
     nombre: nombre.trim(),
     username: usernameLimpio,
@@ -75,9 +78,11 @@ function actualizar(usuarioSesion, id, datos) {
   if (!nombre || !nombre.trim()) throw new UsuarioError('El nombre es requerido.');
   if (!rol_id) throw new UsuarioError('El rol es requerido.');
 
-  // No permitir cambiar rol ni desactivar a Wilmer
-  const esCuentaWilmer = usuario.username.toLowerCase() === 'wilmer';
-  if (esCuentaWilmer) {
+  // No permitir cambiar rol ni desactivar la cuenta principal (flag en BD, con
+  // fallback a username para BDs legadas donde la migración 020 aún no corrió).
+  const esCuentaPrincipal = Number(usuario.es_superadmin_principal) === 1
+    || String(usuario.username || '').toLowerCase() === 'wilmer';
+  if (esCuentaPrincipal) {
     if (estado === ESTADOS_REGISTRO.INACTIVO) {
       throw new UsuarioError('No puedes desactivar tu propia cuenta principal de Superadmin.');
     }
@@ -88,8 +93,8 @@ function actualizar(usuarioSesion, id, datos) {
 
   let password_hash = undefined;
   if (password && password.trim()) {
-    if (password.length < 6) throw new UsuarioError('La contraseña debe tener al menos 6 caracteres.');
-    password_hash = bcrypt.hashSync(password, 10);
+    if (password.length < 8) throw new UsuarioError('La contraseña debe tener al menos 8 caracteres.');
+    password_hash = bcrypt.hashSync(password, 12);
   }
 
   const actualizado = usuarioRepository.actualizar(id, {
@@ -121,7 +126,8 @@ function cambiarEstado(usuarioSesion, id, nuevoEstado) {
   const usuario = usuarioRepository.findById(id);
   if (!usuario) throw new UsuarioError('Usuario no encontrado.');
 
-  if (usuario.username.toLowerCase() === 'wilmer') {
+  if (Number(usuario.es_superadmin_principal) === 1
+    || String(usuario.username || '').toLowerCase() === 'wilmer') {
     throw new UsuarioError('No puedes cambiar el estado de la cuenta principal Wilmer.');
   }
 

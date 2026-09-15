@@ -1,5 +1,6 @@
 const movimientoRepository = require('../repositories/movimientoRepository');
 const loteRepository = require('../repositories/loteRepository');
+const { getDb } = require('../database/connection');
 const permisoService = require('./permisoService');
 
 // Concilia el inventario de una sede (o todas, si sedeId es null y el usuario tiene
@@ -50,4 +51,40 @@ function conciliar(usuarioSesion, { sedeId } = {}) {
   return { estadoGeneral, detalle };
 }
 
-module.exports = { conciliar };
+// Versión ligera para dashboard: solo estadoGeneral en SQL, sin traer detalle.
+// Misma regla dura: cualquier diferencia o ajuste a la baja => NO_CONCILIADO.
+function conciliarResumen(usuarioSesion, { sedeId } = {}) {
+  const sedeEfectiva = permisoService.resolverSedeEfectiva(usuarioSesion, sedeId);
+  const db = getDb();
+  const params = {};
+  let filtroLote = '';
+  let filtroMov = '';
+  if (sedeEfectiva !== null && sedeEfectiva !== undefined) {
+    filtroLote = 'AND l.sede_id = @sedeId';
+    filtroMov = 'AND m.sede_id = @sedeId';
+    params.sedeId = sedeEfectiva;
+  }
+  const row = db.prepare(`
+    SELECT COUNT(*) AS malos FROM (
+      SELECT l.id
+      FROM lotes l
+      LEFT JOIN (
+        SELECT lote_id,
+               COALESCE(SUM(cantidad), 0) AS esperado,
+               COUNT(CASE WHEN tipo = 'AJUSTE' AND cantidad < 0 THEN 1 END) AS bajas
+        FROM movimientos_inventario m
+        WHERE 1=1 ${filtroMov}
+        GROUP BY lote_id
+      ) mv ON mv.lote_id = l.id
+      WHERE 1=1 ${filtroLote}
+        AND (
+          l.cantidad_total_unidades != COALESCE(mv.esperado, 0)
+          OR COALESCE(mv.bajas, 0) > 0
+        )
+      LIMIT 1
+    )
+  `).get(params);
+  return { estadoGeneral: (row?.malos || 0) > 0 ? 'NO_CONCILIADO' : 'CONCILIADO' };
+}
+
+module.exports = { conciliar, conciliarResumen };

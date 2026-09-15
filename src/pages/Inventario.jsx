@@ -50,7 +50,7 @@ export default function Inventario({ usuario, sedeActiva, params, onClearParams 
   const cargar = useCallback(async () => {
     setCargando(true);
     const [medRes, loteRes] = await Promise.all([
-      inventarioApi.medicamentos.listar(),
+      inventarioApi.medicamentos.listar(usuario),
       inventarioApi.lotes.listar(usuario, { sedeId: sedeActiva, limit: porPagina, offset: (pagina - 1) * porPagina })
     ]);
     if (medRes.ok) setMedicamentos(medRes.data);

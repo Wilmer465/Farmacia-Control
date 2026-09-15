@@ -1,10 +1,35 @@
 const { getDb } = require('../database/connection');
 
 function siguienteNumero(db) {
-  const row = db.prepare(`SELECT COUNT(*) AS total FROM ordenes`).get();
-  const consecutivo = row.total + 1;
+  // SEGURIDAD concurrencia/borrados: MAX del consecutivo en vez de COUNT(*)+1,
+  // que repetía números si había borrados. Dentro de la tx de crearConDetalles.
+  const row = db.prepare(`
+    SELECT MAX(CAST(SUBSTR(numero, 5) AS INTEGER)) AS maximo FROM ordenes
+    WHERE numero LIKE 'ORD-%'
+  `).get();
+  const consecutivo = (Number(row?.maximo) || 0) + 1;
   return `ORD-${String(consecutivo).padStart(6, '0')}`;
 }
+
+function sanitizarEntero(valor, defecto, maximo = 500) {
+  const n = Number.parseInt(valor, 10);
+  if (!Number.isInteger(n) || n < 0) return defecto;
+  return Math.min(n, maximo);
+}
+
+// Columnas de listado: SIN blobs (firma_data/documento_adjunto_data son base64
+// que pueden ser megas por fila). El detalle completo va por findById().
+const COLUMNAS_LISTADO = `
+  o.id, o.numero, o.sede_id, o.estado, o.motivo_cancelacion,
+  o.usuario_creador_id, o.fecha_creacion, o.fecha_actualizacion,
+  o.tipo_destino, o.destino_detalle,
+  o.receptor_nombre, o.receptor_documento, o.receptor_telefono, o.receptor_correo,
+  CASE WHEN o.firma_data IS NOT NULL AND o.firma_data != '' THEN 1 ELSE 0 END AS tiene_firma,
+  o.huella_registrada,
+  o.documento_adjunto_nombre, o.documento_adjunto_tipo,
+  CASE WHEN o.documento_adjunto_data IS NOT NULL AND o.documento_adjunto_data != '' THEN 1 ELSE 0 END AS tiene_adjunto,
+  o.documentacion_completa, o.elementos_faltantes
+`;
 
 function findAll({ sedeId } = {}) {
   const db = getDb();
@@ -17,13 +42,83 @@ function findAll({ sedeId } = {}) {
   const where = condiciones.length ? `WHERE ${condiciones.join(' AND ')}` : '';
 
   return db.prepare(`
-    SELECT o.*, s.nombre AS sede_nombre, u.nombre AS creador_nombre
+    SELECT ${COLUMNAS_LISTADO}, s.nombre AS sede_nombre, u.nombre AS creador_nombre
     FROM ordenes o
     JOIN sedes s ON s.id = o.sede_id
     JOIN usuarios u ON u.id = o.usuario_creador_id
     ${where}
     ORDER BY o.fecha_creacion DESC
   `).all(params);
+}
+
+// Listado paginado con COUNT(*) real para totales correctos en la UI.
+function findAllPaginated({ sedeId, estado, fechaInicio, fechaFin, limit = 25, offset = 0 } = {}) {  const db = getDb();
+  const condiciones = [];
+  const params = {};
+  if (sedeId !== null && sedeId !== undefined) {
+    condiciones.push('o.sede_id = @sedeId');
+    params.sedeId = sedeId;
+  }
+  if (estado) {
+    condiciones.push('o.estado = @estado');
+    params.estado = estado;
+  }
+  if (fechaInicio) {
+    condiciones.push('o.fecha_creacion >= @fechaInicio');
+    params.fechaInicio = fechaInicio;
+  }
+  if (fechaFin) {
+    condiciones.push('o.fecha_creacion <= @fechaFin');
+    params.fechaFin = fechaFin;
+  }
+  const where = condiciones.length ? `WHERE ${condiciones.join(' AND ')}` : '';
+  const limpio = sanitizarEntero(limit, 25);
+  const desplazamiento = sanitizarEntero(offset, 0, 1000000);
+
+  const total = db.prepare(`
+    SELECT COUNT(*) AS total FROM ordenes o ${where}
+  `).get(params).total;
+
+  const data = db.prepare(`
+    SELECT ${COLUMNAS_LISTADO}, s.nombre AS sede_nombre, u.nombre AS creador_nombre
+    FROM ordenes o
+    JOIN sedes s ON s.id = o.sede_id
+    JOIN usuarios u ON u.id = o.usuario_creador_id
+    ${where}
+    ORDER BY o.fecha_creacion DESC
+    LIMIT ${limpio} OFFSET ${desplazamiento}
+  `).all(params);
+
+  return { data, total, limit: limpio, offset: desplazamiento };
+}
+
+function contar({ sedeId, estado, estadoNot, documentacionCompleta, excluirTipoDestino, tipoDestinoNot } = {}) {
+  const db = getDb();
+  const condiciones = [];
+  const params = {};
+  if (sedeId !== null && sedeId !== undefined) {
+    condiciones.push('sede_id = @sedeId');
+    params.sedeId = sedeId;
+  }
+  if (estado) {
+    condiciones.push('estado = @estado');
+    params.estado = estado;
+  }
+  if (estadoNot) {
+    condiciones.push('estado != @estadoNot');
+    params.estadoNot = estadoNot;
+  }
+  if (documentacionCompleta !== undefined) {
+    condiciones.push('documentacion_completa = @documentacionCompleta');
+    params.documentacionCompleta = documentacionCompleta;
+  }
+  const tipoExcluir = excluirTipoDestino || tipoDestinoNot;
+  if (tipoExcluir) {
+    condiciones.push('tipo_destino != @tipoExcluir');
+    params.tipoExcluir = tipoExcluir;
+  }
+  const where = condiciones.length ? `WHERE ${condiciones.join(' AND ')}` : '';
+  return db.prepare(`SELECT COUNT(*) AS total FROM ordenes ${where}`).get(params).total;
 }
 
 function findById(id) {
@@ -151,4 +246,4 @@ function actualizarDocumentacion(id, {
   return findById(id);
 }
 
-module.exports = { findAll, findById, crearConDetalles, actualizarEstado, cancelar, actualizarDocumentacion };
+module.exports = { findAll, findAllPaginated, contar, findById, crearConDetalles, actualizarEstado, cancelar, actualizarDocumentacion };

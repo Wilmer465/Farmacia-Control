@@ -68,4 +68,20 @@ function resolver(id, { estado, usuario_resolutor_id, observacion_resolucion }) 
   return findById(id);
 }
 
-module.exports = { findAll, findById, create, resolver };
+function contar({ sedeId, estado } = {}) {
+  const db = getDb();
+  const condiciones = [];
+  const params = {};
+  if (sedeId !== null && sedeId !== undefined) {
+    condiciones.push('sede_id = @sedeId');
+    params.sedeId = sedeId;
+  }
+  if (estado) {
+    condiciones.push('estado = @estado');
+    params.estado = estado;
+  }
+  const where = condiciones.length ? `WHERE ${condiciones.join(' AND ')}` : '';
+  return db.prepare(`SELECT COUNT(*) AS total FROM solicitudes_eliminacion ${where}`).get(params).total;
+}
+
+module.exports = { findAll, findById, create, resolver, contar };

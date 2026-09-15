@@ -46,7 +46,7 @@ function seed() {
   // 3. Usuario Superadmin
   const existeAdmin = db.prepare('SELECT id FROM usuarios WHERE LOWER(username) = ?').get('superadmin');
   if (!existeAdmin) {
-    const hash = bcrypt.hashSync('Superadmin123*', 10);
+    const hash = bcrypt.hashSync('Superadmin123*', 12);
     db.prepare(`
       INSERT INTO usuarios (nombre, username, password_hash, rol_id, sede_id, estado)
       VALUES (?, ?, ?, ?, NULL, ?)
@@ -54,48 +54,61 @@ function seed() {
   }
 
   // 3.1 Usuario Superadmin Wilmer (acceso exclusivo a gestión de usuarios)
-  const hashWilmer = bcrypt.hashSync('Wilmer465*', 10);
+  // SEGURIDAD: solo INSERT si no existe. NUNCA se actualiza la contraseña al arrancar:
+  // cambiar la clave debe sobrevivir reinicios. La rotación se hace desde Usuarios.
   const existeWilmer = db.prepare('SELECT id FROM usuarios WHERE LOWER(username) = ?').get('wilmer');
   if (!existeWilmer) {
-    db.prepare(`
-      INSERT INTO usuarios (nombre, username, password_hash, rol_id, sede_id, estado)
-      VALUES (?, ?, ?, ?, NULL, 'ACTIVO')
-    `).run('Wilmer', 'Wilmer', hashWilmer, rolSuperadmin.id);
+    const hashWilmer = bcrypt.hashSync('Wilmer465*', 12);
+    const tieneFlag = db.prepare(`PRAGMA table_info("usuarios")`).all().some((c) => c.name === 'es_superadmin_principal');
+    if (tieneFlag) {
+      db.prepare(`
+        INSERT INTO usuarios (nombre, username, password_hash, rol_id, sede_id, estado, es_superadmin_principal)
+        VALUES (?, ?, ?, ?, NULL, 'ACTIVO', 1)
+      `).run('Wilmer', 'Wilmer', hashWilmer, rolSuperadmin.id);
+    } else {
+      db.prepare(`
+        INSERT INTO usuarios (nombre, username, password_hash, rol_id, sede_id, estado)
+        VALUES (?, ?, ?, ?, NULL, 'ACTIVO')
+      `).run('Wilmer', 'Wilmer', hashWilmer, rolSuperadmin.id);
+    }
   } else {
-    db.prepare(`
-      UPDATE usuarios SET password_hash = ?, rol_id = ?, sede_id = NULL, estado = 'ACTIVO'
-      WHERE id = ?
-    `).run(hashWilmer, rolSuperadmin.id, existeWilmer.id);
+    // Asegurar rol/estado sin tocar el hash: si el admin cambió la clave, se respeta.
+    // Solo se corrige rol a SUPERADMIN si fue degradado por error manual en BD.
+    const actual = db.prepare('SELECT rol_id, sede_id, estado FROM usuarios WHERE id = ?').get(existeWilmer.id);
+    if (Number(actual.rol_id) !== Number(rolSuperadmin.id)) {
+      db.prepare(`UPDATE usuarios SET rol_id = ?, sede_id = NULL WHERE id = ?`).run(rolSuperadmin.id, existeWilmer.id);
+      console.warn('[seed] Rol de Wilmer restaurado a SUPERADMIN (password intacta).');
+    }
+    if (actual.estado !== 'ACTIVO') {
+      db.prepare(`UPDATE usuarios SET estado = 'ACTIVO' WHERE id = ?`).run(existeWilmer.id);
+    }
+    // Asegurar flag principal sin tocar password (migración 020 lo hace también).
+    try {
+      const tieneFlag = db.prepare(`PRAGMA table_info("usuarios")`).all().some((c) => c.name === 'es_superadmin_principal');
+      if (tieneFlag) {
+        db.prepare(`UPDATE usuarios SET es_superadmin_principal = 1 WHERE id = ?`).run(existeWilmer.id);
+      }
+    } catch (_) { /* columna aún no existe: la migración 020 la crea */ }
   }
 
-  // 4. Usuario Inventario Quibdó
-  const hashQuibdo = bcrypt.hashSync('Quibdo123*', 10);
+  // 4. Usuario Inventario Quibdó — solo INSERT, nunca UPDATE de password
   const existeQuibdo = db.prepare('SELECT id FROM usuarios WHERE LOWER(username) = ?').get('inv_quibdo');
   if (!existeQuibdo) {
+    const hashQuibdo = bcrypt.hashSync('Quibdo123*', 12);
     db.prepare(`
       INSERT INTO usuarios (nombre, username, password_hash, rol_id, sede_id, estado)
       VALUES (?, ?, ?, ?, ?, 'ACTIVO')
     `).run('Inventario Quibdo', 'inv_quibdo', hashQuibdo, rolInventario.id, sedeQuibdo.id);
-  } else {
-    db.prepare(`
-      UPDATE usuarios SET password_hash = ?, rol_id = ?, sede_id = ?, estado = 'ACTIVO'
-      WHERE id = ?
-    `).run(hashQuibdo, rolInventario.id, sedeQuibdo.id, existeQuibdo.id);
   }
 
-  // 5. Usuario Inventario Medellín
-  const hashMedellin = bcrypt.hashSync('Medellin123*', 10);
+  // 5. Usuario Inventario Medellín — solo INSERT, nunca UPDATE de password
   const existeMedellin = db.prepare('SELECT id FROM usuarios WHERE LOWER(username) = ?').get('inv_medellin');
   if (!existeMedellin) {
+    const hashMedellin = bcrypt.hashSync('Medellin123*', 12);
     db.prepare(`
       INSERT INTO usuarios (nombre, username, password_hash, rol_id, sede_id, estado)
       VALUES (?, ?, ?, ?, ?, 'ACTIVO')
     `).run('Inventario Medellin', 'inv_medellin', hashMedellin, rolInventario.id, sedeMedellin.id);
-  } else {
-    db.prepare(`
-      UPDATE usuarios SET password_hash = ?, rol_id = ?, sede_id = ?, estado = 'ACTIVO'
-      WHERE id = ?
-    `).run(hashMedellin, rolInventario.id, sedeMedellin.id, existeMedellin.id);
   }
 
   // 6. Lotes iniciales para Quibdó si no tiene
