@@ -13,7 +13,7 @@ const ESTADO_CLASE = {
   AGOTADO: 'estado-gris'
 };
 
-export default function Inventario({ usuario, sedeActiva, params, onClearParams }) {
+export default function Inventario({ usuario, sedeActiva, params, onClearParams, onNavigate }) {
   const [medicamentos, setMedicamentos] = useState([]);
   const [lotes, setLotes] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -146,6 +146,14 @@ export default function Inventario({ usuario, sedeActiva, params, onClearParams 
         </div>
         {puedeEscribir && (
           <div className="header-actions">
+            {onNavigate && (
+              <button
+                className="btn-accion-azul"
+                onClick={() => onNavigate('recepcion')}
+              >
+                📦 Escanear / Recibir
+              </button>
+            )}
             <button
               className={`btn-toggle-action ${mostrarFormMed ? 'btn-cancelar' : 'btn-primario'}`}
               onClick={() => {

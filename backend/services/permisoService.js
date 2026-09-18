@@ -50,11 +50,21 @@ function verificarDespacho(usuarioSesion) {
   }
 }
 
+// Solo ADMIN y SUPERADMIN gestionan el catálogo CUM (importar/actualizar/registrar manual).
+const ROLES_ADMIN = [ROLES.SUPERADMIN, ROLES.ADMIN];
+
+function verificarEsAdmin(usuarioSesion) {
+  if (!usuarioSesion || !ROLES_ADMIN.includes(usuarioSesion.rol_nombre)) {
+    throw new PermisoError('No tiene permisos para gestionar el catálogo CUM.');
+  }
+}
+
 module.exports = {
   PermisoError,
   verificarEscrituraInventario,
   resolverSedeEfectiva,
   verificarPerteneceASede,
   verificarGestionOrdenes,
-  verificarDespacho
+  verificarDespacho,
+  verificarEsAdmin
 };

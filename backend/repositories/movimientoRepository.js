@@ -1,12 +1,16 @@
 const { getDb } = require('../database/connection');
 
-function registrar({ lote_id, medicamento_id, sede_id, tipo, cantidad, referencia_orden_id, usuario_id }) {
+function registrar({ lote_id, medicamento_id, sede_id, tipo, cantidad, referencia_orden_id, usuario_id, empaque_nivel, cantidad_unidades_base }) {
   const db = getDb();
   db.prepare(`
     INSERT INTO movimientos_inventario
-      (lote_id, medicamento_id, sede_id, tipo, cantidad, referencia_orden_id, usuario_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(lote_id, medicamento_id, sede_id, tipo, cantidad, referencia_orden_id ?? null, usuario_id ?? null);
+      (lote_id, medicamento_id, sede_id, tipo, cantidad, referencia_orden_id, usuario_id, empaque_nivel, cantidad_unidades_base)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(lote_id, medicamento_id, sede_id, tipo, cantidad, referencia_orden_id ?? null, usuario_id ?? null, empaque_nivel ?? null, cantidad_unidades_base ?? null);
+}
+
+function crear(data) {
+  return registrar(data);
 }
 
 // Suma de movimientos por lote, agrupado por tipo. Es la base de la conciliación:

@@ -196,9 +196,9 @@ export default function Respaldos({ usuario, sedeActiva }) {
           <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.88rem', fontWeight: 700, color: configAuto.habilitado ? '#15803d' : '#64748b' }}>
             <input
               type="checkbox"
+              className="checkbox-solo-label"
               checked={configAuto.habilitado}
               onChange={(e) => setConfigAuto((prev) => ({ ...prev, habilitado: e.target.checked }))}
-              style={{ width: '1.1rem', height: '1.1rem', cursor: 'pointer' }}
             />
             {configAuto.habilitado ? '🟢 Auto-respaldos ACTIVADOS' : '⚪ Auto-respaldos DESACTIVADOS'}
           </label>

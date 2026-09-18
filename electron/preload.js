@@ -78,5 +78,21 @@ contextBridge.exposeInMainWorld('api', {
     crear: (usuarioSesion, data) => ipcRenderer.invoke('usuarios:crear', usuarioSesion, data),
     actualizar: (usuarioSesion, id, data) => ipcRenderer.invoke('usuarios:actualizar', usuarioSesion, id, data),
     cambiarEstado: (usuarioSesion, id, estado) => ipcRenderer.invoke('usuarios:cambiarEstado', usuarioSesion, id, estado)
+  },
+  catalogoCum: {
+    actualizar: (usuarioSesion) => ipcRenderer.invoke('catalogoCum:actualizar', usuarioSesion),
+    estado: (usuarioSesion) => ipcRenderer.invoke('catalogoCum:estado', usuarioSesion),
+    buscarPorGTIN: (usuarioSesion, gtin) => ipcRenderer.invoke('catalogoCum:buscarPorGTIN', usuarioSesion, gtin),
+    buscarPorCUM: (usuarioSesion, cum) => ipcRenderer.invoke('catalogoCum:buscarPorCUM', usuarioSesion, cum),
+    buscarPorProducto: (usuarioSesion, texto, limite) => ipcRenderer.invoke('catalogoCum:buscarPorProducto', usuarioSesion, texto, limite),
+    crearManual: (usuarioSesion, data) => ipcRenderer.invoke('catalogoCum:crearManual', usuarioSesion, data),
+    crearEmpaque: (usuarioSesion, data) => ipcRenderer.invoke('catalogoCum:crearEmpaque', usuarioSesion, data),
+    adjuntarDocumento: (usuarioSesion, id, data) => ipcRenderer.invoke('catalogoCum:adjuntarDocumento', usuarioSesion, id, data),
+    obtenerDocumento: (usuarioSesion, id) => ipcRenderer.invoke('catalogoCum:obtenerDocumento', usuarioSesion, id)
+  },
+  recepcion: {
+    escanear: (usuarioSesion, codigoBarras) => ipcRenderer.invoke('recepcion:escanear', usuarioSesion, codigoBarras),
+    registrar: (usuarioSesion, data) => ipcRenderer.invoke('recepcion:registrar', usuarioSesion, data),
+    historial: (usuarioSesion, filtros) => ipcRenderer.invoke('recepcion:historial', usuarioSesion, filtros)
   }
 });

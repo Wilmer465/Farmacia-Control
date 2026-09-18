@@ -14,6 +14,8 @@ const Eliminaciones = lazy(() => import('./Eliminaciones.jsx'));
 const Auditoria     = lazy(() => import('./Auditoria.jsx'));
 const Respaldos     = lazy(() => import('./Respaldos.jsx'));
 const Usuarios      = lazy(() => import('./Usuarios.jsx'));
+const CatalogoCUM   = lazy(() => import('./CatalogoCUM.jsx'));
+const Recepcion     = lazy(() => import('./Recepcion.jsx'));
 
 // ─── Spinner de carga mientras el módulo se descarga ──────────────────────
 const CargandoModulo = memo(function CargandoModulo() {
@@ -120,6 +122,24 @@ const ICONS = {
       <path d="M16 3.13a4 4 0 0 1 0 7.75" />
     </svg>
   ),
+  catalogoCum: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <path d="M9 3v18" />
+      <path d="M15 3v18" />
+      <path d="M3 9h18" />
+      <path d="M3 15h18" />
+    </svg>
+  ),
+  recepcion: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10" />
+      <path d="M7 10l5 5 5-5" />
+      <path d="M12 15v10" />
+      <line x1="18" y1="3" x2="22" y2="7" />
+      <line x1="22" y1="3" x2="18" y2="7" />
+    </svg>
+  ),
   logout: (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
@@ -132,12 +152,18 @@ const ICONS = {
 const TABS_BASE = [
   { id: 'dashboard',     label: 'Dashboard',     desc: 'Métricas y KPIs' },
   { id: 'inventario',    label: 'Inventario',     desc: 'Medicamentos y lotes' },
+  { id: 'catalogoCum',   label: 'Catálogo CUM',   desc: 'Catálogo oficial INVIMA' },
   { id: 'ordenes',       label: 'Órdenes',        desc: 'Gestión y despachos' },
   { id: 'entregas',      label: 'Entregas',       desc: 'Firmas y recepción' },
   { id: 'pacientes',     label: 'Documento de Usuarios', desc: 'Prioridad y medicamentos' },
   { id: 'solicitudes',   label: 'Solicitudes',    desc: 'Bajas e intercambios' },
   { id: 'reportes',      label: 'Reportes',       desc: 'Trazabilidad diaria' }
 ];
+
+// Pestañas que no aparecen en el menú lateral pero se acceden desde otras páginas
+const TABS_OCCULTOS = {
+  recepcion: { id: 'recepcion', label: 'Recepción', desc: 'Escaneo y entrada de medicamentos' }
+};
 
 // ─── Item del menú lateral memoizado ──────────────────────────────────────
 const NavItem = memo(function NavItem({ tab, tabActivo, onClick }) {
@@ -225,7 +251,7 @@ export default function AppShell({ usuario, onLogout }) {
     ];
   }
 
-  const tabActual = tabs.find((t) => t.id === tab);
+  const tabActual = tabs.find((t) => t.id === tab) || TABS_OCCULTOS[tab];
 
   const [tabParams, setTabParams] = useState({});
 
@@ -366,8 +392,10 @@ export default function AppShell({ usuario, onLogout }) {
         <main className="dashboard-main">
           <Suspense fallback={<CargandoModulo />}>
             {tab === 'dashboard'     && <Dashboard     usuario={usuario} sedeActiva={sedeActiva} onNavigate={handleNavigate} />}
+            {tab === 'recepcion'     && <Recepcion     usuario={usuario} sedeActiva={sedeActiva} onNavigate={handleNavigate} />}
+            {tab === 'catalogoCum'   && <CatalogoCUM   usuario={usuario} sedeActiva={sedeActiva} />}
             {tab === 'reportes'      && <Reportes      usuario={usuario} sedeActiva={sedeActiva} />}
-            {tab === 'inventario'    && <Inventario    usuario={usuario} sedeActiva={sedeActiva} params={tabParams.inventario} onClearParams={() => limpiarParams('inventario')} />}
+            {tab === 'inventario'    && <Inventario    usuario={usuario} sedeActiva={sedeActiva} onNavigate={handleNavigate} params={tabParams.inventario} onClearParams={() => limpiarParams('inventario')} />}
             {tab === 'ordenes'       && <Ordenes       usuario={usuario} sedeActiva={sedeActiva} params={tabParams.ordenes} onClearParams={() => limpiarParams('ordenes')} />}
             {tab === 'entregas'      && <Entregas      usuario={usuario} sedeActiva={sedeActiva} params={tabParams.entregas} onClearParams={() => limpiarParams('entregas')} />}
             {tab === 'pacientes'     && <Pacientes     usuario={usuario} sedeActiva={sedeActiva} />}

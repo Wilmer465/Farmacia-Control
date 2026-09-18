@@ -15,6 +15,8 @@ const reporteController = require('./controllers/reporteController');
 const backupController = require('./controllers/backupController');
 const cloudSyncController = require('./controllers/cloudSyncController');
 const usuarioController = require('./controllers/usuarioController');
+const catalogoCumController = require('./controllers/catalogoCumController');
+const recepcionController = require('./controllers/recepcionController');
 const { sincronizarEnSegundoPlano } = require('./services/cloudSyncService');
 const sedeService = require('./services/sedeService');
 const sessionService = require('./services/sessionService');
@@ -285,6 +287,56 @@ ipcMain.handle('backups:restaurar', conSyncDespuesDeCambio('backups:restaurar', 
   ipcMain.handle('usuarios:cambiarEstado', conSyncDespuesDeCambio('usuarios:cambiarEstado', conValidacionSesion((usuarioSesion, id, estado) => {
     return usuarioController.cambiarEstado(usuarioSesion, id, estado);
   })));
+
+  // Catálogo CUM (INVIMA) - Solo ADMIN/SUPERADMIN
+  ipcMain.handle('catalogoCum:actualizar', conSyncDespuesDeCambio('catalogoCum:actualizar', conValidacionSesion((usuarioSesion) => {
+    return catalogoCumController.actualizarCatalogo(usuarioSesion);
+  })));
+
+  ipcMain.handle('catalogoCum:estado', conValidacionSesion(() => {
+    return catalogoCumController.obtenerEstadoCatalogo();
+  }));
+
+  ipcMain.handle('catalogoCum:buscarPorGTIN', conValidacionSesion((_usuarioSesion, gtin) => {
+    return catalogoCumController.buscarPorGTIN(gtin);
+  }));
+
+  ipcMain.handle('catalogoCum:buscarPorCUM', conValidacionSesion((_usuarioSesion, cum) => {
+    return catalogoCumController.buscarPorCUM(cum);
+  }));
+
+  ipcMain.handle('catalogoCum:buscarPorProducto', conValidacionSesion((_usuarioSesion, texto, limite) => {
+    return catalogoCumController.buscarPorProducto(texto, limite);
+  }));
+
+  ipcMain.handle('catalogoCum:crearManual', conSyncDespuesDeCambio('catalogoCum:crearManual', conValidacionSesion((usuarioSesion, data) => {
+    return catalogoCumController.crearRegistroManual(usuarioSesion, data);
+  })));
+
+  ipcMain.handle('catalogoCum:crearEmpaque', conSyncDespuesDeCambio('catalogoCum:crearEmpaque', conValidacionSesion((usuarioSesion, data) => {
+    return catalogoCumController.crearEmpaque(usuarioSesion, data);
+  })));
+
+  ipcMain.handle('catalogoCum:adjuntarDocumento', conSyncDespuesDeCambio('catalogoCum:adjuntarDocumento', conValidacionSesion((usuarioSesion, id, data) => {
+    return catalogoCumController.adjuntarDocumento(usuarioSesion, id, data);
+  })));
+
+  ipcMain.handle('catalogoCum:obtenerDocumento', conValidacionSesion((_usuarioSesion, id) => {
+    return catalogoCumController.obtenerDocumento(_usuarioSesion, id);
+  }));
+
+  // Recepción con escaneo - INVENTARIO/ADMIN/SUPERADMIN
+  ipcMain.handle('recepcion:escanear', conValidacionSesion((usuarioSesion, codigoBarras) => {
+    return recepcionController.procesarEscaneo(usuarioSesion, codigoBarras);
+  }));
+
+  ipcMain.handle('recepcion:registrar', conSyncDespuesDeCambio('recepcion:registrar', conValidacionSesion((usuarioSesion, data) => {
+    return recepcionController.registrarRecepcion(usuarioSesion, data);
+  })));
+
+  ipcMain.handle('recepcion:historial', conValidacionSesion((usuarioSesion, filtros) => {
+    return recepcionController.obtenerHistorialRecepciones(usuarioSesion, filtros);
+  }));
 }
 
 module.exports = { registerIpcHandlers };

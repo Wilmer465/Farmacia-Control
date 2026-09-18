@@ -43,7 +43,10 @@ const SYNC_TABLES = [
   'solicitudes_eliminacion',
   'solicitudes_intercambio',
   'movimientos_inventario',
-  'auditoria'
+  'auditoria',
+  'catalogo_cum',
+  'catalogo_empaques',
+  'catalogo_actualizaciones'
 ];
 
 function rutaSyncState() {

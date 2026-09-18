@@ -1,0 +1,1 @@
+﻿const D = require("better-sqlite3"); const db = new D(":memory:"); db.prepare("create table t(x)").run(); db.prepare("insert into t values (1)").run(); console.log("OK modules=" + process.versions.modules + " electron=" + process.versions.electron + " rows=" + db.prepare("select count(*) c from t").get().c);

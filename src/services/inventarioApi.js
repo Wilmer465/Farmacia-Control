@@ -70,5 +70,21 @@ export const inventarioApi = {
     crear: (usuario, data) => window.api.usuarios.crear(usuario, data),
     actualizar: (usuario, id, data) => window.api.usuarios.actualizar(usuario, id, data),
     cambiarEstado: (usuario, id, estado) => window.api.usuarios.cambiarEstado(usuario, id, estado)
+  },
+  catalogoCum: {
+    actualizar: (usuario) => window.api.catalogoCum.actualizar(usuario),
+    estado: (usuario) => window.api.catalogoCum.estado(usuario),
+    buscarPorGTIN: (usuario, gtin) => window.api.catalogoCum.buscarPorGTIN(usuario, gtin),
+    buscarPorCUM: (usuario, cum) => window.api.catalogoCum.buscarPorCUM(usuario, cum),
+    buscarPorProducto: (usuario, texto, limite) => window.api.catalogoCum.buscarPorProducto(usuario, texto, limite),
+    crearManual: (usuario, data) => window.api.catalogoCum.crearManual(usuario, data),
+    crearEmpaque: (usuario, data) => window.api.catalogoCum.crearEmpaque(usuario, data),
+    adjuntarDocumento: (usuario, id, data) => window.api.catalogoCum.adjuntarDocumento(usuario, id, data),
+    obtenerDocumento: (usuario, id) => window.api.catalogoCum.obtenerDocumento(usuario, id)
+  },
+  recepcion: {
+    escanear: (usuario, codigoBarras) => window.api.recepcion.escanear(usuario, codigoBarras),
+    registrar: (usuario, data) => window.api.recepcion.registrar(usuario, data),
+    historial: (usuario, filtros) => window.api.recepcion.historial(usuario, filtros)
   }
 };
