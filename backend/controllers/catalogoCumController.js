@@ -81,6 +81,23 @@ function obtenerDocumento(usuarioSesion, cumId) {
   }
 }
 
+function obtenerProgreso() {
+  try {
+    return { ok: true, data: catalogoCumService.obtenerProgreso() };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
+function cancelarActualizacion() {
+  try {
+    catalogoCumService.cancelarActualizacion();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
 module.exports = {
   actualizarCatalogo,
   obtenerEstadoCatalogo,
@@ -90,5 +107,7 @@ module.exports = {
   crearRegistroManual,
   crearEmpaque,
   adjuntarDocumento,
-  obtenerDocumento
+  obtenerDocumento,
+  obtenerProgreso,
+  cancelarActualizacion
 };

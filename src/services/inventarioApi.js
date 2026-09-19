@@ -80,7 +80,9 @@ export const inventarioApi = {
     crearManual: (usuario, data) => window.api.catalogoCum.crearManual(usuario, data),
     crearEmpaque: (usuario, data) => window.api.catalogoCum.crearEmpaque(usuario, data),
     adjuntarDocumento: (usuario, id, data) => window.api.catalogoCum.adjuntarDocumento(usuario, id, data),
-    obtenerDocumento: (usuario, id) => window.api.catalogoCum.obtenerDocumento(usuario, id)
+    obtenerDocumento: (usuario, id) => window.api.catalogoCum.obtenerDocumento(usuario, id),
+    progresoActualizacion: (usuario) => window.api.catalogoCum.progresoActualizacion(usuario),
+    cancelarActualizacion: (usuario) => window.api.catalogoCum.cancelarActualizacion(usuario)
   },
   recepcion: {
     escanear: (usuario, codigoBarras) => window.api.recepcion.escanear(usuario, codigoBarras),

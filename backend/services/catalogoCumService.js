@@ -8,20 +8,59 @@ const INVIMA_CUM_URL = 'https://www.datos.gov.co/resource/i7cb-raxc.json';
 const CHUNK_SIZE = 5000;
 const TIMEOUT_MS = 120000;
 
-class CatalogoCumError extends Error {}
+// Estado de progreso y cancelación para actualización de catálogo
+let progresoActualizacion = { activo: false, paso: '', descargados: 0, total: 0, registros: 0 };
+let cancelarActualizacionFlag = false;
+let actualizacionEnProgreso = false;
+
+function obtenerProgreso() {
+  return { ...progresoActualizacion };
+}
+
+function cancelarActualizacion() {
+  cancelarActualizacionFlag = true;
+}
+
+class CatalogoCumError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'CatalogoCumError';
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, this.constructor);
+    }
+  }
+}
 
 function generarHashFila(row) {
   const camposClave = [
     row.expediente,
     row.consecutivocum,
     row.producto,
-    row.principioactivo,
+    row.descripcioncomercial,
+    row.principio_activo,
     row.concentracion,
-    row.formafarmaceutica,
-    row.registrosanitario,
+    row.forma_farmaceutica,
+    row.via_administracion,
+    row.unidad_medida,
+    row.cantidad_presentacion,
+    row.registro_sanitario,
+    row.fecha_expedicion_registro,
+    row.fecha_vencimiento_registro,
+    row.estado_registro,
+    row.estado_cum || row.estadocum,
+    row.fecha_activo,
+    row.fecha_inactivo,
     row.titular,
     row.laboratorio,
-    row.estado_cum || row.estadocum
+    row.fabricante,
+    row.pais_fabricante,
+    row.condicion_venta,
+    row.tipo_producto,
+    row.atc_codigo,
+    row.atc_descripcion,
+    row.gtin,
+    row.gtin_empaque_logistico,
+    row.gtin_empaque_venta
   ].filter(v => v != null && v !== '').join('|');
   return crypto.createHash('sha256').update(camposClave).digest('hex');
 }
@@ -40,7 +79,10 @@ function mapearRegistroINVIMA(item, versionCatalogo) {
     forma_farmaceutica: item.formafarmaceutica || null,
     via_administracion: item.viaadministracion || null,
     unidad_medida: item.unidadmedida || null,
-    cantidad_presentacion: item.cantidadcum ? Number(item.cantidadcum) : null,
+    cantidad_presentacion: (() => {
+        const val = item.cantidadcum ? Number(item.cantidadcum) : null;
+        return (val !== null && Number.isFinite(val)) ? val : null;
+      })(),
     registro_sanitario: item.registrosanitario || null,
     fecha_expedicion_registro: item.fechaexpedicion || null,
     fecha_vencimiento_registro: item.fechavencimiento || null,
@@ -80,6 +122,7 @@ async function descargarCatalogoCompleto() {
   let allData = [];
   let offset = 0;
   let hasMore = true;
+  let chunkNum = 0;
 
   while (hasMore) {
     const url = `${INVIMA_CUM_URL}?$limit=${CHUNK_SIZE}&$offset=${offset}`;
@@ -103,6 +146,11 @@ async function descargarCatalogoCompleto() {
       allData = allData.concat(chunk);
       offset += CHUNK_SIZE;
       hasMore = chunk.length === CHUNK_SIZE;
+      chunkNum++;
+      progresoActualizacion.descargados = offset;
+      if (cancelarActualizacionFlag) {
+        throw new CatalogoCumError('Actualización cancelada por el usuario');
+      }
     } catch (err) {
       clearTimeout(timeoutId);
       if (err.name === 'AbortError') {
@@ -157,7 +205,7 @@ function importarATemporal(db, registros, versionCatalogo) {
   `);
 
   const stmt = db.prepare(`
-    INSERT INTO catalogo_cum_temp (
+     INSERT OR IGNORE INTO catalogo_cum_temp (
       expediente, consecutivocum, cum, producto, descripcioncomercial,
       principio_activo, concentracion, forma_farmaceutica, via_administracion,
       unidad_medida, cantidad_presentacion, registro_sanitario,
@@ -330,15 +378,26 @@ async function actualizarCatalogo(usuarioSesion, opciones = {}) {
   let hashArchivo = null;
   let datosDescargados = [];
 
+  // Rate limiting: prevenir llamadas concurrentes
+  if (actualizacionEnProgreso) {
+    throw new CatalogoCumError('Ya hay una actualización de catálogo en progreso');
+  }
+  actualizacionEnProgreso = true;
+
   try {
     // Verificar permisos (solo ADMIN/SUPERADMIN)
     permisoService.verificarEsAdmin(usuarioSesion);
 
+    cancelarActualizacionFlag = false;
+    progresoActualizacion = { activo: true, paso: 'descargando', descargados: 0, total: 0, registros: 0 };
     console.log('[catalogoCum] Iniciando actualización catálogo INVIMA...');
 
     // 1. Descargar
+    progresoActualizacion.paso = 'descargando';
     console.log('[catalogoCum] Descargando desde datos.gov.co...');
     datosDescargados = await descargarCatalogoCompleto();
+    progresoActualizacion.registros = datosDescargados.length;
+    progresoActualizacion.total = datosDescargados.length;
     console.log(`[catalogoCum] Descargados ${datosDescargados.length} registros`);
 
     if (!datosDescargados.length) {
@@ -358,6 +417,7 @@ async function actualizarCatalogo(usuarioSesion, opciones = {}) {
     `).get(hashArchivo);
     
     if (yaImportado && !forzar) {
+      actualizacionEnProgreso = false;
       return {
         ok: true,
         mensaje: 'Catálogo ya está actualizado (misma versión)',
@@ -367,11 +427,19 @@ async function actualizarCatalogo(usuarioSesion, opciones = {}) {
     }
 
     // 2. Mapear y validar
+    progresoActualizacion.paso = 'mapeando';
     console.log('[catalogoCum] Mapeando y validando registros...');
     const registrosValidos = [];
+    const seenCum = new Set();
+    let duplicados = 0;
     for (const item of datosDescargados) {
       try {
         const registro = mapearRegistroINVIMA(item, versionCatalogo);
+        if (registro.cum && seenCum.has(registro.cum)) {
+          duplicados++;
+          continue;
+        }
+        if (registro.cum) seenCum.add(registro.cum);
         registro.hash_fila = generarHashFila(registro);
         const { valido, errores: errs } = validarRegistro(registro);
         if (valido) {
@@ -383,13 +451,15 @@ async function actualizarCatalogo(usuarioSesion, opciones = {}) {
         errores.push({ item, error: e.message });
       }
     }
-    console.log(`[catalogoCum] ${registrosValidos.length} válidos, ${errores.length} con errores`);
+    console.log(`[catalogoCum] ${registrosValidos.length} válidos, ${errores.length} con errores, ${duplicados} duplicados omitidos`);
 
     // 3. Importar a temporal
+    progresoActualizacion.paso = 'importando';
     console.log('[catalogoCum] Importando a tabla temporal...');
     importarATemporal(db, registrosValidos, versionCatalogo);
 
     // 4. Merge (UPSERT)
+    progresoActualizacion.paso = 'fusionando';
     console.log('[catalogoCum] Fusionando con catálogo principal...');
     const stats = compararYMerge(db, versionCatalogo);
     stats.descargados = datosDescargados.length;
@@ -411,6 +481,8 @@ async function actualizarCatalogo(usuarioSesion, opciones = {}) {
 
     console.log('[catalogoCum] Actualización completada:', stats);
 
+    progresoActualizacion.activo = false;
+    progresoActualizacion.paso = 'completado';
     return {
       ok: true,
       version: versionCatalogo,
@@ -429,7 +501,11 @@ async function actualizarCatalogo(usuarioSesion, opciones = {}) {
         [{ error: err.message }]);
     } catch (_) {}
 
+    progresoActualizacion.activo = false;
+    progresoActualizacion.paso = 'error';
     return { ok: false, error: err.message };
+  } finally {
+    actualizacionEnProgreso = false;
   }
 }
 
@@ -504,9 +580,18 @@ function buscarPorCUM(cum) {
 }
 
 function buscarPorProducto(texto, limite = 20) {
-  if (!texto) return [];
   const db = getDb();
-  const like = `%${texto}%`;
+  if (!texto) {
+    return db.prepare(`
+      SELECT * FROM catalogo_cum 
+      ORDER BY actualizado_en DESC, creado_en DESC
+      LIMIT ?
+    `).all(limite);
+  }
+  // Escapar wildcards % y _ para que se traten literalmente
+  const textoEscapado = texto.replace(/[%_]/g, '\\$&');
+  const like = `%${textoEscapado}%`;
+  const startsWith = `${textoEscapado}%`;
   return db.prepare(`
     SELECT * FROM catalogo_cum 
     WHERE producto LIKE ? OR principio_activo LIKE ? OR registro_sanitario LIKE ?
@@ -514,7 +599,7 @@ function buscarPorProducto(texto, limite = 20) {
       CASE WHEN producto LIKE ? THEN 0 ELSE 1 END,
       producto
     LIMIT ?
-  `).all(like, like, like, `${texto}%`, limite);
+  `).all(like, like, like, startsWith, limite);
 }
 
 function crearRegistroManual(usuarioSesion, data) {
@@ -599,6 +684,11 @@ function crearRegistroManual(usuarioSesion, data) {
 function crearEmpaque(usuarioSesion, data) {
   permisoService.verificarEsAdmin(usuarioSesion);
   const db = getDb();
+
+  // Validar nivel explícitamente (solo 1, 2, 3 permitidos)
+  if (![1, 2, 3].includes(data.nivel)) {
+    throw new CatalogoCumError('Nivel de empaque inválido. Debe ser 1, 2 o 3.');
+  }
   
   const stmt = db.prepare(`
     INSERT INTO catalogo_empaques (catalogo_cum_id, nivel, gtin, descripcion, contenido_cantidad, contenido_unidad, factor_conversion, es_principal)
@@ -679,7 +769,8 @@ function adjuntarDocumento(usuarioSesion, cumId, data) {
   return actualizado;
 }
 
-function obtenerDocumento(cumId) {
+function obtenerDocumento(usuarioSesion, cumId) {
+  permisoService.verificarEsAdmin(usuarioSesion);
   const db = getDb();
   return db.prepare(`
     SELECT documento_adjunto_nombre, documento_adjunto_data, documento_adjunto_tipo
@@ -697,5 +788,7 @@ module.exports = {
   crearEmpaque,
   adjuntarDocumento,
   obtenerDocumento,
+  obtenerProgreso,
+  cancelarActualizacion,
   CatalogoCumError
 };

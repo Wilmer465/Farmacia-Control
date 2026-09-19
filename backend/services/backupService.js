@@ -1,4 +1,5 @@
 const fs = require('fs');
+const fsp = require('fs/promises');
 const path = require('path');
 const Database = require('better-sqlite3');
 const { getDb, resolveDbPath, closeDb } = require('../database/connection');
@@ -48,17 +49,18 @@ function validarIntegridad(rutaArchivo) {
   }
 }
 
-function listar(usuarioSesion, filtros = {}) {
+async function listar(usuarioSesion, filtros = {}) {
   verificarAccesoRespaldos(usuarioSesion);
 
   const sedeEfectiva = permisoService.resolverSedeEfectiva(usuarioSesion, filtros?.sedeId);
 
   const dir = carpetaRespaldos();
-  const archivos = fs.readdirSync(dir).filter((f) => f.endsWith('.db'));
+  const archivos = await fsp.readdir(dir);
+  const archivosDb = archivos.filter((f) => f.endsWith('.db'));
 
-  const listado = archivos.map((nombre) => {
+  const listado = await Promise.all(archivosDb.map(async (nombre) => {
     const rutaCompleta = path.join(dir, nombre);
-    const stats = fs.statSync(rutaCompleta);
+    const stats = await fsp.stat(rutaCompleta);
     const match = nombre.match(/_sede_(\d+)/);
     const sedeIdArchivo = match ? Number(match[1]) : null;
 
@@ -69,7 +71,7 @@ function listar(usuarioSesion, filtros = {}) {
       esAutomatico: nombre.includes('_auto_'),
       sedeId: sedeIdArchivo
     };
-  });
+  }));
 
   // Filtrado por sede: si se seleccionó una sede, mostrar respaldos de esa sede o globales
   const filtrados = listado.filter((b) => {
@@ -199,8 +201,8 @@ function restaurar(usuarioSesion, nombreArchivo) {
   return { restaurado: true, nombre: nombreArchivo };
 }
 
-function ultimoRespaldo(usuarioSesion, filtros = {}) {
-  const listado = listar(usuarioSesion, filtros);
+async function ultimoRespaldo(usuarioSesion, filtros = {}) {
+  const listado = await listar(usuarioSesion, filtros);
   return listado.length > 0 ? listado[0] : null;
 }
 

@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { getDb, resolveDbPath } = require('../database/connection');
 const permisoService = require('./permisoService');
-const { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } = require('../config/supabaseConfig');
+const { SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, syncHabilitado } = require('../config/supabaseConfig');
 const { ROLES } = require('../../shared/constants');
 
 class CloudSyncError extends Error {}
@@ -83,16 +83,16 @@ function verificarPermiso(usuarioSesion) {
 
 function headers(extra = {}) {
   return {
-    apikey: SUPABASE_PUBLISHABLE_KEY,
-    Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY}`,
     'Content-Type': 'application/json',
     ...extra
   };
 }
 
 async function supabaseRequest(pathRequest, options = {}) {
-  if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
-    throw new CloudSyncError('Falta configurar SUPABASE_URL o SUPABASE_PUBLISHABLE_KEY.');
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    throw new CloudSyncError('Falta configurar SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY.');
   }
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${pathRequest}`, {
     ...options,
@@ -306,6 +306,9 @@ function iniciarPlanificadorCloudSync({ intervaloMs = 5 * 60 * 1000, ejecutarAlI
 }
 
 function sincronizarEnSegundoPlano(motivo = 'cambio-local') {
+  const { syncHabilitado } = require('../config/supabaseConfig');
+  if (!syncHabilitado) return;
+
   if (syncDebounceTimer) clearTimeout(syncDebounceTimer);
   syncDebounceTimer = setTimeout(async () => {
     syncDebounceTimer = null;

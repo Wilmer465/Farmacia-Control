@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { inventarioApi } from '../services/inventarioApi.js';
 import Pagination from '../components/Pagination.jsx';
 
@@ -23,6 +23,10 @@ export default function CatalogoCUM({ usuario, sedeActiva }) {
   const [porPagina, setPorPagina] = useState(50);
   const [estadoCatalogo, setEstadoCatalogo] = useState(null);
   const [actualizando, setActualizando] = useState(false);
+  const [progreso, setProgreso] = useState(null);
+  const [tiempoActualizacion, setTiempoActualizacion] = useState(0);
+  const progresoIntervalRef = useRef(null);
+  const tiempoIntervalRef = useRef(null);
 
   // Modales
   const [mostrarModalManual, setMostrarModalManual] = useState(false);
@@ -84,6 +88,10 @@ export default function CatalogoCUM({ usuario, sedeActiva }) {
   useEffect(() => {
     cargarCatalogo();
     cargarEstado();
+    return () => {
+      clearInterval(progresoIntervalRef.current);
+      clearInterval(tiempoIntervalRef.current);
+    };
   }, [cargarCatalogo, cargarEstado]);
 
   // Filtrado en memoria
@@ -112,8 +120,30 @@ export default function CatalogoCUM({ usuario, sedeActiva }) {
     setActualizando(true);
     setError(null);
     setExito(null);
+    setProgreso(null);
+    setTiempoActualizacion(0);
+
+    progresoIntervalRef.current = setInterval(async () => {
+      try {
+        const res = await inventarioApi.catalogoCum.progresoActualizacion(usuario);
+        if (res.ok && res.data?.activo) {
+          setProgreso(res.data);
+        }
+      } catch (_) {}
+    }, 1000);
+
+    tiempoIntervalRef.current = setInterval(() => {
+      setTiempoActualizacion(t => t + 1);
+    }, 1000);
+
     try {
-      const res = await inventarioApi.catalogoCum.actualizar(usuario);
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('La actualización está tomando demasiado tiempo. El servidor puede estar descargando un catálogo muy grande. Puede cancelar y reintentar.')), 300000)
+      );
+      const res = await Promise.race([
+        inventarioApi.catalogoCum.actualizar(usuario),
+        timeoutPromise
+      ]);
       if (res.ok) {
         setExito(res.yaActualizado 
           ? `Catálogo ya actualizado (${res.version})` 
@@ -126,7 +156,11 @@ export default function CatalogoCUM({ usuario, sedeActiva }) {
     } catch (err) {
       setError(err.message);
     } finally {
+      clearInterval(progresoIntervalRef.current);
+      clearInterval(tiempoIntervalRef.current);
       setActualizando(false);
+      setProgreso(null);
+      setTiempoActualizacion(0);
     }
   }
 
@@ -238,20 +272,26 @@ export default function CatalogoCUM({ usuario, sedeActiva }) {
 
   async function handleVerDocumento(item) {
     setDocError(null);
-    if (item.documento_adjunto_data) {
-      const esPdf = item.documento_adjunto_tipo === 'PDF';
-      const dataUrl = `data:${esPdf ? 'application/pdf' : 'image/*'};base64,${item.documento_adjunto_data}`;
-      window.open(dataUrl, '_blank');
-    } else {
-      const res = await inventarioApi.catalogoCum.obtenerDocumento(usuario, item.id);
-      if (res.ok && res.data?.documento_adjunto_data) {
-        const esPdf = res.data.documento_adjunto_tipo === 'PDF';
-        const dataUrl = `data:${esPdf ? 'application/pdf' : 'image/*'};base64,${res.data.documento_adjunto_data}`;
-        window.open(dataUrl, '_blank');
-      } else {
-        setDocError(res.error || 'No se encontró el documento.');
-      }
+    const base64 = item.documento_adjunto_data || '';
+    
+    // Validar que el base64 no esté vacío y sea válido
+    if (!base64 || base64.trim() === '') {
+      setDocError('El documento adjunto está vacío o corrupto.');
+      return;
     }
+    
+    // Validación básica de base64
+    try {
+      atob(base64);
+    } catch {
+      setDocError('El documento adjunto tiene un formato inválido (base64 corrupto).');
+      return;
+    }
+    
+    const esPdf = item.documento_adjunto_tipo === 'PDF';
+    const mimeType = esPdf ? 'application/pdf' : 'image/*';
+    const dataUrl = `data:${mimeType};base64,${base64}`;
+    window.open(dataUrl, '_blank');
   }
 
   async function handleQuitarDocumento(item) {
@@ -281,6 +321,36 @@ export default function CatalogoCUM({ usuario, sedeActiva }) {
         </div>
         {puedeAdmin && (
           <div className="header-actions">
+            {actualizando && progreso && (
+              <div className="progreso-actualizacion" style={{ fontSize: '0.8rem', color: '#475569', margin: '0 0.5rem 0 0' }}>
+                Paso: {progreso.paso || 'descargando'} · Registros: {progreso.descargados || 0}
+                {progreso.total > 0 && ` / ${progreso.total}total`}
+              </div>
+            )}
+            {actualizando && tiempoActualizacion > 0 && (
+              <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                ⏱ {Math.floor(tiempoActualizacion / 60)}:{(tiempoActualizacion % 60).toString().padStart(2, '0')}
+              </span>
+            )}
+            {actualizando && (
+              <button
+                className="btn-rojo"
+                onClick={async () => {
+                  try {
+                    await inventarioApi.catalogoCum.cancelarActualizacion(usuario);
+                  } catch (_) {}
+                  clearInterval(progresoIntervalRef.current);
+                  clearInterval(tiempoIntervalRef.current);
+                  setActualizando(false);
+                  setProgreso(null);
+                  setTiempoActualizacion(0);
+                  setError('Actualización cancelada por el usuario.');
+                }}
+                title="Cancelar actualización en curso"
+              >
+                ✕ Cancelar
+              </button>
+            )}
             <button
               className={`btn-primario ${actualizando ? 'btn-cargando' : ''}`}
               onClick={handleActualizarCatalogo}
@@ -291,6 +361,7 @@ export default function CatalogoCUM({ usuario, sedeActiva }) {
             <button
               className="btn-verde"
               onClick={() => setMostrarModalManual(true)}
+              disabled={actualizando}
             >
               ➕ Registrar Manual
             </button>

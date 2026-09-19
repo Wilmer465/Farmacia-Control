@@ -31,22 +31,15 @@ cls
 echo.
 echo === Farmacia Control - Iniciando en modo desarrollo ===
 echo.
-echo Recompilando modulo nativo (better-sqlite3) para Electron...
-call npm run rebuild:electron
-if errorlevel 1 (
-    echo.
-    echo [ERROR] No se pudo recompilar better-sqlite3 para Electron.
-    echo Asegurese de tener Python y Visual Studio Build Tools instalados.
-    pause
-    goto MENU
-)
-echo.
 echo Iniciando Vite + Electron...
 echo Cierre la ventana de la aplicacion para detener todo.
 echo.
 call npm run dev
 echo.
 echo === La aplicacion se cerro. ===
+echo.
+echo Reconstruyendo modulo nativo para Node.js del sistema...
+call npm run rebuild:node 2>nul
 pause
 goto MENU
 

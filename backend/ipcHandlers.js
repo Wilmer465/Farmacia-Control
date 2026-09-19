@@ -42,7 +42,7 @@ function conSyncDespuesDeCambio(nombre, accion) {
   return (...args) => {
     const resultado = accion(...args);
     const programar = (res) => {
-      if (!res || res.ok !== false) sincronizarEnSegundoPlano(nombre);
+      if (res?.ok === true) sincronizarEnSegundoPlano(nombre);
       return res;
     };
     if (resultado && typeof resultado.then === 'function') {
@@ -323,6 +323,14 @@ ipcMain.handle('backups:restaurar', conSyncDespuesDeCambio('backups:restaurar', 
 
   ipcMain.handle('catalogoCum:obtenerDocumento', conValidacionSesion((_usuarioSesion, id) => {
     return catalogoCumController.obtenerDocumento(_usuarioSesion, id);
+  }));
+
+  ipcMain.handle('catalogoCum:progresoActualizacion', conValidacionSesion(() => {
+    return catalogoCumController.obtenerProgreso();
+  }));
+
+  ipcMain.handle('catalogoCum:cancelarActualizacion', conValidacionSesion((_usuarioSesion) => {
+    return catalogoCumController.cancelarActualizacion();
   }));
 
   // Recepción con escaneo - INVENTARIO/ADMIN/SUPERADMIN

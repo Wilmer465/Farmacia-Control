@@ -87,9 +87,11 @@ contextBridge.exposeInMainWorld('api', {
     buscarPorProducto: (usuarioSesion, texto, limite) => ipcRenderer.invoke('catalogoCum:buscarPorProducto', usuarioSesion, texto, limite),
     crearManual: (usuarioSesion, data) => ipcRenderer.invoke('catalogoCum:crearManual', usuarioSesion, data),
     crearEmpaque: (usuarioSesion, data) => ipcRenderer.invoke('catalogoCum:crearEmpaque', usuarioSesion, data),
-    adjuntarDocumento: (usuarioSesion, id, data) => ipcRenderer.invoke('catalogoCum:adjuntarDocumento', usuarioSesion, id, data),
-    obtenerDocumento: (usuarioSesion, id) => ipcRenderer.invoke('catalogoCum:obtenerDocumento', usuarioSesion, id)
-  },
+     adjuntarDocumento: (usuarioSesion, id, data) => ipcRenderer.invoke('catalogoCum:adjuntarDocumento', usuarioSesion, id, data),
+     obtenerDocumento: (usuarioSesion, id) => ipcRenderer.invoke('catalogoCum:obtenerDocumento', usuarioSesion, id),
+     progresoActualizacion: (usuarioSesion) => ipcRenderer.invoke('catalogoCum:progresoActualizacion', usuarioSesion),
+     cancelarActualizacion: (usuarioSesion) => ipcRenderer.invoke('catalogoCum:cancelarActualizacion', usuarioSesion)
+   },
   recepcion: {
     escanear: (usuarioSesion, codigoBarras) => ipcRenderer.invoke('recepcion:escanear', usuarioSesion, codigoBarras),
     registrar: (usuarioSesion, data) => ipcRenderer.invoke('recepcion:registrar', usuarioSesion, data),

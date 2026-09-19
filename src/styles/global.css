@@ -1205,6 +1205,22 @@ body {
   background: #bfdbfe;
 }
 
+.btn-rojo {
+  background: #dc2626;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.55rem 1.1rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-rojo:hover {
+  background: #b91c1c;
+}
+
 .form-collapsible-wrapper {
   margin-bottom: 1.5rem;
   animation: fadeIn 0.2s ease-in-out;
