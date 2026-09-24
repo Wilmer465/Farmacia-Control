@@ -53,11 +53,21 @@ function mantenimientoAlCerrar() {
   try { dbInstance.exec('ANALYZE'); } catch (_) {}
 }
 
+function setTestDb(instance) {
+  if (dbInstance && dbInstance !== instance) {
+    try { dbInstance.close(); } catch (_) {}
+  }
+  dbInstance = instance;
+  if (dbInstance) {
+    dbInstance.pragma('foreign_keys = ON');
+  }
+}
+
 function closeDb() {
   if (dbInstance) {
-    dbInstance.close();
+    try { dbInstance.close(); } catch (_) {}
     dbInstance = null;
   }
 }
 
-module.exports = { getDb, resolveDbPath, closeDb, mantenimientoAlCerrar };
+module.exports = { getDb, resolveDbPath, closeDb, mantenimientoAlCerrar, setTestDb };

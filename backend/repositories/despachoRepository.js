@@ -63,16 +63,20 @@ function findDetalleByDespachoIds(despachoIds) {
   `).all(...despachoIds);
 }
 
+const auditoriaRepository = require('./auditoriaRepository');
+const { AUDIT_ACTIONS } = require('../../shared/constants');
+
 // Ejecuta TODO el despacho en una única transacción SQLite:
 // 1) valida (en frío, dentro de la tx, para evitar condiciones de carrera) que cada
 //    lote tenga stock suficiente y no esté vencido/bloqueado,
 // 2) descuenta el lote,
 // 3) acumula lo despachado en la línea de la orden,
 // 4) recalcula y actualiza el estado de la orden,
-// 5) inserta el despacho y su detalle.
+// 5) inserta el despacho y su detalle,
+// 6) registra la auditoría dentro de la misma transacción.
 // Si cualquier paso falla, SQLite revierte todo — no puede quedar inventario
 // parcialmente descontado ni una orden en un estado inconsistente.
-function crearConDetalles({ orden_id, sede_id, despachado_por, items }) {
+function crearConDetalles({ orden_id, sede_id, despachado_por, despachado_por_rol, items }) {
   const db = getDb();
 
   const tx = db.transaction(() => {
@@ -115,7 +119,9 @@ function crearConDetalles({ orden_id, sede_id, despachado_por, items }) {
       }
 
       const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
-      if (new Date(lote.fecha_vencimiento) < hoy) {
+      const partes = String(lote.fecha_vencimiento).split('-').map(Number);
+      const vencimiento = partes.length === 3 ? new Date(partes[0], partes[1] - 1, partes[2]) : new Date(lote.fecha_vencimiento);
+      if (vencimiento < hoy) {
         throw new Error(`El lote ${lote.numero_lote} está vencido y no puede despacharse.`);
       }
       if (lote.cantidad_total_unidades < item.cantidad_total_despachada) {
@@ -173,6 +179,22 @@ function crearConDetalles({ orden_id, sede_id, despachado_por, items }) {
 
     db.prepare(`UPDATE ordenes SET estado = ?, fecha_actualizacion = datetime('now') WHERE id = ?`).run(nuevoEstado, orden_id);
 
+    // Auditoría transaccional: si esto falla, la tx completa se revierte
+    auditoriaRepository.registrar({
+      usuario_id: despachado_por,
+      rol: despachado_por_rol,
+      sede_id,
+      accion: AUDIT_ACTIONS.DESPACHAR_MEDICAMENTO,
+      modulo: 'DESPACHOS',
+      registro_afectado: `orden:${orden_id}`,
+      resultado: 'EXITO',
+      valores_nuevos: {
+        despacho_id: despachoId,
+        items,
+        nuevo_estado_orden: nuevoEstado
+      }
+    });
+
     return { despachoId, nuevoEstado };
   });
 
@@ -184,4 +206,4 @@ function crearConDetalles({ orden_id, sede_id, despachado_por, items }) {
   };
 }
 
-module.exports = { findAll, findById, findDetalleByDespachoId, crearConDetalles };
+module.exports = { findAll, findById, findDetalleByDespachoId, findDetalleByDespachoIds, crearConDetalles };

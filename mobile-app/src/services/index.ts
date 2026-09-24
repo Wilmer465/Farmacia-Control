@@ -1,0 +1,10 @@
+export { sqliteService, SQLiteService } from './database/SQLiteService';
+export * from './database/repositories';
+export { authService, AuthService } from './auth/AuthService';
+export type { LoginCredentials, LoginResult } from './auth/AuthService';
+export { apiClient } from './api/ApiClient';
+export { syncEngine, SyncEngine } from './sync/SyncEngine';
+export { notificationService, NotificationService } from './notifications/NotificationService';
+export { scannerService, ScannerService } from './scanner/ScannerService';
+export { permissionsService, PermissionsService } from './permissions/PermissionsService';
+export { SecureStorage } from './storage/SecureStorage';

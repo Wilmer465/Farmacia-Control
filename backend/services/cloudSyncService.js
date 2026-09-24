@@ -183,47 +183,50 @@ async function bajar(lastSyncTimestamp, { permitirBajadaTotal = true } = {}) {
   let recibidos = 0;
 
   db.pragma('foreign_keys = OFF');
-  const tx = db.transaction((records) => {
-    for (const table of SYNC_TABLES) {
-      const tableRecords = records.filter((item) => item.table_name === table);
-      for (const item of tableRecords) {
-        if (item.data && typeof item.data === 'object') {
-          let fila = sanitizarFila(item.data);
-          // SEGURIDAD: al bajar usuarios, nunca sobrescribir el hash local con
-          // dato de nube (que viene sin password_hash). Preservar el local.
-          if (table === 'usuarios' && fila.id != null) {
-            try {
-              const local = db.prepare('SELECT password_hash FROM usuarios WHERE id = ?').get(fila.id);
-              if (local && local.password_hash) {
-                fila = { ...fila, password_hash: local.password_hash };
-              } else if (!fila.password_hash) {
-                // Usuario nuevo sin hash en nube: no se puede crear sin credencial.
-                continue;
-              }
-            } catch (_) { /* si falla, se inserta sanitizado */ }
+  try {
+    const tx = db.transaction((records) => {
+      for (const table of SYNC_TABLES) {
+        const tableRecords = records.filter((item) => item.table_name === table);
+        for (const item of tableRecords) {
+          if (item.data && typeof item.data === 'object') {
+            let fila = sanitizarFila(item.data);
+            // SEGURIDAD: al bajar usuarios, nunca sobrescribir el hash local con
+            // dato de nube (que viene sin password_hash). Preservar el local.
+            if (table === 'usuarios' && fila.id != null) {
+              try {
+                const local = db.prepare('SELECT password_hash FROM usuarios WHERE id = ?').get(fila.id);
+                if (local && local.password_hash) {
+                  fila = { ...fila, password_hash: local.password_hash };
+                } else if (!fila.password_hash) {
+                  // Usuario nuevo sin hash en nube: no se puede crear sin credencial.
+                  continue;
+                }
+              } catch (_) { /* si falla, se inserta sanitizado */ }
+            }
+            insertOrReplace(db, table, fila);
+            recibidos += 1;
           }
-          insertOrReplace(db, table, fila);
-          recibidos += 1;
         }
       }
+    });
+
+    let offset = 0;
+    const limit = 1000;
+    const timeFilter = lastSyncTimestamp ? `&synced_at=gte.${encodeURIComponent(lastSyncTimestamp)}` : '';
+
+    while (true) {
+      const records = await supabaseRequest(
+        `sync_records?select=table_name,record_id,data&order=table_name.asc&limit=${limit}&offset=${offset}${timeFilter}`,
+        { method: 'GET' }
+      );
+      if (!records?.length) break;
+      tx(records);
+      if (records.length < limit) break;
+      offset += limit;
     }
-  });
-
-  let offset = 0;
-  const limit = 1000;
-  const timeFilter = lastSyncTimestamp ? `&synced_at=gte.${encodeURIComponent(lastSyncTimestamp)}` : '';
-
-  while (true) {
-    const records = await supabaseRequest(
-      `sync_records?select=table_name,record_id,data&order=table_name.asc&limit=${limit}&offset=${offset}${timeFilter}`,
-      { method: 'GET' }
-    );
-    if (!records?.length) break;
-    tx(records);
-    if (records.length < limit) break;
-    offset += limit;
+  } finally {
+    db.pragma('foreign_keys = ON');
   }
-  db.pragma('foreign_keys = ON');
   return recibidos;
 }
 

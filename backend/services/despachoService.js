@@ -32,7 +32,7 @@ function listarPorOrden(usuarioSesion, ordenId) {
   return despachos.map(d => ({ ...d, detalle: detallesPorDespacho[d.id] || [] }));
 }
 
-function crear(usuarioSesion, { orden_id, items }) {
+function crear(usuarioSesion, { orden_id, items, firma_data, huella_registrada }) {
   permisoService.verificarDespacho(usuarioSesion);
 
   const orden = ordenRepository.findById(orden_id);
@@ -41,6 +41,17 @@ function crear(usuarioSesion, { orden_id, items }) {
 
   if (!ESTADOS_DESPACHABLES.includes(orden.estado)) {
     throw new ValidationError(`Solo se pueden despachar órdenes PENDIENTE o PARCIAL (actual: ${orden.estado}).`);
+  }
+
+  // Regla crítica (Fases 5 y 6): No permitir despacho sin firma ni huella
+  const firmaEfectiva = firma_data || orden.firma_data;
+  const huellaEfectiva = Boolean(huella_registrada ?? orden.huella_registrada);
+
+  if (!firmaEfectiva) {
+    throw new ValidationError('No se puede despachar: se requiere firma registrada.');
+  }
+  if (!huellaEfectiva) {
+    throw new ValidationError('No se puede despachar: se requiere huella registrada.');
   }
 
   const { valido, errores } = validarItemsDespacho(items);
@@ -81,27 +92,13 @@ function crear(usuarioSesion, { orden_id, items }) {
       orden_id: orden.id,
       sede_id: orden.sede_id,
       despachado_por: usuarioSesion.id,
+      despachado_por_rol: usuarioSesion.rol_nombre,
       items: itemsPreparados
     });
   } catch (err) {
     // Errores lanzados dentro de la transacción (stock insuficiente, lote vencido, etc).
     throw new ValidationError(err.message);
   }
-
-  auditoriaRepository.registrar({
-    usuario_id: usuarioSesion.id,
-    rol: usuarioSesion.rol_nombre,
-    sede_id: orden.sede_id,
-    accion: AUDIT_ACTIONS.DESPACHAR_MEDICAMENTO,
-    modulo: 'DESPACHOS',
-    registro_afectado: `orden:${orden.id}`,
-    resultado: 'EXITO',
-    valores_nuevos: {
-      despacho_id: resultado.despacho.id,
-      items: itemsPreparados,
-      nuevo_estado_orden: resultado.nuevoEstadoOrden
-    }
-  });
 
   return resultado;
 }

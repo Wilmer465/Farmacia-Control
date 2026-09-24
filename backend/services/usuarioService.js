@@ -58,7 +58,7 @@ function crear(usuarioSesion, datos) {
     usuario_id: usuarioSesion.id,
     rol: usuarioSesion.rol_nombre,
     sede_id: usuarioSesion.sede_id,
-    accion: AUDIT_ACTIONS.CREAR_LOTE || 'CREAR_USUARIO',
+    accion: AUDIT_ACTIONS.CREAR_USUARIO || 'CREAR_USUARIO',
     modulo: 'USUARIOS',
     registro_afectado: nuevo.username,
     resultado: 'EXITO',

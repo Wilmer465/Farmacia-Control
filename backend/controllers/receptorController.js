@@ -20,8 +20,13 @@ function listar() {
   }
 }
 
-function guardar(data) {
+const { ROLES } = require('../../shared/constants');
+
+function guardar(usuarioSesion, data) {
   try {
+    if (!usuarioSesion || ![ROLES.SUPERADMIN, ROLES.ADMIN, ROLES.INVENTARIO].includes(usuarioSesion.rol_nombre)) {
+      return { ok: false, error: 'No tiene permisos para modificar o registrar receptores.' };
+    }
     const receptor = receptorService.guardarOActualizar(data);
     return { ok: true, data: receptor };
   } catch (err) {
@@ -30,8 +35,11 @@ function guardar(data) {
   }
 }
 
-function actualizar(id, data) {
+function actualizar(usuarioSesion, id, data) {
   try {
+    if (!usuarioSesion || ![ROLES.SUPERADMIN, ROLES.ADMIN, ROLES.INVENTARIO].includes(usuarioSesion.rol_nombre)) {
+      return { ok: false, error: 'No tiene permisos para modificar o registrar receptores.' };
+    }
     const receptor = receptorService.actualizar(id, data);
     if (!receptor) return { ok: false, error: 'La persona no existe.' };
     return { ok: true, data: receptor };

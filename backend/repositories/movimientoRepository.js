@@ -95,4 +95,4 @@ function resumenPorRango({ sedeId, fechaInicio, fechaFin } = {}) {
   `).get(params);
 }
 
-module.exports = { registrar, resumenPorLote, findByRango, resumenPorRango };
+module.exports = { registrar, crear, resumenPorLote, findByRango, resumenPorRango };

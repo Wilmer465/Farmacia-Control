@@ -20,7 +20,9 @@ function calcularEstado(lote) {
 
   const hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
-  const vencimiento = new Date(lote.fecha_vencimiento);
+  const partes = String(lote.fecha_vencimiento || '').split('-').map(Number);
+  const vencimiento = partes.length === 3 ? new Date(partes[0], partes[1] - 1, partes[2]) : new Date(lote.fecha_vencimiento);
+  vencimiento.setHours(0, 0, 0, 0);
   const diffDias = Math.floor((vencimiento - hoy) / (1000 * 60 * 60 * 24));
 
   if (diffDias < 0) return 'VENCIDO';

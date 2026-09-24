@@ -144,12 +144,12 @@ ipcMain.handle('auth:logout', conSyncDespuesDeCambio('auth:logout', conValidacio
     return receptorController.listar();
   }));
 
-  ipcMain.handle('receptores:guardar', conSyncDespuesDeCambio('receptores:guardar', conValidacionSesion((_usuarioSesion, data) => {
-    return receptorController.guardar(data);
+  ipcMain.handle('receptores:guardar', conSyncDespuesDeCambio('receptores:guardar', conValidacionSesion((usuarioSesion, data) => {
+    return receptorController.guardar(usuarioSesion, data);
   })));
 
-  ipcMain.handle('receptores:actualizar', conSyncDespuesDeCambio('receptores:actualizar', conValidacionSesion((_usuarioSesion, id, data) => {
-    return receptorController.actualizar(id, data);
+  ipcMain.handle('receptores:actualizar', conSyncDespuesDeCambio('receptores:actualizar', conValidacionSesion((usuarioSesion, id, data) => {
+    return receptorController.actualizar(usuarioSesion, id, data);
   })));
 
   ipcMain.handle('solicitudesEliminacion:listar', conValidacionSesion((usuarioSesion, filtros) => {

@@ -63,6 +63,10 @@ function resolver(usuarioSesion, id, { decision, observacion }) {
     throw new ValidationError(`Esta solicitud ya fue resuelta (${solicitud.estado}).`);
   }
 
+  if (decision === 'APROBADA' && Number(solicitud.usuario_solicitante_id) === Number(usuarioSesion.id)) {
+    throw new permisoService.PermisoError('Por seguridad, no puede aprobar su propia solicitud de eliminación.');
+  }
+
   const actualizada = solicitudRepository.resolver(id, {
     estado: decision,
     usuario_resolutor_id: usuarioSesion.id,
