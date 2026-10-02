@@ -44,6 +44,19 @@ function findById(id) {
   `).get(id);
 }
 
+// Comprobación de aplicación. La garantía real es el índice único parcial
+// idx_solicitudes_elim_pendiente (migración 024); esto da un mensaje de negocio
+// legible en el caso normal y el índice cubre la carrera entre dos envíos.
+function existePendiente({ tipoRegistro, registroId }) {
+  const db = getDb();
+  const row = db.prepare(`
+    SELECT 1 AS existe FROM solicitudes_eliminacion
+    WHERE tipo_registro = ? AND registro_id = ? AND estado = 'PENDIENTE'
+    LIMIT 1
+  `).get(tipoRegistro, registroId);
+  return Boolean(row);
+}
+
 function create(data) {
   const db = getDb();
   const stmt = db.prepare(`
@@ -84,4 +97,4 @@ function contar({ sedeId, estado } = {}) {
   return db.prepare(`SELECT COUNT(*) AS total FROM solicitudes_eliminacion ${where}`).get(params).total;
 }
 
-module.exports = { findAll, findById, create, resolver, contar };
+module.exports = { findAll, findById, create, existePendiente, resolver, contar };

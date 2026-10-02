@@ -4,7 +4,8 @@ export const migration021: Migration = {
   version: 21,
   name: '021_extender_inventario_cum',
   up: async (db: any) => {
-    const colsMed = db.prepare("PRAGMA table_info(medicamentos)").all().map((c: any) => c.name);
+    const colsMedResult = await db.getAllAsync("PRAGMA table_info(medicamentos)");
+    const colsMed = colsMedResult.map((c: any) => c.name);
     
     if (!colsMed.includes('catalogo_cum_id')) {
       await db.execAsync(`ALTER TABLE medicamentos ADD COLUMN catalogo_cum_id INTEGER;`);
@@ -16,7 +17,8 @@ export const migration021: Migration = {
       await db.execAsync(`ALTER TABLE medicamentos ADD COLUMN gtin_principal TEXT;`);
     }
     
-    const colsLotes = db.prepare("PRAGMA table_info(lotes)").all().map((c: any) => c.name);
+    const colsLotesResult = await db.getAllAsync("PRAGMA table_info(lotes)");
+    const colsLotes = colsLotesResult.map((c: any) => c.name);
     
     if (!colsLotes.includes('empaque_nivel')) {
       await db.execAsync(`ALTER TABLE lotes ADD COLUMN empaque_nivel INTEGER CHECK (empaque_nivel IN (1,2,3));`);
@@ -28,7 +30,8 @@ export const migration021: Migration = {
       await db.execAsync(`ALTER TABLE lotes ADD COLUMN factor_conversion INTEGER NOT NULL DEFAULT 1;`);
     }
     
-    const colsMov = db.prepare("PRAGMA table_info(movimientos_inventario)").all().map((c: any) => c.name);
+    const colsMovResult = await db.getAllAsync("PRAGMA table_info(movimientos_inventario)");
+    const colsMov = colsMovResult.map((c: any) => c.name);
     
     if (!colsMov.includes('empaque_nivel')) {
       await db.execAsync(`ALTER TABLE movimientos_inventario ADD COLUMN empaque_nivel INTEGER;`);

@@ -57,6 +57,35 @@ export const migration001: Migration = {
       CREATE INDEX IF NOT EXISTS idx_auditoria_fecha ON auditoria(fecha);
       CREATE INDEX IF NOT EXISTS idx_auditoria_sede ON auditoria(sede_id);
     `);
+
+    await db.execAsync(`
+      INSERT OR IGNORE INTO roles (id, nombre, descripcion) VALUES
+        (1, 'SUPERADMIN', 'Super administrador del sistema'),
+        (2, 'ADMIN', 'Administrador de sede'),
+        (3, 'BODEGA', 'Personal de bodega'),
+        (4, 'ENFERMERIA', 'Personal de enfermería'),
+        (5, 'MEDICO', 'Médico');
+
+      INSERT OR IGNORE INTO sedes (id, nombre, ciudad, estado) VALUES
+        (1, 'Sede Principal', 'Quibdó', 'ACTIVO');
+    `);
+
+    // bcrypt (coste 12) de 'admin123*', el mismo formato que verifica
+    // `AuthService.verifyPassword` con bcryptjs. La API central siembra el mismo
+    // usuario con la misma clave, asi que login remoto y login local comparten
+    // credenciales.
+    const adminHash = '$2a$12$JUvGaw13XEm44DjzTwGLJ.vyEfwUmb.CUEXvbcpJIe70qV6pFUESi';
+    // OJO: hay que usar runAsync y no execAsync para sentencia con parametros.
+    // En web la implementacion de expo-sqlite declara `execAsync(source: string)`
+    // sin `bindParams`: los `?` nunca se enlazan, el INSERT falla por la
+    // restriccion NOT NULL de password_hash y la sentencia se descarta en
+    // silencio, dejando la tabla `usuarios` vacia (y por tanto imposible
+    // iniciar sesion en modo local). runAsync si enlaza parametros en web.
+    await db.runAsync(
+      `INSERT OR IGNORE INTO usuarios (id, nombre, username, password_hash, rol_id, sede_id, estado, es_superadmin_principal)
+       VALUES (1, 'Super Admin', 'admin', ?, 1, 1, 'ACTIVO', 1);`,
+      [adminHash]
+    );
   },
 };
 

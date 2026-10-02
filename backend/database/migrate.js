@@ -12,6 +12,27 @@ function ensureMigrationsTable(db) {
   `);
 }
 
+// Migración atómica por defecto: `up()` y el registro en `migrations` se aplican
+// juntos o no se aplica ninguno.
+//
+// Excepción declarada con `atomic: false`: hay sentencias que SQLite no acepta
+// dentro de una transacción —`VACUUM` entre ellas—, y una migración de ese tipo
+// solo puede correr sin el envoltorio. Quien marque `atomic: false` asume que la
+// operación NO es reversible por el runner; por eso esas migraciones son las
+// últimas de su bloque y todas las suyas se emiten en orden lexicográfico
+// (`024_`, `025_`, `026_`...).
+function ejecutarMigracion(db, migration, insertRecord) {
+  if (migration.atomic === false) {
+    migration.up(db);
+    insertRecord.run(migration.name);
+    return;
+  }
+  db.transaction(() => {
+    migration.up(db);
+    insertRecord.run(migration.name);
+  })();
+}
+
 function runMigrations() {
   const db = getDb();
   ensureMigrationsTable(db);
@@ -31,14 +52,10 @@ function runMigrations() {
     const migration = require(path.join(dir, file));
     if (already.has(migration.name)) continue;
 
-    const runTx = db.transaction(() => {
-      migration.up(db);
-      insertRecord.run(migration.name);
-    });
-
     try {
-      runTx();
-      console.log(`[migrate] OK  -> ${migration.name}`);
+      ejecutarMigracion(db, migration, insertRecord);
+      const sufijo = migration.atomic === false ? ' (no atómica)' : '';
+      console.log(`[migrate] OK  -> ${migration.name}${sufijo}`);
     } catch (err) {
       console.error(`[migrate] FALLÓ -> ${migration.name}:`, err.message);
       throw err;

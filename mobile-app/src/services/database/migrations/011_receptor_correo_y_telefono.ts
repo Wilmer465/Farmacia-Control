@@ -4,7 +4,8 @@ export const migration011: Migration = {
   version: 11,
   name: '011_receptor_correo_y_telefono',
   up: async (db: any) => {
-    const cols = db.prepare("PRAGMA table_info(receptores)").all().map((c: any) => c.name);
+    const colsResult = await db.getAllAsync("PRAGMA table_info(receptores)");
+    const cols = colsResult.map((c: any) => c.name);
     if (!cols.includes('telefono')) {
       await db.execAsync("ALTER TABLE receptores ADD COLUMN telefono TEXT;");
     }

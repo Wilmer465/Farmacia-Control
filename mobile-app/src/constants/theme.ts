@@ -1,10 +1,11 @@
-import { DefaultTheme, DarkTheme, Theme } from 'react-native-paper';
+import { MD3LightTheme, MD3DarkTheme } from 'react-native-paper';
+import type { MD3Theme } from 'react-native-paper';
 
-export const theme: Theme = {
-  ...DefaultTheme,
+export const theme: MD3Theme = {
+  ...MD3LightTheme,
   roundness: 8,
   colors: {
-    ...DefaultTheme.colors,
+    ...MD3LightTheme.colors,
     primary: '#2563eb',
     primaryContainer: '#dbeafe',
     secondary: '#059669',
@@ -34,23 +35,15 @@ export const theme: Theme = {
     inversePrimary: '#93c5fd',
     shadow: '#000000',
     scrim: '#000000',
-    backdrop: 'rgba(0, 0, 0, 0.5)',
   },
-  fonts: {
-    ...DefaultTheme.fonts,
-    regular: { fontFamily: 'System', fontWeight: '400' as const },
-    medium: { fontFamily: 'System', fontWeight: '500' as const },
-    light: { fontFamily: 'System', fontWeight: '300' as const },
-    thin: { fontFamily: 'System', fontWeight: '100' as const },
-    bold: { fontFamily: 'System', fontWeight: '700' as const },
-  },
+  fonts: MD3LightTheme.fonts,
 };
 
-export const darkTheme: Theme = {
-  ...DarkTheme,
+export const darkTheme: MD3Theme = {
+  ...MD3DarkTheme,
   roundness: 8,
   colors: {
-    ...DarkTheme.colors,
+    ...MD3DarkTheme.colors,
     primary: '#3b82f6',
     primaryContainer: '#1e3a5f',
     secondary: '#10b981',
@@ -80,6 +73,5 @@ export const darkTheme: Theme = {
     inversePrimary: '#2563eb',
     shadow: '#000000',
     scrim: '#000000',
-    backdrop: 'rgba(0, 0, 0, 0.7)',
   },
 };

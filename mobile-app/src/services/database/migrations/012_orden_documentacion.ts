@@ -4,7 +4,8 @@ export const migration012: Migration = {
   version: 12,
   name: '012_orden_documentacion',
   up: async (db: any) => {
-    const cols = db.prepare("PRAGMA table_info(ordenes)").all().map((c: any) => c.name);
+    const colsResult = await db.getAllAsync("PRAGMA table_info(ordenes)");
+    const cols = colsResult.map((c: any) => c.name);
     
     if (!cols.includes('receptor_nombre')) await db.execAsync("ALTER TABLE ordenes ADD COLUMN receptor_nombre TEXT;");
     if (!cols.includes('receptor_documento')) await db.execAsync("ALTER TABLE ordenes ADD COLUMN receptor_documento TEXT;");

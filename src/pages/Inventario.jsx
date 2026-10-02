@@ -3,6 +3,7 @@ import { inventarioApi } from '../services/inventarioApi.js';
 import MedicamentoForm from '../components/MedicamentoForm.jsx';
 import LoteForm from '../components/LoteForm.jsx';
 import Pagination from '../components/Pagination.jsx';
+import { useEscapeCerrarModal } from '../hooks/useEscapeCerrarModal.js';
 
 const ROLES_ESCRITURA = ['SUPERADMIN', 'INVENTARIO'];
 
@@ -10,7 +11,8 @@ const ESTADO_CLASE = {
   DISPONIBLE: 'estado-verde',
   PROXIMO_VENCER: 'estado-amarillo',
   VENCIDO: 'estado-rojo',
-  AGOTADO: 'estado-gris'
+  AGOTADO: 'estado-gris',
+  DADO_DE_BAJA: 'estado-gris'
 };
 
 export default function Inventario({ usuario, sedeActiva, params, onClearParams, onNavigate }) {
@@ -47,18 +49,33 @@ export default function Inventario({ usuario, sedeActiva, params, onClearParams,
 
   const puedeEscribir = ROLES_ESCRITURA.includes(usuario.rol_nombre);
 
+  // Esta vista SÍ muestra los lotes dados de baja: son el registro histórico de la
+  // baja. Los listados operables (despacho, órdenes, intercambios) los excluyen en
+  // el backend; aquí el lote ya no es accionable y la acción de baja desaparece.
   const cargar = useCallback(async () => {
     setCargando(true);
-    const [medRes, loteRes] = await Promise.all([
-      inventarioApi.medicamentos.listar(usuario),
-      inventarioApi.lotes.listar(usuario, { sedeId: sedeActiva, limit: porPagina, offset: (pagina - 1) * porPagina })
-    ]);
-    if (medRes.ok) setMedicamentos(medRes.data);
-    if (loteRes.ok) setLotes(loteRes.data);
-    setCargando(false);
+    try {
+      const [medRes, loteRes] = await Promise.all([
+        inventarioApi.medicamentos.listar(usuario),
+        inventarioApi.lotes.listar(usuario, {
+          sedeId: sedeActiva,
+          limit: porPagina,
+          offset: (pagina - 1) * porPagina,
+          incluirDadosDeBaja: true
+        })
+      ]);
+      if (medRes.ok) setMedicamentos(medRes.data);
+      if (loteRes.ok) setLotes(loteRes.data);
+    } catch (err) {
+      console.error('[Inventario] Error al cargar inventario:', err);
+    } finally {
+      setCargando(false);
+    }
   }, [usuario, sedeActiva, pagina, porPagina]);
 
   useEffect(() => { cargar(); }, [cargar]);
+
+  useEscapeCerrarModal(() => setLoteParaBaja(null), Boolean(loteParaBaja));
 
   async function handleCrearMedicamento(data) {
     setErrorMedicamento(null);
@@ -88,6 +105,11 @@ export default function Inventario({ usuario, sedeActiva, params, onClearParams,
     setErrorSolicitud(null);
   }
 
+  // El IPC puede RECHAZAR la promesa, no solo devolver {ok:false}: los handlers se
+  // encadenan con .then en conSyncDespuesDeCambio (ipcHandlers.js:41), así que un
+  // fallo fuera del try/catch del controlador deja setEnviandoBaja en true y el
+  // botón queda deshabilitado de forma permanente. Por eso el try/catch/finally
+  // envuelve la llamada y el indicador se restablece siempre.
   async function handleConfirmarBaja(e) {
     e.preventDefault();
     if (!motivoBaja.trim()) {
@@ -96,19 +118,25 @@ export default function Inventario({ usuario, sedeActiva, params, onClearParams,
     }
     setEnviandoBaja(true);
     setErrorSolicitud(null);
-    const res = await inventarioApi.solicitudesEliminacion.crear(usuario, {
-      registro_id: loteParaBaja.id,
-      motivo: motivoBaja.trim()
-    });
-    setEnviandoBaja(false);
-    if (!res.ok) {
-      setErrorSolicitud(res.error);
-      return;
+    try {
+      const res = await inventarioApi.solicitudesEliminacion.crear(usuario, {
+        registro_id: loteParaBaja.id,
+        motivo: motivoBaja.trim()
+      });
+      if (!res?.ok) {
+        setErrorSolicitud(res?.error || 'No se pudo enviar la solicitud de baja.');
+        return;
+      }
+      setLoteParaBaja(null);
+      setExitoMensaje('Solicitud de baja enviada correctamente al Superadmin.');
+      setTimeout(() => setExitoMensaje(null), 5000);
+      await cargar();
+    } catch (err) {
+      console.error('[Inventario] Error al solicitar baja:', err);
+      setErrorSolicitud('No se pudo enviar la solicitud de baja. Intente nuevamente.');
+    } finally {
+      setEnviandoBaja(false);
     }
-    setLoteParaBaja(null);
-    setExitoMensaje('Solicitud de baja enviada correctamente al Superadmin.');
-    setTimeout(() => setExitoMensaje(null), 5000);
-    await cargar();
   }
 
   // Filtrado reactivo de lotes — solo recalcula cuando cambian lotes o filtros
@@ -148,7 +176,7 @@ export default function Inventario({ usuario, sedeActiva, params, onClearParams,
           <div className="header-actions">
             {onNavigate && (
               <button
-                className="btn-accion-azul"
+                className="btn-toggle-action btn-primario"
                 onClick={() => onNavigate('recepcion')}
               >
                 📦 Escanear / Recibir
@@ -202,7 +230,7 @@ export default function Inventario({ usuario, sedeActiva, params, onClearParams,
       {/* MODAL PARA SOLICITAR BAJA DE LOTE */}
       {loteParaBaja && (
         <div className="modal-overlay" onClick={() => setLoteParaBaja(null)}>
-          <div className="modal-card" style={{ maxWidth: '520px' }} onClick={(e) => e.stopPropagation()}>
+          <div className="modal-card modal-sm" onClick={(e) => e.stopPropagation()}>
             <button
               type="button"
               className="modal-close-x"
@@ -330,16 +358,29 @@ export default function Inventario({ usuario, sedeActiva, params, onClearParams,
                   </span>
                 </td>
                 <td><strong className="total-highlight">{l.cantidad_total_unidades} unidades</strong></td>
-                <td><span className={`pill ${ESTADO_CLASE[l.estado] || ''}`}>{l.estado}</span></td>
+                <td>
+                  <span className={`pill ${ESTADO_CLASE[l.estado] || ''}`} title={l.baja_motivo || undefined}>
+                    {l.estado}
+                  </span>
+                  {l.estado === 'DADO_DE_BAJA' && l.baja_motivo && (
+                    <div className="baja-motivo-nota" title={l.baja_motivo}>
+                      {l.baja_motivo}
+                    </div>
+                  )}
+                </td>
                 {puedeEscribir && (
                   <td className="acciones">
-                    <button
-                      className="btn-peligro"
-                      onClick={() => abrirModalBaja(l)}
-                      title="Solicitar baja/eliminación de este lote"
-                    >
-                      Baja
-                    </button>
+                    {l.estado === 'DADO_DE_BAJA' ? (
+                      <span style={{ fontSize: '0.76rem', color: '#94a3b8' }}>Baja aprobada</span>
+                    ) : (
+                      <button
+                        className="btn-peligro"
+                        onClick={() => abrirModalBaja(l)}
+                        title="Solicitar baja/eliminación de este lote"
+                      >
+                        Baja
+                      </button>
+                    )}
                   </td>
                 )}
               </tr>

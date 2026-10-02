@@ -59,6 +59,7 @@ export const inventarioApi = {
     ultimo: (usuario, filtros) => window.api.backups.ultimo(usuario, filtros),
     obtenerConfig: (usuario) => window.api.backups.obtenerConfig(usuario),
     guardarConfig: (usuario, config) => window.api.backups.guardarConfig(usuario, config),
+    consumo: (usuario) => window.api.backups.consumo(usuario),
     restaurar: (usuario, nombreArchivo) => window.api.backups.restaurar(usuario, nombreArchivo)
   },
   cloudSync: {
@@ -69,7 +70,8 @@ export const inventarioApi = {
     listarRoles: (usuario) => window.api.usuarios.listarRoles(usuario),
     crear: (usuario, data) => window.api.usuarios.crear(usuario, data),
     actualizar: (usuario, id, data) => window.api.usuarios.actualizar(usuario, id, data),
-    cambiarEstado: (usuario, id, estado) => window.api.usuarios.cambiarEstado(usuario, id, estado)
+    cambiarEstado: (usuario, id, estado) => window.api.usuarios.cambiarEstado(usuario, id, estado),
+    eliminarDefinitivo: (usuario, id) => window.api.usuarios.eliminarDefinitivo(usuario, id)
   },
   catalogoCum: {
     actualizar: (usuario) => window.api.catalogoCum.actualizar(usuario),

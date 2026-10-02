@@ -13,6 +13,7 @@ const AUDIT_ACTIONS = Object.freeze({
   LOGOUT: 'LOGOUT',
   CREAR_USUARIO: 'CREAR_USUARIO',
   MODIFICAR_USUARIO: 'MODIFICAR_USUARIO',
+  ELIMINAR_USUARIO: 'ELIMINAR_USUARIO',
   CREAR_SEDE: 'CREAR_SEDE',
   CREAR_MEDICAMENTO: 'CREAR_MEDICAMENTO',
   MODIFICAR_MEDICAMENTO: 'MODIFICAR_MEDICAMENTO',
@@ -28,6 +29,7 @@ const AUDIT_ACTIONS = Object.freeze({
   REGISTRAR_HUELLA: 'REGISTRAR_HUELLA',
   CREAR_RESPALDO: 'CREAR_RESPALDO',
   RESTAURAR_RESPALDO: 'RESTAURAR_RESPALDO',
+  ACTUALIZAR_CONFIG: 'ACTUALIZAR_CONFIG',
   SOLICITAR_ELIMINACION: 'SOLICITAR_ELIMINACION',
   APROBAR_ELIMINACION: 'APROBAR_ELIMINACION',
   RECHAZAR_ELIMINACION: 'RECHAZAR_ELIMINACION',
@@ -44,9 +46,15 @@ const AUDIT_ACTIONS = Object.freeze({
   CATALOGO_CUM_DOCUMENTO: 'CATALOGO_CUM_DOCUMENTO',
 });
 
+// ESTADO DE UN USUARIO. ELIMINADO no es un synonym de INACTIVO:
+// `eliminarDefinitivo` anonimiza la fila (nombre, username y password_hash) y la
+// deja en este estado para conservar el histórico. Como `authService.login` y
+// `sessionService.resolverUsuarioDesdeSesion` exigen ACTIVO, anonimizar corta el
+// acceso y destruye las sesiones vivas sin necesidad de invalidación explícita.
 const ESTADOS_REGISTRO = Object.freeze({
   ACTIVO: 'ACTIVO',
-  INACTIVO: 'INACTIVO'
+  INACTIVO: 'INACTIVO',
+  ELIMINADO: 'ELIMINADO'
 });
 
 module.exports = { ROLES, AUDIT_ACTIONS, ESTADOS_REGISTRO };

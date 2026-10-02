@@ -8,17 +8,25 @@ function manejarError(err) {
   return { ok: false, error: 'Error interno. Intente nuevamente.' };
 }
 
-function listar(usuarioSesion, filtros) {
+// Estas funciones DEBEN ser async. backupService.listar y .ultimoRespaldo son
+// asincronas (leen el directorio con fsp) y .crear se volvio asincrona al
+// migrar a db.backup(). Un controlador sincronico que devuelve
+// `{ ok: true, data: <Promise> }` no es un thenable, asi que ipcMain.handle no
+// lo resuelve: Electron serializa la Promise como {} por structured clone y el
+// renderer recibe un objeto vacio donde esperaba un array.
+async function listar(usuarioSesion, filtros) {
   try {
-    return { ok: true, data: backupService.listar(usuarioSesion, filtros) };
+    const data = await backupService.listar(usuarioSesion, filtros);
+    return { ok: true, data };
   } catch (err) {
     return manejarError(err);
   }
 }
 
-function crear(usuarioSesion, opciones) {
+async function crear(usuarioSesion, opciones) {
   try {
-    return { ok: true, data: backupService.crear(usuarioSesion, opciones) };
+    const data = await backupService.crear(usuarioSesion, opciones);
+    return { ok: true, data };
   } catch (err) {
     return manejarError(err);
   }
@@ -32,9 +40,10 @@ function restaurar(usuarioSesion, nombreArchivo) {
   }
 }
 
-function ultimoRespaldo(usuarioSesion) {
+async function ultimoRespaldo(usuarioSesion, filtros) {
   try {
-    return { ok: true, data: backupService.ultimoRespaldo(usuarioSesion) };
+    const data = await backupService.ultimoRespaldo(usuarioSesion, filtros);
+    return { ok: true, data };
   } catch (err) {
     return manejarError(err);
   }
@@ -56,4 +65,16 @@ function guardarConfig(usuarioSesion, config) {
   }
 }
 
-module.exports = { listar, crear, restaurar, ultimoRespaldo, obtenerConfig, guardarConfig };
+// Consumo total en disco de los respaldos, independientemente del alcance que el
+// usuario tenga seleccionado. Sin esto el operador solo ve el tamaño de los
+// respaldos de su sede y no descubre el consumo real hasta que el disco se llena.
+function consumo(usuarioSesion) {
+  try {
+    backupService.verificarAccesoRespaldos(usuarioSesion);
+    return { ok: true, data: backupService.tamanoTotalEnDisco() };
+  } catch (err) {
+    return manejarError(err);
+  }
+}
+
+module.exports = { listar, crear, restaurar, ultimoRespaldo, obtenerConfig, guardarConfig, consumo };

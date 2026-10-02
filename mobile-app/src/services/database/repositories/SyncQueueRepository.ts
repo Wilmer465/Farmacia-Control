@@ -3,7 +3,7 @@ import { sqliteService } from '../SQLiteService';
 import { SYNC_QUEUE_STATUS } from '../../../constants/syncStates';
 
 export class SyncQueueRepository {
-  protected db = sqliteService.getDatabase();
+  protected get db() { return sqliteService.getDatabase(); }
   protected tableName = 'sync_queue';
 
   async findPending(limit: number = 100): Promise<SyncQueueItem[]> {

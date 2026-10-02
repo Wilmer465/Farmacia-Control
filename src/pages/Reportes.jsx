@@ -248,7 +248,7 @@ export default function Reportes({ usuario, sedeActiva }) {
           {esSuperadmin ? (
             <select
               id="sede-reporte"
-              className="sede-reporte-select"
+              className="sede-selector"
               value={sedeReporte ?? 'TODAS'}
               onChange={(e) => {
                 const valor = e.target.value;

@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { SyncQueueStatus, SYNC_QUEUE_STATUS } from './syncStates';
 
 export const APP_CONFIG = {
@@ -6,8 +7,28 @@ export const APP_CONFIG = {
   bundleIdentifier: 'com.farmacia.control.mobile',
 } as const;
 
+// Host de la API central en desarrollo. 10.0.2.2 es el loopback del host visto
+// desde el emulador de Android; iOS y web usan localhost. En un dispositivo
+// fisico hay que usar la IP de la red local o `adb reverse tcp:3000 tcp:3000`.
+export const API_HOST_DEV = '10.0.2.2:3000';
+
+// URL de produccion. Se puede sobreescribir en build con
+// EXPO_PUBLIC_API_URL (metro lo expone como process.env al compilar).
+const API_URL_PRODUCCION = process.env.EXPO_PUBLIC_API_URL;
+
+function resolverBaseUrl(): string {
+  if (API_URL_PRODUCCION) {
+    return `${API_URL_PRODUCCION.replace(/\/+$/, '')}/api/v1`;
+  }
+  if (!__DEV__) {
+    return 'https://api.farmacia-control.com/api/v1';
+  }
+  const host = Platform.OS === 'android' ? API_HOST_DEV : 'localhost:3000';
+  return `http://${host}/api/v1`;
+}
+
 export const API_CONFIG = {
-  baseURL: __DEV__ ? 'http://10.0.2.2:3000/api/v1' : 'https://api.farmacia-control.com/api/v1',
+  baseURL: resolverBaseUrl(),
   timeout: 30000,
   retryAttempts: 3,
   retryDelay: 1000,
@@ -35,7 +56,7 @@ export const SYNC_CONFIG = {
 } as const;
 
 export const DB_CONFIG = {
-  name: 'farmacia_control.db',
+  name: 'farmacia_control_dev.db',
   version: 1,
   schemaVersion: 22,
 } as const;

@@ -347,21 +347,45 @@ body {
   max-width: 120px;
 }
 
-.user-sede-selector {
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: #e2e8f0;
-  background: rgba(15, 23, 42, 0.55);
-  border: 1px solid rgba(148, 163, 184, 0.35);
+/* Selector de sede — UNA sola definición.
+   Existían tres variantes del mismo control: `user-sede-selector` en el
+   encabezado (fondo translúcido oscuro, 0.72rem, max-width 200px),
+   `sede-reporte-select` en Reportes (fondo blanco, 0.88rem, min-width 260px) y
+   estilos inline copiados en Auditoria y Respaldos. Cuatro lugares que cambian por
+   separado para el mismo dropdown. Aquí vive una clase; el encabezado conserva su
+   tamaño compacto con el modificador `-compacto`, porque vive en una barra oscura
+   donde un control de 260px rompería el layout. */
+.sede-selector {
+  min-width: 240px;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #cbd5e1;
   border-radius: 8px;
-  padding: 0.22rem 0.4rem;
-  max-width: 200px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 0.88rem;
+  font-weight: 600;
   cursor: pointer;
-  outline: none;
 }
 
-.user-sede-selector:focus {
+.sede-selector:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.sede-selector--compacto {
+  min-width: 0;
+  max-width: 200px;
+  padding: 0.22rem 0.4rem;
+  font-size: 0.72rem;
+  border-color: rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.55);
+  color: #e2e8f0;
+}
+
+.sede-selector--compacto:focus {
   border-color: #3b82f6;
+  box-shadow: none;
 }
 
 .sidebar-nav {
@@ -1070,6 +1094,22 @@ body {
 .estado-gris { background: #f1f5f9; color: #475569; }
 .estado-azul { background: #eff6ff; color: #1d4ed8; }
 
+/* Motivo de una baja aprobada. El estado DADO_DE_BAJA por sí solo no explica por
+   qué el lote salio del inventario: la fila muestra el motivo que quedó
+   registrado en lotes.baja_motivo, recortado a una línea y con el texto completo
+   en el tooltip. */
+.baja-motivo-nota {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.72rem;
+  color: #64748b;
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-style: italic;
+}
+
 .total-highlight {
   color: #2563eb;
   font-size: 0.92rem;
@@ -1648,6 +1688,11 @@ body {
 /* =========================================================================
    MODAL DIALOGS
    ========================================================================= */
+/* El overlay centra verticalmente. Con `flex-start` el modal se pegaba al borde
+   superior y en pantallas bajas quedaba recortado por arriba, sin forma de llegar
+   a la parte alta del contenido. `margin: auto` en la card mantiene el centrado
+   cuando sobra espacio y, cuando el modal es más alto que el viewport, deja que
+   el overflow del overlay muestre correctamente ambos extremos. */
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -1655,9 +1700,9 @@ body {
   backdrop-filter: blur(3px);
   z-index: 100;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
-  padding: 1rem 1.5rem 1.5rem 1.5rem;
+  padding: 1.5rem;
   overflow-y: auto;
   animation: fadeIn 0.15s ease-out;
 }
@@ -1667,11 +1712,28 @@ body {
   border-radius: 16px;
   max-width: 650px;
   width: 100%;
-  max-height: calc(100vh - 4rem);
+  margin: auto;
+  max-height: calc(100vh - 3rem);
   overflow-y: auto;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
   padding: 1.75rem;
   position: relative;
+}
+
+/* Variantes de ancho. Reemplazan los `maxWidth` inline dispersos que había por
+   los componentes (500, 520, 640, 700, 720, 750 px): seis anchos para el mismo
+   control. Aquí el ancho es una decisión de diseño declarativa, no un número
+   repetido dentro de cada JSX. */
+.modal-card.modal-sm {
+  max-width: 500px;
+}
+
+.modal-card.modal-md {
+  max-width: 640px;
+}
+
+.modal-card.modal-lg {
+  max-width: 760px;
 }
 
 .modal-close-x {
@@ -1926,23 +1988,6 @@ body {
   font-size: 0.8rem;
   font-weight: 600;
   color: #475569;
-}
-
-.sede-reporte-select {
-  min-width: 260px;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  background: #ffffff;
-  color: #0f172a;
-  font-size: 0.88rem;
-  font-weight: 600;
-}
-
-.sede-reporte-select:focus {
-  outline: none;
-  border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
 }
 
 .sede-reporte-fija {

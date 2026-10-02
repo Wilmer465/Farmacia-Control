@@ -1,6 +1,7 @@
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { inventarioApi } from '../services/inventarioApi.js';
 import SignaturePad from '../components/SignaturePad.jsx';
+import { useEscapeCerrarModal } from '../hooks/useEscapeCerrarModal.js';
 
 const PRIORIDADES = [
   { id: 'ALTA', label: 'Alta', className: 'estado-rojo' },
@@ -83,6 +84,8 @@ export default function Pacientes({ usuario, sedeActiva }) {
   }, [usuario, sedeActiva]);
 
   useEffect(() => { cargar(); }, [cargar]);
+
+  useEscapeCerrarModal(() => setModalAbierto(false), modalAbierto);
 
   const lotesDisponibles = useMemo(() => (
     lotes.filter((l) => (

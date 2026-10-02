@@ -1,6 +1,7 @@
 const { app, BrowserWindow, session } = require('electron');
 const path = require('path');
 const { registerIpcHandlers } = require('../backend/ipcHandlers');
+const { iniciarServidorHttp } = require('../backend/server');
 const { runMigrations } = require('../backend/database/migrate');
 const { seed } = require('../backend/database/seeds/seed');
 const { mantenimientoAlCerrar } = require('../backend/database/connection');
@@ -60,7 +61,7 @@ function createWindow() {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // Migraciones y seed corren aquí, DENTRO de Electron, usando el mismo módulo
   // nativo (better-sqlite3) que ya está compilado para este proceso. Nunca deben
   // correrse por fuera con `node` normal: ese binario usa otra versión de ABI
@@ -68,6 +69,16 @@ app.whenReady().then(() => {
   runMigrations();
   seed(); // idempotente: si ya existen roles/sede/superadmin, no hace nada
   registerIpcHandlers();
+
+  // API HTTP de autenticacion para la app movil (Expo Go, emulador, dispositivo
+  // fisico y web). Comparte el mismo better-sqlite3 y el mismo sessionService que
+  // los handlers IPC. Si el puerto esta ocupado, el escritorio sigue funcionando.
+  try {
+    await iniciarServidorHttp();
+  } catch (err) {
+    console.error('[main] No se pudo iniciar la API HTTP de autenticacion:', err.message);
+  }
+
   iniciarPlanificadorAutoBackup();
   iniciarPlanificadorCloudSync();
   createWindow();

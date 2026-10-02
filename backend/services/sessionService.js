@@ -17,6 +17,17 @@ function invalidar(token) {
   if (token) sesiones.delete(token);
 }
 
+// El token es opaco y no rota: refrescar reinicia el TTL de la misma sesion y
+// devuelve el mismo token. Asi el cliente movil nunca queda con un token vivo
+// que el servidor ya haya invalidado.
+function renovarSesion(token) {
+  if (!token) return false;
+  const sesion = sesiones.get(token);
+  if (!sesion) return false;
+  sesion.creadoEn = Date.now();
+  return true;
+}
+
 function resolverUsuarioDesdeSesion(usuarioSesion) {
   if (!usuarioSesion || typeof usuarioSesion !== 'object') {
     throw new SesionError('Sesión de usuario inválida.');
@@ -47,7 +58,9 @@ function resolverUsuarioDesdeSesion(usuarioSesion) {
 
 module.exports = {
   SesionError,
+  TTL_MS,
   crearSesion,
   invalidar,
+  renovarSesion,
   resolverUsuarioDesdeSesion
 };

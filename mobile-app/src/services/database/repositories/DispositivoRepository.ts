@@ -2,7 +2,7 @@ import { Dispositivo } from '../../../types/domain';
 import { sqliteService } from '../SQLiteService';
 
 export class DispositivoRepository {
-  protected db = sqliteService.getDatabase();
+  protected get db() { return sqliteService.getDatabase(); }
   protected tableName = 'dispositivos';
 
   async findByDeviceId(deviceId: string): Promise<Dispositivo | null> {

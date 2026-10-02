@@ -86,13 +86,13 @@ export default function Auditoria({ usuario, sedeActiva }) {
         <div className="header-actions" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
           {esSuperadmin && (
             <select
-              className="user-sede-selector"
+              className="sede-selector"
               value={sedeAuditoria == null ? 'TODAS' : sedeAuditoria}
               onChange={(e) => {
                 setSedeAuditoria(e.target.value);
                 setPagina(1);
               }}
-              style={{ padding: '0.45rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1' }}
+              aria-label="Seleccionar sede de la auditoría"
             >
               <option value="TODAS">Todas las sedes</option>
               {sedes.map((s) => (

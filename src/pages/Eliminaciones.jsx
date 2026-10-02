@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { inventarioApi } from '../services/inventarioApi.js';
+import { useEscapeCerrarModal } from '../hooks/useEscapeCerrarModal.js';
 
 const ESTADO_CLASE = {
   PENDIENTE: 'estado-amarillo',
@@ -49,47 +50,73 @@ export default function Eliminaciones({ usuario, sedeActiva }) {
   const esAdmin = usuario.rol_nombre === 'ADMIN';
   const puedeSolicitarIntercambio = esSuperadmin || esAdmin;
 
+  // El try/catch/finally es estructural, no cosmético: un rechazo de la promesa IPC
+  // (no un {ok:false}) dejaba setCargando en true y la vista en "Cargando..." para
+  // siempre. Cada bloque tells su propio error para no perder el detalle del resto.
   const cargar = useCallback(async () => {
     setCargando(true);
     setError(null);
+    try {
+      const [resBajas, resInter, resOrdenes, resSedes, resLotes] = await Promise.all([
+        inventarioApi.solicitudesEliminacion.listar(usuario, { sedeId: sedeActiva }),
+        inventarioApi.solicitudesIntercambio.listar(usuario, { sedeId: sedeActiva }),
+        inventarioApi.ordenes.listar(usuario, { sedeId: sedeActiva }),
+        inventarioApi.sedes.listar(),
+        inventarioApi.lotes.listar(usuario, { sedeId: esSuperadmin ? null : usuario.sede_id })
+      ]);
 
-    const [resBajas, resInter, resOrdenes, resSedes, resLotes] = await Promise.all([
-      inventarioApi.solicitudesEliminacion.listar(usuario, { sedeId: sedeActiva }),
-      inventarioApi.solicitudesIntercambio.listar(usuario, { sedeId: sedeActiva }),
-      inventarioApi.ordenes.listar(usuario, { sedeId: sedeActiva }),
-      inventarioApi.sedes.listar(),
-      inventarioApi.lotes.listar(usuario, { sedeId: esSuperadmin ? null : usuario.sede_id })
-    ]);
+      if (resBajas.ok) setSolicitudesBaja(resBajas.data || []);
+      else setError(resBajas.error);
 
-    if (resBajas.ok) setSolicitudesBaja(resBajas.data || []);
-    else setError(resBajas.error);
+      if (resInter.ok) setSolicitudesIntercambio(resInter.data || []);
+      if (resOrdenes.ok) setOrdenesCanceladas((resOrdenes.data || []).filter((o) => o.estado === 'CANCELADA'));
+      if (resSedes.ok) setSedes(resSedes.data || []);
 
-    if (resInter.ok) setSolicitudesIntercambio(resInter.data || []);
-    if (resOrdenes.ok) setOrdenesCanceladas((resOrdenes.data || []).filter((o) => o.estado === 'CANCELADA'));
-    if (resSedes.ok) setSedes(resSedes.data || []);
-    if (resLotes.ok) setLotesDisponibles((resLotes.data || []).filter((l) => (l.cantidad_total_unidades || l.cantidad_actual || 0) > 0));
-
-    setCargando(false);
+      // Un lote DADO_DE_BAJA no es transferible: se excluye aquí aunque el backend ya
+      // lo omita, para que el formulario nunca ofrezca sacar stock de un lote dado de
+      // baja. La comprobación es por `estado` derivado, no por cantidad, que es lo
+      // que fallaba antes (solo miraba cantidad > 0).
+      if (resLotes.ok) {
+        setLotesDisponibles((resLotes.data || []).filter(
+          (l) => l.estado !== 'DADO_DE_BAJA' && (l.cantidad_total_unidades || l.cantidad_actual || 0) > 0
+        ));
+      }
+    } catch (err) {
+      console.error('[Eliminaciones] Error al cargar solicitudes:', err);
+      setError('No se pudieron cargar las solicitudes. Intente nuevamente.');
+    } finally {
+      setCargando(false);
+    }
   }, [usuario, sedeActiva, esSuperadmin]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
-  // Aprobación de Baja
+  useEscapeCerrarModal(() => setModalRechazo(null), Boolean(modalRechazo));
+  useEscapeCerrarModal(() => setModalNuevoIntercambio(false), modalNuevoIntercambio);
+
+  // try/catch/finally: si la promesa IPC rechaza en lugar de devolver {ok:false}, el
+  // setAccionEnCurso(null) no se ejecutaba y los botones quedaban deshabilitados.
   async function handleAprobarBaja(id) {
     if (!window.confirm('¿Está seguro de APROBAR esta solicitud de baja? El lote será dado de baja definitivamente del inventario.')) {
       return;
     }
     setAccionEnCurso(`baja_${id}`);
     setError(null);
-    const res = await inventarioApi.solicitudesEliminacion.resolver(usuario, id, {
-      decision: 'APROBADA',
-      observacion: 'Aprobada por Superadmin'
-    });
-    setAccionEnCurso(null);
-    if (!res.ok) { setError(res.error); return; }
-    setAviso('Solicitud de baja aprobada con éxito.');
-    setTimeout(() => setAviso(null), 4000);
-    await cargar();
+    try {
+      const res = await inventarioApi.solicitudesEliminacion.resolver(usuario, id, {
+        decision: 'APROBADA',
+        observacion: 'Aprobada por Superadmin'
+      });
+      if (!res?.ok) { setError(res?.error || 'No se pudo aprobar la solicitud.'); return; }
+      setAviso('Solicitud de baja aprobada con éxito.');
+      setTimeout(() => setAviso(null), 4000);
+      await cargar();
+    } catch (err) {
+      console.error('[Eliminaciones] Error al aprobar baja:', err);
+      setError('No se pudo aprobar la solicitud. Intente nuevamente.');
+    } finally {
+      setAccionEnCurso(null);
+    }
   }
 
   // Aprobación de Intercambio / Envío
@@ -99,15 +126,21 @@ export default function Eliminaciones({ usuario, sedeActiva }) {
     }
     setAccionEnCurso(`inter_${id}`);
     setError(null);
-    const res = await inventarioApi.solicitudesIntercambio.resolver(usuario, id, {
-      decision: 'APROBADA',
-      observacion: 'Aprobado y transferido exitosamente'
-    });
-    setAccionEnCurso(null);
-    if (!res.ok) { setError(res.error); return; }
-    setAviso('Envío / intercambio aprobado. El inventario ha sido transferido.');
-    setTimeout(() => setAviso(null), 4000);
-    await cargar();
+    try {
+      const res = await inventarioApi.solicitudesIntercambio.resolver(usuario, id, {
+        decision: 'APROBADA',
+        observacion: 'Aprobado y transferido exitosamente'
+      });
+      if (!res?.ok) { setError(res?.error || 'No se pudo aprobar la solicitud.'); return; }
+      setAviso('Envío / intercambio aprobado. El inventario ha sido transferido.');
+      setTimeout(() => setAviso(null), 4000);
+      await cargar();
+    } catch (err) {
+      console.error('[Eliminaciones] Error al aprobar intercambio:', err);
+      setError('No se pudo aprobar la solicitud. Intente nuevamente.');
+    } finally {
+      setAccionEnCurso(null);
+    }
   }
 
   // Rechazo de solicitudes (baja o intercambio)
@@ -127,29 +160,35 @@ export default function Eliminaciones({ usuario, sedeActiva }) {
     setAccionEnCurso('rechazando');
     setErrorRechazo(null);
 
-    let res;
-    if (modalRechazo.tipo === 'BAJA') {
-      res = await inventarioApi.solicitudesEliminacion.resolver(usuario, modalRechazo.item.id, {
-        decision: 'RECHAZADA',
-        observacion: motivoRechazo.trim()
-      });
-    } else {
-      res = await inventarioApi.solicitudesIntercambio.resolver(usuario, modalRechazo.item.id, {
-        decision: 'RECHAZADA',
-        observacion: motivoRechazo.trim()
-      });
-    }
+    try {
+      let res;
+      if (modalRechazo.tipo === 'BAJA') {
+        res = await inventarioApi.solicitudesEliminacion.resolver(usuario, modalRechazo.item.id, {
+          decision: 'RECHAZADA',
+          observacion: motivoRechazo.trim()
+        });
+      } else {
+        res = await inventarioApi.solicitudesIntercambio.resolver(usuario, modalRechazo.item.id, {
+          decision: 'RECHAZADA',
+          observacion: motivoRechazo.trim()
+        });
+      }
 
-    setAccionEnCurso(null);
-    if (!res.ok) {
-      setErrorRechazo(res.error);
-      return;
-    }
+      if (!res?.ok) {
+        setErrorRechazo(res?.error || 'No se pudo rechazar la solicitud.');
+        return;
+      }
 
-    setModalRechazo(null);
-    setAviso(`La solicitud #${modalRechazo.item.id} ha sido rechazada. Quedará registrada en la bitácora.`);
-    setTimeout(() => setAviso(null), 4000);
-    await cargar();
+      setModalRechazo(null);
+      setAviso(`La solicitud #${modalRechazo.item.id} ha sido rechazada. Quedará registrada en la bitácora.`);
+      setTimeout(() => setAviso(null), 4000);
+      await cargar();
+    } catch (err) {
+      console.error('[Eliminaciones] Error al rechazar solicitud:', err);
+      setErrorRechazo('No se pudo rechazar la solicitud. Intente nuevamente.');
+    } finally {
+      setAccionEnCurso(null);
+    }
   }
 
   // Abrir modal de nuevo intercambio
@@ -209,33 +248,39 @@ export default function Eliminaciones({ usuario, sedeActiva }) {
       }
     }
 
-    setGuardandoIntercambio(true);
+setGuardandoIntercambio(true);
     setErrorIntercambio(null);
 
-    const res = await inventarioApi.solicitudesIntercambio.crear(usuario, {
-      tipo: formIntercambio.tipo,
-      sede_origen_id: Number(formIntercambio.sede_origen_id),
-      sede_destino_id: Number(formIntercambio.sede_destino_id),
-      lote_id: Number(formIntercambio.lote_id),
-      cantidad_total_unidades: cant,
-      sede_recibe_id: formIntercambio.tipo === 'INTERCAMBIO' ? Number(formIntercambio.sede_recibe_id) : null,
-      lote_recibe_id: formIntercambio.tipo === 'INTERCAMBIO' ? Number(formIntercambio.lote_recibe_id) : null,
-      cantidad_recibe_total_unidades: formIntercambio.tipo === 'INTERCAMBIO'
-        ? Number(formIntercambio.cantidad_recibe_total_unidades || cant)
-        : null,
-      motivo: formIntercambio.motivo.trim()
-    });
+    try {
+      const res = await inventarioApi.solicitudesIntercambio.crear(usuario, {
+        tipo: formIntercambio.tipo,
+        sede_origen_id: Number(formIntercambio.sede_origen_id),
+        sede_destino_id: Number(formIntercambio.sede_destino_id),
+        lote_id: Number(formIntercambio.lote_id),
+        cantidad_total_unidades: cant,
+        sede_recibe_id: formIntercambio.tipo === 'INTERCAMBIO' ? Number(formIntercambio.sede_recibe_id) : null,
+        lote_recibe_id: formIntercambio.tipo === 'INTERCAMBIO' ? Number(formIntercambio.lote_recibe_id) : null,
+        cantidad_recibe_total_unidades: formIntercambio.tipo === 'INTERCAMBIO'
+          ? Number(formIntercambio.cantidad_recibe_total_unidades || cant)
+          : null,
+        motivo: formIntercambio.motivo.trim()
+      });
 
-    setGuardandoIntercambio(false);
-    if (!res.ok) {
-      setErrorIntercambio(res.error);
-      return;
+      if (!res?.ok) {
+        setErrorIntercambio(res?.error || 'No se pudo crear la solicitud.');
+        return;
+      }
+
+      setModalNuevoIntercambio(false);
+      setAviso(`Solicitud de ${formIntercambio.tipo.toLowerCase()} creada exitosamente.`);
+      setTimeout(() => setAviso(null), 4000);
+      await cargar();
+    } catch (err) {
+      console.error('[Eliminaciones] Error al crear solicitud de intercambio:', err);
+      setErrorIntercambio('No se pudo crear la solicitud. Intente nuevamente.');
+    } finally {
+      setGuardandoIntercambio(false);
     }
-
-    setModalNuevoIntercambio(false);
-    setAviso(`Solicitud de ${formIntercambio.tipo.toLowerCase()} creada exitosamente.`);
-    setTimeout(() => setAviso(null), 4000);
-    await cargar();
   }
 
   // Lotes filtrados para el formulario de nuevo intercambio
@@ -572,7 +617,7 @@ export default function Eliminaciones({ usuario, sedeActiva }) {
       {/* MODAL: RECHAZAR SOLICITUD CON MOTIVO */}
       {modalRechazo && (
         <div className="modal-overlay" onClick={() => setModalRechazo(null)}>
-          <div className="modal-card" style={{ maxWidth: '520px' }} onClick={(e) => e.stopPropagation()}>
+          <div className="modal-card modal-sm" onClick={(e) => e.stopPropagation()}>
             <button
               type="button"
               className="modal-close-x"
@@ -634,7 +679,7 @@ export default function Eliminaciones({ usuario, sedeActiva }) {
       {/* MODAL: SOLICITAR ENVÍO / INTERCAMBIO DE MEDICAMENTOS */}
       {modalNuevoIntercambio && (
         <div className="modal-overlay" onClick={() => setModalNuevoIntercambio(false)}>
-          <div className="modal-card" style={{ maxWidth: '640px' }} onClick={(e) => e.stopPropagation()}>
+          <div className="modal-card modal-md" onClick={(e) => e.stopPropagation()}>
             <button
               type="button"
               className="modal-close-x"

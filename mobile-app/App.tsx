@@ -5,8 +5,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import AppNavigator from './src/navigation/AppNavigator';
 import { authService, sqliteService, notificationService, permissionsService } from './src/services';
+import { AuthProvider } from './src/hooks';
 import { theme } from './src/constants/theme';
-import { registerRootComponent } from 'expo';
 
 export default function App() {
   useEffect(() => {
@@ -33,7 +33,11 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <PaperProvider theme={theme}>
-          <AppNavigator />
+          {/* AuthProvider debe envolver al navegador: AppNavigator decide entre
+              la pantalla de login y el drawer segun el usuario del contexto. */}
+          <AuthProvider>
+            <AppNavigator />
+          </AuthProvider>
           <StatusBar style="auto" />
         </PaperProvider>
       </SafeAreaProvider>
@@ -41,4 +45,3 @@ export default function App() {
   );
 }
 
-registerRootComponent(App);

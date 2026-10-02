@@ -14,9 +14,16 @@ function calcularTotalUnidades(cajas, sueltas, unidadesPorCaja) {
 }
 
 // Estado derivado — nunca se confía en un valor guardado que pueda desactualizarse.
-// Orden de prioridad: AGOTADO > VENCIDO > PROXIMO_VENCER > DISPONIBLE.
+// Orden de prioridad: DADO_DE_BAJA > AGOTADO > VENCIDO > PROXIMO_VENCER > DISPONIBLE.
+//
+// DADO_DE_BAJA se comprueba PRIMERO y devuelve su propio estado. Antes se colapsaba
+// a AGOTADO, con lo que un lote dado de baja con existencias era indistinguible de
+// uno sin stock y la baja no dejaba rastro visible en la UI. Los reportes y
+// `resumenVencimientos` ya lo excluían por su cuenta, así que cambiarlo no altera
+// esas cifras: solo hace el estado fiel a lo que realmente significa.
 function calcularEstado(lote) {
-  if (lote.estado_manual === 'DADO_DE_BAJA' || lote.cantidad_total_unidades <= 0) return 'AGOTADO';
+  if (lote.estado_manual === 'DADO_DE_BAJA') return 'DADO_DE_BAJA';
+  if (lote.cantidad_total_unidades <= 0) return 'AGOTADO';
 
   const hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
@@ -34,13 +41,16 @@ function conEstadoCalculado(lote) {
   return { ...lote, estado: calcularEstado(lote) };
 }
 
-function listar(usuarioSesion, { sedeId, medicamentoId, limit, offset, conTotal = false } = {}) {
+// `incluirDadosDeBaja` sigue a `loteRepository.findAll`: por defecto los lotes dados
+// de baja quedan fuera porque ya no son operables. Solo quien los muestra como
+// registro histórico (la vista de Inventario) los pide explícitamente.
+function listar(usuarioSesion, { sedeId, medicamentoId, limit, offset, conTotal = false, incluirDadosDeBaja = false } = {}) {
   const sedeEfectiva = permisoService.resolverSedeEfectiva(usuarioSesion, sedeId);
-  const lotes = loteRepository.findAll({ sedeId: sedeEfectiva, medicamentoId, limit, offset });
+  const lotes = loteRepository.findAll({ sedeId: sedeEfectiva, medicamentoId, limit, offset, incluirDadosDeBaja });
   const data = lotes.map(conEstadoCalculado);
   // conTotal=true devuelve { data, total } con COUNT(*) real para paginación correcta.
   if (conTotal) {
-    const total = loteRepository.contar({ sedeId: sedeEfectiva, medicamentoId });
+    const total = loteRepository.contar({ sedeId: sedeEfectiva, medicamentoId, incluirDadosDeBaja });
     return { data, total };
   }
   return data;

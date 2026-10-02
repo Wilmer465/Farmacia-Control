@@ -59,6 +59,24 @@ function verificarEsAdmin(usuarioSesion) {
   }
 }
 
+// Autorización para resolver (aprobar/rechazar) una solicitud de baja.
+// SUPERADMIN resuelve en cualquier sede. ADMIN resuelve solo las de su propia sede
+// —que es exactamente el alcance que la UI de Eliminaciones ya muestra, de modo que
+// el botón visible y el servidor coinciden. La prohibición de aprobar la propia
+// solicitud se aplica en el servicio de solicitudes, donde se conoce el solicitante.
+function verificarResolucionEliminacion(usuarioSesion, solicitud) {
+  if (!usuarioSesion) {
+    throw new PermisoError('Sesión requerida.');
+  }
+  if (ROLES_VISION_GLOBAL.includes(usuarioSesion.rol_nombre)) return;
+  if (usuarioSesion.rol_nombre !== ROLES.ADMIN) {
+    throw new PermisoError('Solo el Superadmin o el Administrador de sede pueden resolver solicitudes de baja.');
+  }
+  if (Number(usuarioSesion.sede_id) !== Number(solicitud?.sede_id)) {
+    throw new PermisoError('Solo puede resolver solicitudes de baja de su propia sede.');
+  }
+}
+
 module.exports = {
   PermisoError,
   verificarEscrituraInventario,
@@ -66,5 +84,6 @@ module.exports = {
   verificarPerteneceASede,
   verificarGestionOrdenes,
   verificarDespacho,
-  verificarEsAdmin
+  verificarEsAdmin,
+  verificarResolucionEliminacion
 };

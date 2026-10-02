@@ -248,6 +248,10 @@ ipcMain.handle('backups:crear', conValidacionSesion((usuarioSesion, opciones) =>
     return backupController.guardarConfig(usuarioSesion, config);
   }));
 
+  ipcMain.handle('backups:consumo', conValidacionSesion((usuarioSesion) => {
+    return backupController.consumo(usuarioSesion);
+  }));
+
   ipcMain.handle('cloudSync:sincronizar', conValidacionSesion((usuarioSesion, opciones) => {
     return cloudSyncController.sincronizar(usuarioSesion, opciones);
   }));
@@ -286,6 +290,12 @@ ipcMain.handle('backups:restaurar', conSyncDespuesDeCambio('backups:restaurar', 
 
   ipcMain.handle('usuarios:cambiarEstado', conSyncDespuesDeCambio('usuarios:cambiarEstado', conValidacionSesion((usuarioSesion, id, estado) => {
     return usuarioController.cambiarEstado(usuarioSesion, id, estado);
+  })));
+
+  // Anonimiza la fila del usuario (no la borra) y corta su acceso al quedar en
+  // estado ELIMINADO. Solo el superadmin principal puede invocarlo.
+  ipcMain.handle('usuarios:eliminarDefinitivo', conSyncDespuesDeCambio('usuarios:eliminarDefinitivo', conValidacionSesion((usuarioSesion, id) => {
+    return usuarioController.eliminarDefinitivo(usuarioSesion, id);
   })));
 
   // Catálogo CUM (INVIMA) - Solo ADMIN/SUPERADMIN

@@ -43,12 +43,17 @@ class ApiClient {
       async (error: AxiosError) => {
         const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
-        if (error.response?.status === 401 && !originalRequest._retry) {
+        // Un 401 de /auth/login es "credenciales incorrectas", no "token vencido":
+        // reintentar con refresh solo producing un fallo mas unhelpful. El refresh
+        // solo aplica a peticiones que ya viajan con un Bearer.
+        const esRutaDeAuth = /\/auth\/(login|refresh|logout)/.test(originalRequest?.url || '');
+        const puedeRenovar = !!this.authToken && !esRutaDeAuth;
+
+        if (error.response?.status === 401 && !originalRequest._retry && puedeRenovar) {
           originalRequest._retry = true;
-          
-try {
-            const { authService } = await import('../auth/AuthService');
-            const newToken = await authService.refreshAccessToken();
+
+          try {
+            const newToken = await this.renovarTokenUnico();
             originalRequest.headers.Authorization = `Bearer ${newToken}`;
             return this.client(originalRequest);
           } catch (refreshError) {
@@ -66,14 +71,28 @@ try {
     );
   }
 
+  // Single-flight: varias peticiones pueden recibir 401 a la vez y todas deben
+  // compartir un unico refresh en lugar de disparar N peticiones simultaneas.
+  private renovarTokenUnico(): Promise<string> {
+    if (!this.refreshPromise) {
+      this.refreshPromise = import('../auth/AuthService')
+        .then(({ authService }) => authService.refreshAccessToken())
+        .finally(() => {
+          this.refreshPromise = null;
+        });
+    }
+    return this.refreshPromise;
+  }
+
   private normalizeError(error: AxiosError): Error & { code?: string; status?: number } {
+    const data = error.response?.data as { error?: string; code?: string } | undefined;
     const normalizedError = new Error(
-      error.response?.data?.error || error.message || 'Error de red'
+      data?.error || error.message || 'Error de red'
     ) as Error & { code?: string; status?: number };
-    
-    normalizedError.code = error.response?.data?.code as string;
+
+    normalizedError.code = data?.code;
     normalizedError.status = error.response?.status;
-    
+
     return normalizedError;
   }
 
@@ -135,15 +154,19 @@ try {
   }
 
   private handleError(error: any): ApiResponse {
-    if (error?.response?.data) {
+    const data = error?.response?.data;
+    if (data) {
       return {
         ok: false,
-        error: error.response.data.error || 'Error del servidor',
-        code: error.response.data.code,
+        error: data.error || 'Error del servidor',
+        code: data.code,
       };
     }
-    if (error?.message) {
-      return { ok: false, error: error.message };
+    // El interceptor de respuestas ya normalizo el error: `code` y `status`
+    // vienen como propiedades del Error, no dentro de `response`.
+    const message: string | undefined = error?.message;
+    if (message) {
+      return { ok: false, error: message, code: error.code };
     }
     return { ok: false, error: 'Error desconocido' };
   }

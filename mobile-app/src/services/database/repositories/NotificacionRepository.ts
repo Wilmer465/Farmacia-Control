@@ -2,7 +2,7 @@ import { Notificacion, Mensaje } from '../../../types/domain';
 import { sqliteService } from '../SQLiteService';
 
 export class NotificacionRepository {
-  protected db = sqliteService.getDatabase();
+  protected get db() { return sqliteService.getDatabase(); }
   protected tableName = 'notificaciones_locales';
 
   async create(notificacion: Omit<Notificacion, 'id'>): Promise<number> {
@@ -68,7 +68,7 @@ export class NotificacionRepository {
 }
 
 export class MensajeRepository {
-  protected db = sqliteService.getDatabase();
+  protected get db() { return sqliteService.getDatabase(); }
   protected tableName = 'mensajes_locales';
 
   async create(mensaje: Omit<Mensaje, 'id'>): Promise<number> {

@@ -24,4 +24,6 @@ export * from './023_mobile_sync_queue';
 export * from './024_mobile_notificaciones_mensajes';
 export * from './025_mobile_auditoria_local';
 export * from './026_mobile_dispositivos';
+export * from './027_admin_bcrypt';
+export * from './028_debe_restablecer_contrasena';
 

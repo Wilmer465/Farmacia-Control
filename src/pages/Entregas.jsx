@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useMemo, useDeferredValue } fr
 import { inventarioApi } from '../services/inventarioApi.js';
 import Pagination from '../components/Pagination.jsx';
 import DocumentacionReceptor from '../components/DocumentacionReceptor.jsx';
+import { useEscapeCerrarModal } from '../hooks/useEscapeCerrarModal.js';
 
 export default function Entregas({ usuario, sedeActiva, params, onClearParams }) {
   const [ordenes, setOrdenes] = useState([]);
@@ -38,6 +39,9 @@ export default function Entregas({ usuario, sedeActiva, params, onClearParams })
   }, [usuario, sedeActiva]);
 
   useEffect(() => { cargar(); }, [cargar]);
+
+  useEscapeCerrarModal(() => setModalVisualizar(null), Boolean(modalVisualizar));
+  useEscapeCerrarModal(() => setOrdenParaDoc(null), Boolean(ordenParaDoc));
 
   function abrirCompletarDoc(orden) {
     setDocActual(null);
@@ -295,8 +299,7 @@ export default function Entregas({ usuario, sedeActiva, params, onClearParams })
       {modalVisualizar && (
         <div className="modal-overlay" onClick={() => setModalVisualizar(null)}>
           <div
-            className="modal-card"
-            style={{ maxWidth: '700px', width: '90%' }}
+            className="modal-card modal-lg"
             onClick={(e) => e.stopPropagation()}
           >
             <button
@@ -354,7 +357,7 @@ export default function Entregas({ usuario, sedeActiva, params, onClearParams })
       {/* MODAL PARA COMPLETAR/CORREGIR DOCUMENTACIÓN (solo Superadmin) */}
       {ordenParaDoc && (
         <div className="modal-overlay" onClick={() => setOrdenParaDoc(null)}>
-          <div className="modal-card" style={{ maxWidth: '720px' }} onClick={(e) => e.stopPropagation()}>
+          <div className="modal-card modal-lg" onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem', marginBottom: '1.25rem' }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>

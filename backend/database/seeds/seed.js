@@ -91,6 +91,19 @@ function seed() {
     } catch (_) { /* columna aún no existe: la migración 020 la crea */ }
   }
 
+  // 3.2 Usuario `admin` — credencial compartida con la app movil.
+  // La app movil siembra el mismo usuario con esta misma clave en su SQLite
+  // local, asi que el login contra la API central y el login offline usan el
+  // mismo par usuario/clave. Solo INSERT, nunca UPDATE de password.
+  const existeAdminMovil = db.prepare('SELECT id FROM usuarios WHERE LOWER(username) = ?').get('admin');
+  if (!existeAdminMovil) {
+    const hashAdmin = bcrypt.hashSync('admin123*', 12);
+    db.prepare(`
+      INSERT INTO usuarios (nombre, username, password_hash, rol_id, sede_id, estado)
+      VALUES (?, ?, ?, ?, NULL, 'ACTIVO')
+    `).run('Administrador Movil', 'admin', hashAdmin, rolSuperadmin.id);
+  }
+
   // 4. Usuario Inventario Quibdó — solo INSERT, nunca UPDATE de password
   const existeQuibdo = db.prepare('SELECT id FROM usuarios WHERE LOWER(username) = ?').get('inv_quibdo');
   if (!existeQuibdo) {

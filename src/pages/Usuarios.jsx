@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { inventarioApi } from '../services/inventarioApi.js';
+import { useEscapeCerrarModal } from '../hooks/useEscapeCerrarModal.js';
 
 export default function Usuarios({ usuario }) {
   const [usuarios, setUsuarios] = useState([]);
@@ -29,6 +30,8 @@ export default function Usuarios({ usuario }) {
     if (!esWilmer) return;
     cargarDatos();
   }, [esWilmer]);
+
+  useEscapeCerrarModal(() => setModalAbierto(false), modalAbierto);
 
   async function cargarDatos() {
     setCargando(true);
@@ -158,6 +161,44 @@ export default function Usuarios({ usuario }) {
       }
     } catch (err) {
       alert('Error de conexión al cambiar estado.');
+    }
+  }
+
+  // Eliminación definitiva = anonimización, no borrado. Por eso la doble
+  // confirmación: la fila desaparece del listado y sus credenciales dejan de
+  // servir, aunque el histórico de auditoría se conserva intacto.
+  async function handleEliminarDefinitivo(u) {
+    if (u.username.toLowerCase() === 'wilmer') {
+      alert('No puedes eliminar la cuenta principal de Superadmin.');
+      return;
+    }
+
+    const primera = window.confirm(
+      `¿Eliminar definitivamente a '${u.nombre}' (${u.username})?\n\n` +
+      'La cuenta se anonimiza: sus credenciales dejan de funcionar y desaparece de los listados.\n' +
+      'El histórico de auditoría, órdenes y despachos se conserva.'
+    );
+    if (!primera) return;
+
+    // Segunda confirmación: es la única operación de la pantalla que no se puede
+    // deshacer ni siquiera desde la propia interfaz.
+    const segunda = window.confirm(
+      `Última confirmación: la eliminación de '${u.username}' es irreversible.\n\n` +
+      '¿Continuar?'
+    );
+    if (!segunda) return;
+
+    try {
+      const res = await inventarioApi.usuarios.eliminarDefinitivo(usuario, u.id);
+      if (res.ok) {
+        setMensajeExito(`Usuario eliminado definitivamente. Su histórico se conserva.`);
+        await cargarDatos();
+        setTimeout(() => setMensajeExito(null), 5000);
+      } else {
+        alert(res.error || 'Error al eliminar el usuario.');
+      }
+    } catch (err) {
+      alert('Error de conexión al eliminar el usuario.');
     }
   }
 
@@ -308,6 +349,20 @@ export default function Usuarios({ usuario }) {
                             }}
                           >
                             {u.estado === 'ACTIVO' ? 'Desactivar' : 'Activar'}
+                          </button>
+                        )}
+                        {!esFilaWilmer && (
+                          <button
+                            type="button"
+                            onClick={() => handleEliminarDefinitivo(u)}
+                            title="Anonimiza la cuenta y conserva el histórico de auditoría"
+                            style={{
+                              padding: '4px 10px', fontSize: '0.8rem', borderRadius: '6px',
+                              border: '1px solid #fecaca', background: '#fef2f2',
+                              color: '#b91c1c', cursor: 'pointer'
+                            }}
+                          >
+                            🗑️ Eliminar
                           </button>
                         )}
                       </div>

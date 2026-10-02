@@ -1,7 +1,7 @@
 import { sqliteService } from '../SQLiteService';
 
 export class SyncMetadataRepository {
-  protected db = sqliteService.getDatabase();
+  protected get db() { return sqliteService.getDatabase(); }
   protected tableName = 'sync_metadata';
 
   async get(key: string): Promise<string | null> {

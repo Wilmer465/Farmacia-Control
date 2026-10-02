@@ -6,7 +6,13 @@ const auditoriaRepository = require('../repositories/auditoriaRepository');
 const sessionService = require('./sessionService');
 const { AUDIT_ACTIONS, ESTADOS_REGISTRO, ROLES } = require('../../shared/constants');
 
-class AuthError extends Error {}
+class AuthError extends Error {
+  constructor(message, code = 'CREDENCIALES_INVALIDAS') {
+    super(message);
+    this.name = 'AuthError';
+    this.code = code;
+  }
+}
 
 const MAX_INTENTOS = 5;
 const TIEMPO_BLOQUEO_MS = 10 * 60 * 1000; // 10 minutos
@@ -31,7 +37,7 @@ function verificarBloqueo(username) {
   if (row.intento_count >= MAX_INTENTOS) {
     const bloqueadoHasta = row.bloqueado_hasta ? new Date(row.bloqueado_hasta).getTime() : (primerIntento + TIEMPO_BLOQUEO_MS);
     const minutosRestantes = Math.ceil((bloqueadoHasta - ahora) / 60000);
-    throw new AuthError(`Demasiados intentos fallidos. Por seguridad, la cuenta está temporalmente bloqueada por ${minutosRestantes} minuto(s).`);
+    throw new AuthError(`Demasiados intentos fallidos. Por seguridad, la cuenta está temporalmente bloqueada por ${minutosRestantes} minuto(s).`, 'CUENTA_BLOQUEADA');
   }
 }
 
@@ -101,7 +107,7 @@ function login(username, password) {
 
   // Regla: solo SUPERADMIN puede tener sede_id NULL (acceso global). Cualquier otro rol sin sede es un dato corrupto.
   if (usuario.rol_nombre !== ROLES.SUPERADMIN && !usuario.sede_id) {
-    throw new AuthError('El usuario no tiene una sede asignada. Contacte al administrador.');
+    throw new AuthError('El usuario no tiene una sede asignada. Contacte al administrador.', 'SEDE_NO_ASIGNADA');
   }
 
   limpiarFallo(nombreLimpio);

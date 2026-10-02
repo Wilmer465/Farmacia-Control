@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { inventarioApi } from '../services/inventarioApi.js';
 import Pagination from '../components/Pagination.jsx';
+import { useEscapeCerrarModal } from '../hooks/useEscapeCerrarModal.js';
 
 const ROLES_ADMIN = ['SUPERADMIN', 'ADMIN'];
 
@@ -93,6 +94,16 @@ export default function CatalogoCUM({ usuario, sedeActiva }) {
       clearInterval(tiempoIntervalRef.current);
     };
   }, [cargarCatalogo, cargarEstado]);
+
+  useEscapeCerrarModal(() => setMostrarModalManual(false), mostrarModalManual);
+  useEscapeCerrarModal(
+    () => { setMostrarModalEmpaque(false); setCatalogoParaEmpaque(null); },
+    mostrarModalEmpaque
+  );
+  useEscapeCerrarModal(
+    () => { setMostrarModalDocumento(false); setCumParaDocumento(null); setArchivoDocumento(null); },
+    mostrarModalDocumento
+  );
 
   // Filtrado en memoria
   const catalogoFiltrado = useMemo(() => {
@@ -549,7 +560,7 @@ export default function CatalogoCUM({ usuario, sedeActiva }) {
       {/* Modal Registro Manual */}
       {mostrarModalManual && (
         <div className="modal-overlay" onClick={() => setMostrarModalManual(false)}>
-          <div className="modal-card" style={{ maxWidth: '700px', maxHeight: '90vh', overflow: 'auto' }} onClick={e => e.stopPropagation()}>
+          <div className="modal-card modal-lg" style={{ maxHeight: '90vh', overflow: 'auto' }} onClick={e => e.stopPropagation()}>
             <button className="modal-close-x" onClick={() => setMostrarModalManual(false)}>✕</button>
             <h3>➕ Registrar Medicamento Manual</h3>
             <form onSubmit={handleCrearManual}>
@@ -587,7 +598,7 @@ export default function CatalogoCUM({ usuario, sedeActiva }) {
       {/* Modal Empaque */}
       {mostrarModalEmpaque && catalogoParaEmpaque && (
         <div className="modal-overlay" onClick={() => { setMostrarModalEmpaque(false); setCatalogoParaEmpaque(null); }}>
-          <div className="modal-card" style={{ maxWidth: '500px' }} onClick={e => e.stopPropagation()}>
+          <div className="modal-card modal-sm" onClick={e => e.stopPropagation()}>
             <button className="modal-close-x" onClick={() => { setMostrarModalEmpaque(false); setCatalogoParaEmpaque(null); }}>✕</button>
             <h3>📦 Agregar Nivel de Empaque</h3>
             <p style={{fontSize: '0.85rem', color: '#64748b'}}>{catalogoParaEmpaque.producto} (CUM: {catalogoParaEmpaque.cum})</p>
@@ -613,7 +624,7 @@ export default function CatalogoCUM({ usuario, sedeActiva }) {
       {/* Modal Adjuntar Documento */}
       {mostrarModalDocumento && cumParaDocumento && (
         <div className="modal-overlay" onClick={() => { setMostrarModalDocumento(false); setCumParaDocumento(null); setArchivoDocumento(null); }}>
-          <div className="modal-card" style={{ maxWidth: '500px' }} onClick={e => e.stopPropagation()}>
+          <div className="modal-card modal-sm" onClick={e => e.stopPropagation()}>
             <button className="modal-close-x" onClick={() => { setMostrarModalDocumento(false); setCumParaDocumento(null); setArchivoDocumento(null); }}>✕</button>
             <h3>📎 Adjuntar Documento al CUM</h3>
             <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '0.75rem' }}>

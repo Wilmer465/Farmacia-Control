@@ -29,7 +29,8 @@ export const migration010: Migration = {
       CREATE INDEX IF NOT EXISTS idx_receptores_prioridad ON receptores(prioridad);
     `);
 
-    const cols = db.prepare("PRAGMA table_info(entregas)").all().map((c: any) => c.name);
+    const colsResult = await db.getAllAsync("PRAGMA table_info(entregas)");
+    const cols = colsResult.map((c: any) => c.name);
     if (!cols.includes('documento_adjunto_nombre')) {
       await db.execAsync(`ALTER TABLE entregas ADD COLUMN documento_adjunto_nombre TEXT;`);
     }

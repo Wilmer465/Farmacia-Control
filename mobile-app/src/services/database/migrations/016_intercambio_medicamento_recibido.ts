@@ -4,7 +4,8 @@ export const migration016: Migration = {
   version: 16,
   name: '016_intercambio_medicamento_recibido',
   up: async (db: any) => {
-    const cols = db.prepare("PRAGMA table_info(solicitudes_intercambio)").all().map((c: any) => c.name);
+    const colsResult = await db.getAllAsync("PRAGMA table_info(solicitudes_intercambio)");
+    const cols = colsResult.map((c: any) => c.name);
     if (!cols.includes('sede_recibe_id')) {
       await db.execAsync("ALTER TABLE solicitudes_intercambio ADD COLUMN sede_recibe_id INTEGER;");
     }

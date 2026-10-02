@@ -47,10 +47,14 @@ export default function Respaldos({ usuario, sedeActiva }) {
     hora: '02:00',
     dia_semana: 1,
     dia_mes: 1,
+    maximo_respaldos_por_sede: 20,
     ultimo_backup_auto: null
   });
   const [guardandoConfig, setGuardandoConfig] = useState(false);
   const [mensajeConfig, setMensajeConfig] = useState(null);
+  // Consumo real en disco. `respaldos` solo trae los del alcance de sede que está
+  // seleccionado, así que sumarlos daría una cifra parcial y engañosa.
+  const [consumo, setConsumo] = useState({ bytes: 0, cantidad: 0 });
 
   useEffect(() => {
     if (!esSuperadmin) return;
@@ -73,13 +77,30 @@ export default function Respaldos({ usuario, sedeActiva }) {
   const cargar = useCallback(async () => {
     setCargando(true);
     setError(null);
-    const [resList, resConfig] = await Promise.all([
-      inventarioApi.backups.listar(usuario, { sedeId: sedeIdConsulta }),
-      inventarioApi.backups.obtenerConfig(usuario)
-    ]);
-    if (resList.ok) setRespaldos(resList.data); else setError(resList.error);
-    if (resConfig.ok) setConfigAuto(resConfig.data);
-    setCargando(false);
+    try {
+      const [resList, resConfig, resConsumo] = await Promise.all([
+        inventarioApi.backups.listar(usuario, { sedeId: sedeIdConsulta }),
+        inventarioApi.backups.obtenerConfig(usuario),
+        inventarioApi.backups.consumo(usuario)
+      ]);
+      // `listar` cruza el canal IPC, que serializa con structured clone. Si el
+      // backend devolviera algo que no sea un array (por ejemplo el `{}` que
+      // producia una Promise sin await), el estado debe quedar como lista vacía
+      // en vez de propagar un objeto que revienta .map() más abajo.
+      if (resList.ok) {
+        setRespaldos(Array.isArray(resList.data) ? resList.data : []);
+      } else {
+        setRespaldos([]);
+        setError(resList.error);
+      }
+      if (resConfig.ok) setConfigAuto(resConfig.data);
+      if (resConsumo.ok) setConsumo(resConsumo.data);
+    } catch (err) {
+      console.error('[Respaldos] Error al cargar:', err);
+      setError('No se pudo cargar la información de respaldos.');
+    } finally {
+      setCargando(false);
+    }
   }, [usuario, sedeIdConsulta]);
 
   useEffect(() => { cargar(); }, [cargar]);
@@ -88,14 +109,20 @@ export default function Respaldos({ usuario, sedeActiva }) {
     e.preventDefault();
     setGuardandoConfig(true);
     setMensajeConfig(null);
-    const res = await inventarioApi.backups.guardarConfig(usuario, configAuto);
-    setGuardandoConfig(false);
-    if (res.ok) {
-      setConfigAuto(res.data);
-      setMensajeConfig('✅ Configuración de respaldos automáticos guardada exitosamente.');
-      setTimeout(() => setMensajeConfig(null), 4000);
-    } else {
-      setError(res.error);
+    try {
+      const res = await inventarioApi.backups.guardarConfig(usuario, configAuto);
+      if (res.ok) {
+        setConfigAuto(res.data);
+        setMensajeConfig('✅ Configuración de respaldos automáticos guardada exitosamente.');
+        setTimeout(() => setMensajeConfig(null), 4000);
+      } else {
+        setError(res.error);
+      }
+    } catch (err) {
+      console.error('[Respaldos] Error al guardar la configuración:', err);
+      setError('No se pudo guardar la configuración de respaldos.');
+    } finally {
+      setGuardandoConfig(false);
     }
   }
 
@@ -103,11 +130,21 @@ export default function Respaldos({ usuario, sedeActiva }) {
     setCreando(true);
     setError(null);
     setAviso(null);
-    const res = await inventarioApi.backups.crear(usuario, { sedeId: sedeIdConsulta });
-    setCreando(false);
-    if (!res.ok) { setError(res.error); return; }
-    setAviso(`Copia de seguridad manual generada con éxito: ${res.data.nombre}`);
-    await cargar();
+    try {
+      const res = await inventarioApi.backups.crear(usuario, { sedeId: sedeIdConsulta });
+      if (!res?.ok) { setError(res?.error || 'No se pudo crear el respaldo.'); return; }
+      const purgados = res.data?.purga?.eliminados?.length || 0;
+      setAviso(
+        `Copia de seguridad manual generada con éxito: ${res.data.nombre}`
+        + (purgados > 0 ? ` (se purgaron ${purgados} respaldos automáticos antiguos)` : '')
+      );
+      await cargar();
+    } catch (err) {
+      console.error('[Respaldos] Error al crear el respaldo:', err);
+      setError('No se pudo crear el respaldo. Intente nuevamente.');
+    } finally {
+      setCreando(false);
+    }
   }
 
   async function handleRestaurar(nombre) {
@@ -158,10 +195,10 @@ export default function Respaldos({ usuario, sedeActiva }) {
         <div className="header-actions" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
           {esSuperadmin && (
             <select
-              className="user-sede-selector"
+              className="sede-selector"
               value={sedeRespaldo == null ? 'TODAS' : sedeRespaldo}
               onChange={(e) => setSedeRespaldo(e.target.value)}
-              style={{ padding: '0.45rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1' }}
+              aria-label="Seleccionar alcance del respaldo"
             >
               <option value="TODAS">Todas las sedes (Global)</option>
               {sedes.map((s) => (
@@ -291,6 +328,30 @@ export default function Respaldos({ usuario, sedeActiva }) {
               )}
             </div>
 
+            {/* RETENCIÓN */}
+            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '1rem' }}>
+              <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#92400e', display: 'block', marginBottom: '0.35rem' }}>
+                Retención: respaldos automáticos a conservar
+              </label>
+              <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                <input
+                  type="number"
+                  min="1"
+                  max="500"
+                  value={configAuto.maximo_respaldos_por_sede ?? 20}
+                  onChange={(e) => setConfigAuto((prev) => ({ ...prev, maximo_respaldos_por_sede: Number(e.target.value) }))}
+                  style={{ width: '90px', padding: '0.4rem 0.6rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                />
+                <span style={{ fontSize: '0.78rem', color: '#78350f' }}>
+                  archivos por alcance de sede. Solo se purgan los <strong>automáticos</strong>; los manuales nunca se borran.
+                  Con frecuencia horaria, 20 equivalen a unas 20 horas de historial.
+                </span>
+              </div>
+              <div style={{ marginTop: '0.6rem', fontSize: '0.78rem', color: '#78350f' }}>
+                Consumo actual en disco: <strong>{formatearTamano(consumo.bytes)}</strong> en <strong>{consumo.cantidad}</strong> archivo{consumo.cantidad === 1 ? '' : 's'} de respaldo (todos los alcances).
+              </div>
+            </div>
+
             {mensajeConfig && <div className="aviso-ok" style={{ marginBottom: '0.75rem' }}>{mensajeConfig}</div>}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -320,7 +381,12 @@ export default function Respaldos({ usuario, sedeActiva }) {
             </tr>
           </thead>
           <tbody>
-            {respaldos.map((r) => (
+            {cargando && (
+              <tr>
+                <td colSpan={6} className="tabla-vacia">Cargando lista de respaldos...</td>
+              </tr>
+            )}
+            {!cargando && respaldos.map((r) => (
               <tr key={r.nombre}>
                 <td>
                   {r.esAutomatico ? (
@@ -353,10 +419,10 @@ export default function Respaldos({ usuario, sedeActiva }) {
                 </td>
               </tr>
             ))}
-            {respaldos.length === 0 && (
+            {!cargando && respaldos.length === 0 && (
               <tr>
-                <td colSpan="5" className="tabla-vacia">
-                  {cargando ? 'Cargando lista de respaldos...' : 'No hay respaldos generados todavía.'}
+                <td colSpan={6} className="tabla-vacia">
+                  No hay respaldos generados todavía.
                 </td>
               </tr>
             )}

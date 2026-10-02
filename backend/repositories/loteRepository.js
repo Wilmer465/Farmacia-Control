@@ -9,11 +9,19 @@ function sanitizarEntero(valor, defecto, maximo = 500) {
   return Math.min(n, maximo);
 }
 
-function findAll({ sedeId, medicamentoId, limit, offset } = {}) {
+// `incluirDadosDeBaja` (por defecto false) es una condición de OPERABILIDAD, no un
+// filtro cosmético: un lote DADO_DE_BAJA con existencias no puede despacharse,
+// transferirse ni dispensarse. Los listados de operación —Ordenes, Pacientes,
+// intercambios— no lo piden. Solo Inventario lo pide, porque ahí el lote se muestra
+// para dejar constancia de la baja, no para moverlo.
+function findAll({ sedeId, medicamentoId, limit, offset, incluirDadosDeBaja = false } = {}) {
   const db = getDb();
   const condiciones = [];
   const params = {};
 
+  if (!incluirDadosDeBaja) {
+    condiciones.push(`(l.estado_manual IS NULL OR l.estado_manual != 'DADO_DE_BAJA')`);
+  }
   if (sedeId !== null && sedeId !== undefined) {
     condiciones.push('l.sede_id = @sedeId');
     params.sedeId = sedeId;
@@ -149,6 +157,25 @@ function setEstadoManual(id, estadoManual) {
   return findById(id);
 }
 
+// `lotes` no tiene columna `estado`: el estado mostrado es derivado. `estado_manual`
+// es la única marca persistida, y las columnas baja_* (migración 024) son el rastro
+// de por qué y quién la aplicó. Se actualizan juntas y NO en su propia transacción:
+// las llama `solicitudEliminacionService.resolver` dentro de la que cierra la
+// resolución, para que no exista una solicitud aprobada con el lote sin marcar.
+function marcarLoteDeBaja(id, { motivo, usuarioId }) {
+  const db = getDb();
+  db.prepare(`
+    UPDATE lotes SET
+      estado_manual = 'DADO_DE_BAJA',
+      baja_motivo = @motivo,
+      baja_usuario_id = @usuarioId,
+      baja_fecha = datetime('now'),
+      updated_at = datetime('now')
+    WHERE id = @id
+  `).run({ id, motivo: motivo || null, usuarioId: usuarioId ?? null });
+  return findById(id);
+}
+
 // Verifica que un medicamento tenga al menos un lote con stock > 0 en una sede específica.
 function existeEnSede(medicamentoId, sedeId) {
   const db = getDb();
@@ -180,10 +207,13 @@ function resumenStock({ sedeId } = {}) {
   `).get(params);
 }
 
-function contar({ sedeId, medicamentoId } = {}) {
+function contar({ sedeId, medicamentoId, incluirDadosDeBaja = false } = {}) {
   const db = getDb();
   const condiciones = [];
   const params = {};
+  if (!incluirDadosDeBaja) {
+    condiciones.push(`(estado_manual IS NULL OR estado_manual != 'DADO_DE_BAJA')`);
+  }
   if (sedeId !== null && sedeId !== undefined) {
     condiciones.push('sede_id = @sedeId');
     params.sedeId = sedeId;
@@ -218,5 +248,5 @@ function resumenVencimientos({ sedeId } = {}) {
   `).get(params);
 }
 
-module.exports = { findAll, findById, findByClaveUnica, create, crearConMovimiento, updateCantidades, ajustarConMovimiento, setEstadoManual, existeEnSede, resumenStock, contar, resumenVencimientos };
+module.exports = { findAll, findById, findByClaveUnica, create, crearConMovimiento, updateCantidades, ajustarConMovimiento, setEstadoManual, marcarLoteDeBaja, existeEnSede, resumenStock, contar, resumenVencimientos };
 

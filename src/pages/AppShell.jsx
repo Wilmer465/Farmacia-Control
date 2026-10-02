@@ -315,7 +315,7 @@ export default function AppShell({ usuario, onLogout }) {
               <span className="user-badge">{usuario.rol_nombre}</span>
               {esSuperadmin ? (
                 <select
-                  className="user-sede-selector"
+                  className="sede-selector sede-selector--compacto"
                   value={sedeActiva == null ? 'TODAS' : sedeActiva}
                   onChange={handleCambiarSede}
                   title="Sede activa para sus gestiones"

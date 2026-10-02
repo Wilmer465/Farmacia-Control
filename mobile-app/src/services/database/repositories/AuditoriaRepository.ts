@@ -2,7 +2,7 @@ import { Auditoria } from '../../../types/domain';
 import { sqliteService } from '../SQLiteService';
 
 export class AuditoriaRepository {
-  protected db = sqliteService.getDatabase();
+  protected get db() { return sqliteService.getDatabase(); }
   protected tableName = 'auditoria';
 
   async registrar(auditoria: Omit<Auditoria, 'id'>): Promise<number> {
@@ -107,7 +107,7 @@ export class AuditoriaRepository {
 }
 
 export class AuditoriaLocalRepository {
-  protected db = sqliteService.getDatabase();
+  protected get db() { return sqliteService.getDatabase(); }
   protected tableName = 'auditoria_local';
 
   async registrar(auditoria: Omit<Auditoria, 'id' | 'sync_id'> & { sync_id?: string }): Promise<number> {

@@ -4,7 +4,8 @@ export const migration022: Migration = {
   version: 22,
   name: '022_catalogo_cum_documentos',
   up: async (db: any) => {
-    const cols = db.prepare("PRAGMA table_info(catalogo_cum)").all().map((r: any) => r.name);
+    const colsResult = await db.getAllAsync("PRAGMA table_info(catalogo_cum)");
+    const cols = colsResult.map((r: any) => r.name);
 
     if (!cols.includes('documento_adjunto_nombre')) {
       await db.execAsync("ALTER TABLE catalogo_cum ADD COLUMN documento_adjunto_nombre TEXT;");

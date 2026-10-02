@@ -48,10 +48,19 @@ function cambiarEstado(usuarioSesion, id, estado) {
   }
 }
 
+function eliminarDefinitivo(usuarioSesion, id) {
+  try {
+    return { ok: true, data: usuarioService.eliminarDefinitivo(usuarioSesion, id) };
+  } catch (err) {
+    return manejarError(err);
+  }
+}
+
 module.exports = {
   listar,
   listarRoles,
   crear,
   actualizar,
-  cambiarEstado
+  cambiarEstado,
+  eliminarDefinitivo
 };

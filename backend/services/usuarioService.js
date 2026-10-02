@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const usuarioRepository = require('../repositories/usuarioRepository');
 const auditoriaRepository = require('../repositories/auditoriaRepository');
+const { getDb } = require('../database/connection');
 const { AUDIT_ACTIONS, ROLES, ESTADOS_REGISTRO } = require('../../shared/constants');
 
 class UsuarioError extends Error {}
@@ -19,9 +20,9 @@ function verificarAccesoWilmer(usuarioSesion) {
   }
 }
 
-function listar(usuarioSesion) {
+function listar(usuarioSesion, filtros = {}) {
   verificarAccesoWilmer(usuarioSesion);
-  return usuarioRepository.listar();
+  return usuarioRepository.listar({ incluirEliminados: Boolean(filtros?.incluirEliminados) });
 }
 
 function listarRoles(usuarioSesion) {
@@ -146,11 +147,90 @@ function cambiarEstado(usuarioSesion, id, nuevoEstado) {
   return seguro;
 }
 
+// ELIMINACIÓN DEFINITIVA DE UN TRABAJADOR.
+//
+// Anonimiza la fila en lugar de borrarla, conservando auditoría, órdenes,
+// despachos y aprobaciones. Mismas protecciones que cambiarEstado: la cuenta
+// principal Wilmer no se toca y nadie se elimina a sí mismo — borrarse sería dejar
+// el sistema sin su único administrador principal, sin vuelta atrás.
+//
+// No hace falta invalidar sesiones a mano: `authService.login` rechaza estado
+// != ACTIVO y `sessionService.resolverUsuarioDesdeSesion` relee el usuario de la
+// base en cada petición y destruye la sesión si ya no está ACTIVO. Anonimizar con
+// estado = ELIMINADO corta el acceso por sí solo (puntos 7 y 8 del plan).
+function eliminarDefinitivo(usuarioSesion, id) {
+  verificarAccesoWilmer(usuarioSesion);
+
+  const idObjetivo = Number(id);
+  if (!Number.isInteger(idObjetivo) || idObjetivo <= 0) {
+    throw new UsuarioError('Usuario no encontrado.');
+  }
+
+  // Prohibido el auto-borrado: se comprueba ANTES de tocar nada, para que el error
+  // no dependa de haber ya escrito en la base.
+  if (Number(usuarioSesion.id) === idObjetivo) {
+    throw new UsuarioError('No puedes eliminar tu propia cuenta.');
+  }
+
+  const usuario = usuarioRepository.findById(idObjetivo);
+  if (!usuario) throw new UsuarioError('Usuario no encontrado.');
+
+  const esCuentaPrincipal = Number(usuario.es_superadmin_principal) === 1
+    || String(usuario.username || '').toLowerCase() === 'wilmer';
+  if (esCuentaPrincipal) {
+    throw new UsuarioError('No puedes eliminar la cuenta principal del Superadmin.');
+  }
+
+  if (usuario.estado === ESTADOS_REGISTRO.ELIMINADO) {
+    throw new UsuarioError('El usuario ya fue eliminado anteriormente.');
+  }
+
+  // La auditoría registra QUÉ registro se eliminó (id, rol, sede, estado previo),
+  // no el nombre ni el username: copiar aquí los identificadores personales
+  // dejaría la anonimización sin efecto, porque los datos seguirían legibles.
+  const anterior = {
+    id: usuario.id,
+    rol: usuario.rol_nombre,
+    sede: usuario.sede_nombre,
+    estado: usuario.estado
+  };
+
+  // Anonimización y auditoría van en la MISMA transacción. Si la auditoría
+  // fallara después del UPDATE, quedaría un usuario anonimizado sin rastro de por
+  // qué — justo la trazabilidad que el plan exige para toda baja. better-sqlite3
+  // anida la transacción interna del repositorio con esta mediante savepoints, así
+  // que el rollback sigue siendo completo.
+  const db = getDb();
+  const tx = db.transaction(() => {
+    const eliminado = usuarioRepository.eliminarDefinitivo(idObjetivo, { usuarioId: usuarioSesion.id });
+
+    auditoriaRepository.registrar({
+      usuario_id: usuarioSesion.id,
+      rol: usuarioSesion.rol_nombre,
+      sede_id: usuarioSesion.sede_id,
+      accion: AUDIT_ACTIONS.ELIMINAR_USUARIO,
+      modulo: 'USUARIOS',
+      registro_afectado: `usuario:${idObjetivo}`,
+      resultado: 'EXITO',
+      valores_anteriores: JSON.stringify(anterior),
+      valores_nuevos: JSON.stringify({ id: eliminado.id, estado: eliminado.estado, eliminado_en: eliminado.eliminado_en })
+    });
+
+    return eliminado;
+  });
+
+  const eliminado = tx();
+
+  const { password_hash: _, ...seguro } = eliminado;
+  return seguro;
+}
+
 module.exports = {
   UsuarioError,
   listar,
   listarRoles,
   crear,
   actualizar,
-  cambiarEstado
+  cambiarEstado,
+  eliminarDefinitivo
 };

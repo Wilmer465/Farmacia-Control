@@ -67,6 +67,7 @@ contextBridge.exposeInMainWorld('api', {
     ultimo: (usuarioSesion, filtros) => ipcRenderer.invoke('backups:ultimo', usuarioSesion, filtros),
     obtenerConfig: (usuarioSesion) => ipcRenderer.invoke('backups:obtenerConfig', usuarioSesion),
     guardarConfig: (usuarioSesion, config) => ipcRenderer.invoke('backups:guardarConfig', usuarioSesion, config),
+    consumo: (usuarioSesion) => ipcRenderer.invoke('backups:consumo', usuarioSesion),
     restaurar: (usuarioSesion, nombreArchivo) => ipcRenderer.invoke('backups:restaurar', usuarioSesion, nombreArchivo)
   },
   cloudSync: {
@@ -77,7 +78,8 @@ contextBridge.exposeInMainWorld('api', {
     listarRoles: (usuarioSesion) => ipcRenderer.invoke('usuarios:listarRoles', usuarioSesion),
     crear: (usuarioSesion, data) => ipcRenderer.invoke('usuarios:crear', usuarioSesion, data),
     actualizar: (usuarioSesion, id, data) => ipcRenderer.invoke('usuarios:actualizar', usuarioSesion, id, data),
-    cambiarEstado: (usuarioSesion, id, estado) => ipcRenderer.invoke('usuarios:cambiarEstado', usuarioSesion, id, estado)
+    cambiarEstado: (usuarioSesion, id, estado) => ipcRenderer.invoke('usuarios:cambiarEstado', usuarioSesion, id, estado),
+    eliminarDefinitivo: (usuarioSesion, id) => ipcRenderer.invoke('usuarios:eliminarDefinitivo', usuarioSesion, id)
   },
   catalogoCum: {
     actualizar: (usuarioSesion) => ipcRenderer.invoke('catalogoCum:actualizar', usuarioSesion),

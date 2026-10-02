@@ -4,7 +4,7 @@ import { useAuth } from '../../hooks';
 import { useUIStore } from '../../store/uiStore';
 
 export default function LoginScreen() {
-  const { login, cargando } = useAuth();
+  const { login, cargando, error } = useAuth();
   const { addToast } = useUIStore();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -18,6 +18,10 @@ export default function LoginScreen() {
     const success = await login({ username: username.trim(), password });
     if (success) {
       addToast({ type: 'success', message: 'Bienvenido a Farmacia Control' });
+    } else {
+      // Antes el fallo se guardaba en el contexto y no se mostraba nunca, con lo
+      // que un usuario o contrasena incorrectos parecian no hacer nada.
+      addToast({ type: 'error', message: error || 'No se pudo iniciar sesión' });
     }
   };
 
