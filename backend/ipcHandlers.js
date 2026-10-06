@@ -136,12 +136,12 @@ ipcMain.handle('auth:logout', conSyncDespuesDeCambio('auth:logout', conValidacio
     return entregaController.capturarHuella();
   }));
 
-  ipcMain.handle('receptores:buscar', conValidacionSesion((_usuarioSesion, documento) => {
-    return receptorController.buscar(documento);
+  ipcMain.handle('receptores:buscar', conValidacionSesion((usuarioSesion, documento) => {
+    return receptorController.buscar(usuarioSesion, documento);
   }));
 
-  ipcMain.handle('receptores:listar', conValidacionSesion(() => {
-    return receptorController.listar();
+  ipcMain.handle('receptores:listar', conValidacionSesion((usuarioSesion) => {
+    return receptorController.listar(usuarioSesion);
   }));
 
   ipcMain.handle('receptores:guardar', conSyncDespuesDeCambio('receptores:guardar', conValidacionSesion((usuarioSesion, data) => {
@@ -303,20 +303,20 @@ ipcMain.handle('backups:restaurar', conSyncDespuesDeCambio('backups:restaurar', 
     return catalogoCumController.actualizarCatalogo(usuarioSesion);
   })));
 
-  ipcMain.handle('catalogoCum:estado', conValidacionSesion(() => {
-    return catalogoCumController.obtenerEstadoCatalogo();
+  ipcMain.handle('catalogoCum:estado', conValidacionSesion((usuarioSesion) => {
+    return catalogoCumController.obtenerEstadoCatalogo(usuarioSesion);
   }));
 
-  ipcMain.handle('catalogoCum:buscarPorGTIN', conValidacionSesion((_usuarioSesion, gtin) => {
-    return catalogoCumController.buscarPorGTIN(gtin);
+  ipcMain.handle('catalogoCum:buscarPorGTIN', conValidacionSesion((usuarioSesion, gtin) => {
+    return catalogoCumController.buscarPorGTIN(usuarioSesion, gtin);
   }));
 
-  ipcMain.handle('catalogoCum:buscarPorCUM', conValidacionSesion((_usuarioSesion, cum) => {
-    return catalogoCumController.buscarPorCUM(cum);
+  ipcMain.handle('catalogoCum:buscarPorCUM', conValidacionSesion((usuarioSesion, cum) => {
+    return catalogoCumController.buscarPorCUM(usuarioSesion, cum);
   }));
 
-  ipcMain.handle('catalogoCum:buscarPorProducto', conValidacionSesion((_usuarioSesion, texto, limite) => {
-    return catalogoCumController.buscarPorProducto(texto, limite);
+  ipcMain.handle('catalogoCum:buscarPorProducto', conValidacionSesion((usuarioSesion, texto, limite) => {
+    return catalogoCumController.buscarPorProducto(usuarioSesion, texto, limite);
   }));
 
   ipcMain.handle('catalogoCum:crearManual', conSyncDespuesDeCambio('catalogoCum:crearManual', conValidacionSesion((usuarioSesion, data) => {
@@ -331,16 +331,16 @@ ipcMain.handle('backups:restaurar', conSyncDespuesDeCambio('backups:restaurar', 
     return catalogoCumController.adjuntarDocumento(usuarioSesion, id, data);
   })));
 
-  ipcMain.handle('catalogoCum:obtenerDocumento', conValidacionSesion((_usuarioSesion, id) => {
-    return catalogoCumController.obtenerDocumento(_usuarioSesion, id);
+  ipcMain.handle('catalogoCum:obtenerDocumento', conValidacionSesion((usuarioSesion, id) => {
+    return catalogoCumController.obtenerDocumento(usuarioSesion, id);
   }));
 
-  ipcMain.handle('catalogoCum:progresoActualizacion', conValidacionSesion(() => {
-    return catalogoCumController.obtenerProgreso();
+  ipcMain.handle('catalogoCum:progresoActualizacion', conValidacionSesion((usuarioSesion) => {
+    return catalogoCumController.obtenerProgreso(usuarioSesion);
   }));
 
-  ipcMain.handle('catalogoCum:cancelarActualizacion', conValidacionSesion((_usuarioSesion) => {
-    return catalogoCumController.cancelarActualizacion();
+  ipcMain.handle('catalogoCum:cancelarActualizacion', conValidacionSesion((usuarioSesion) => {
+    return catalogoCumController.cancelarActualizacion(usuarioSesion);
   }));
 
   // Recepción con escaneo - INVENTARIO/ADMIN/SUPERADMIN

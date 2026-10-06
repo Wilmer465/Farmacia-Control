@@ -78,9 +78,9 @@ export default function PatientsScreen() {
               </View>
             </View>
             <View style={styles.itemDetails}>
-              <Text style={styles.itemDetail}>📄 {item.documento}</Text>
-              <Text style={styles.itemDetail}>📞 {item.telefono}</Text>
-              <Text style={styles.itemDetail}>💊 {item.medicamentos.join(', ')}</Text>
+              <Text style={styles.itemDetail}>{item.documento}</Text>
+              <Text style={styles.itemDetail}>{item.telefono}</Text>
+              <Text style={styles.itemDetail}>{item.medicamentos.join(', ')}</Text>
             </View>
           </TouchableOpacity>
         )}

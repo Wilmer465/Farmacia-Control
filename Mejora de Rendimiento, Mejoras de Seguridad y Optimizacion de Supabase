@@ -1,19 +1,26 @@
-evitar que se hagan varias solicitudes de bajas o eliminaciones del mismo medicamento
+Los 18 fallos
+La suite actual da 73 pruebas: 55 aprobadas y 18 fallidas. Ninguna corresponde a los cambios visuales; todas son preexistentes del backend/pruebas. Su distribución es:
 
-cuando se escribe el motivo de la baja y se hace la solcirud el cuadro deja de funcionar
+1. Fixtures desactualizados sin unidad_medida: 12 fallos
+El validador actual exige unidad_medida, pero varios fixtures antiguos crean medicamentos sin ese campo:
 
-caundo un admin o superadmin confirman una solicitud de baja o eliminacion de medicamento no se se hace la eliminacion
+sqlite_transaccionalidad.test.js: 3
+reportes.test.js: 4
+offline_sync.test.js: 1
+ipc_handlers.test.js: 1
+medicamentos_lotes.test.js, primeras 3 pruebas: 3
+2. Fixtures de códigos de barras inválidos: 2 fallos
+hardware_mocks.test.js: 1
+El EAN-13 usado como válido no tiene el dígito de control correcto.
+medicamentos_lotes.test.js, prueba de códigos: 1
+Usa el mismo EAN-13 inválido antes de llegar a las comprobaciones GS1/DataMatrix.
+3. Contrato desactualizado entre pruebas y despacho: 2 fallos
+En reglas_negocio.test.js:
 
-todos los caudros independientemnete cual sea deben estar posicionados en la mitad de la pantalla y no en la parte superior
-
-los respaldos no se estan cargando y tampoco dejan guardar de forma automatica ni manual
-
-el boton de escanear debe tener el mismo diseño que el boton de agregar medicamento y el boton de agregar paciente
-
-el boton de sedes que esta en ese mismo apartado que sea igual al que esta en reportes
-
-todos los botones, barras de busquedas o ventanas deben tener le mismo diseño
-
-has que el superadmin tambien pueda eliminar a los trabajadores no solo desabilitarlos
-
-revisa los respaldos estan pesando demasiado para no tener paracticamente ninguna informacion
+La prueba de huella espera el error de huella, pero las órdenes MUNICIPIO_VEREDA guardan firma/huella como pendientes; el despacho valida primero la firma.
+La prueba de despacho parcial envía cantidad_unidades_despachada, mientras el validador solamente acepta cajas o unidades sueltas.
+4. Pruebas mal construidas o sensibles a datos semilla: 2 fallos
+roles_permisos.test.js: 1
+Usa assert.rejects sin esperar la promesa y el controlador convierte el error en una respuesta normal, por lo que la prueba termina antes y genera actividad asíncrona inválida.
+offline_sync.test.js, prueba de sanitización: 1
+Busca exactamente wilmer, mientras la semilla guarda Wilmer; la consulta devuelve indefinido antes de comprobar la columna confidencial.

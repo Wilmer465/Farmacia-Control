@@ -6,8 +6,8 @@ const biometricService = require('../../backend/services/biometricService');
 describe('FASE 11 — Integración de Hardware y Mocks (Lector de Barras, Huella, Firma)', () => {
 
   test('Lector de código de barras: Parseo de formatos estándar EAN-13, EAN-8 y UPC-A', () => {
-    // EAN-13
-    assert.equal(barcodeService.validarEAN13('7702057700018'), true);
+    // EAN-13 (prefijo 770205770001 → dígito de control 0; el antiguo '...018' era inválido)
+    assert.equal(barcodeService.validarEAN13('7702057700010'), true);
     // EAN-8
     assert.equal(barcodeService.validarEAN8('96385074'), true);
     // UPC-A

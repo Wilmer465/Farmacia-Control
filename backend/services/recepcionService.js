@@ -5,7 +5,6 @@ const { getDb } = require('../database/connection');
 const catalogoCumService = require('./catalogoCumService');
 const barcodeService = require('./barcodeService');
 const loteService = require('./loteService');
-const movimientoRepository = require('../repositories/movimientoRepository');
 const auditoriaRepository = require('../repositories/auditoriaRepository');
 const permisoService = require('./permisoService');
 const { AUDIT_ACTIONS } = require('../../shared/constants');
@@ -144,112 +143,119 @@ async function registrarRecepcion(usuarioSesion, datos) {
   if (!cantidad || cantidad <= 0) throw new RecepcionError('Cantidad debe ser mayor a 0');
   if (!sedeEfectiva) throw new RecepcionError('Sede no determinada');
 
+  // Toda la recepción es atómica: medicamento + lote + auditoría o nada.
+  // `loteService.crear/ajustar` ya registran su ENTRADA/AJUSTE dentro de su
+  // propia transacción (anidada por savepoints); el INSERT extra de ENTRADA
+  // que había aquí duplicaba los movimientos y descuadraba la conciliación,
+  // así que se eliminó: se reutiliza el movimiento generado por el lote.
   const db = getDb();
-  const catalogo = db.prepare('SELECT * FROM catalogo_cum WHERE id = ?').get(catalogo_cum_id);
-  if (!catalogo) throw new RecepcionError('Catálogo CUM no encontrado');
+  const tx = db.transaction(() => {
+    const catalogo = db.prepare('SELECT * FROM catalogo_cum WHERE id = ?').get(catalogo_cum_id);
+    if (!catalogo) throw new RecepcionError('Catálogo CUM no encontrado');
 
-  // Obtener o crear medicamento local vinculado al catálogo
-  let medicamento = db.prepare('SELECT * FROM medicamentos WHERE catalogo_cum_id = ?').get(catalogo_cum_id);
-  
-  if (!medicamento) {
-    // Crear medicamento local basado en catálogo
-    const payload = {
-      codigo: `CUM-${catalogo.cum}`,
-      nombre: catalogo.producto,
-      principio_activo: catalogo.principio_activo,
-      presentacion: catalogo.descripcioncomercial,
-      concentracion: catalogo.concentracion,
-      laboratorio: catalogo.laboratorio,
-      unidad_medida: catalogo.unidad_medida || 'UNIDAD',
-      unidades_por_caja: 1,
-      estado: 'ACTIVO',
-      catalogo_cum_id: catalogo.id,
-      fuente: catalogo.fuente,
-      gtin_principal: catalogo.gtin
-    };
-    
-    const stmt = db.prepare(`
-      INSERT INTO medicamentos (codigo, nombre, principio_activo, presentacion, concentracion, laboratorio, 
-        unidad_medida, unidades_por_caja, estado, catalogo_cum_id, fuente, gtin_principal)
-      VALUES (@codigo, @nombre, @principio_activo, @presentacion, @concentracion, @laboratorio,
-        @unidad_medida, @unidades_por_caja, @estado, @catalogo_cum_id, @fuente, @gtin_principal)
-    `);
-    const info = stmt.run(payload);
-    medicamento = db.prepare('SELECT * FROM medicamentos WHERE id = ?').get(info.lastInsertRowid);
-  }
+    // Obtener o crear medicamento local vinculado al catálogo
+    let medicamento = db.prepare('SELECT * FROM medicamentos WHERE catalogo_cum_id = ?').get(catalogo_cum_id);
 
-  // Calcular unidades base (nivel 3 = unidad individual)
-  const unidadesBase = calcularUnidadesBase(cantidad, factor_conversion);
+    if (!medicamento) {
+      // Crear medicamento local basado en catálogo
+      const payload = {
+        codigo: `CUM-${catalogo.cum}`,
+        nombre: catalogo.producto,
+        principio_activo: catalogo.principio_activo,
+        presentacion: catalogo.descripcioncomercial,
+        concentracion: catalogo.concentracion,
+        laboratorio: catalogo.laboratorio,
+        unidad_medida: catalogo.unidad_medida || 'UNIDAD',
+        unidades_por_caja: 1,
+        estado: 'ACTIVO',
+        catalogo_cum_id: catalogo.id,
+        fuente: catalogo.fuente,
+        gtin_principal: catalogo.gtin
+      };
 
-  // Crear/actualizar lote
-  const loteExistente = db.prepare(`
-    SELECT * FROM lotes 
-    WHERE medicamento_id = ? AND sede_id = ? AND numero_lote = ? AND empaque_nivel = ? AND empaque_gtin = ?
-  `).get(medicamento.id, sedeEfectiva, lote.trim(), empaque_nivel, empaque_gtin);
-
-  let loteFinal;
-  if (loteExistente) {
-    // Actualizar cantidad existente
-    const nuevasUnidadesBase = loteExistente.cantidad_total_unidades + unidadesBase;
-    const nuevasCajas = loteExistente.cantidad_cajas + cantidad;
-    
-    loteFinal = loteService.ajustarCantidades(usuarioSesion, loteExistente.id, {
-      cantidad_cajas: nuevasCajas,
-      cantidad_unidades_sueltas: nuevasUnidadesBase % (medicamento.unidades_por_caja || 1),
-      motivo: `Recepción: +${cantidad} ${empaque_nivel === 1 ? 'cajas logísticas' : empaque_nivel === 2 ? 'cajas' : 'unidades'}`
-    });
-  } else {
-    // Crear nuevo lote
-    loteFinal = loteService.crear(usuarioSesion, {
-      medicamento_id: medicamento.id,
-      sede_id: sedeEfectiva,
-      numero_lote: lote.trim(),
-      fecha_expedicion: new Date().toISOString().split('T')[0],
-      fecha_vencimiento,
-      cantidad_cajas: cantidad,
-      cantidad_unidades_sueltas: 0,
-      empaque_nivel,
-      empaque_gtin,
-      factor_conversion
-    });
-  }
-
-  // Registrar movimiento de entrada con trazabilidad completa
-  const movimiento = movimientoRepository.crear({
-    lote_id: loteFinal.id,
-    medicamento_id: medicamento.id,
-    sede_id: sedeEfectiva,
-    tipo: 'ENTRADA',
-    cantidad: unidadesBase,
-    referencia_orden_id: null,
-    usuario_id: usuarioSesion.id,
-    fecha: new Date().toISOString(),
-    empaque_nivel,
-    cantidad_unidades_base: unidadesBase
-  });
-
-  // Auditoría
-  auditoriaRepository.registrar({
-    usuario_id: usuarioSesion.id,
-    rol: usuarioSesion.rol_nombre,
-    sede_id: sedeEfectiva,
-    accion: AUDIT_ACTIONS.RECEPCION_REGISTRAR,
-    modulo: 'RECEPCION',
-    registro_afectado: `lote:${loteFinal.id}`,
-    resultado: 'EXITO',
-    valores_nuevos: {
-      catalogo_cum_id,
-      medicamento_id: medicamento.id,
-      lote: lote.trim(),
-      fecha_vencimiento,
-      cantidad_recibida: cantidad,
-      empaque_nivel,
-      empaque_gtin,
-      factor_conversion,
-      unidades_base: unidadesBase,
-      movimiento_id: movimiento.id
+      const stmt = db.prepare(`
+        INSERT INTO medicamentos (codigo, nombre, principio_activo, presentacion, concentracion, laboratorio,
+          unidad_medida, unidades_por_caja, estado, catalogo_cum_id, fuente, gtin_principal)
+        VALUES (@codigo, @nombre, @principio_activo, @presentacion, @concentracion, @laboratorio,
+          @unidad_medida, @unidades_por_caja, @estado, @catalogo_cum_id, @fuente, @gtin_principal)
+      `);
+      const info = stmt.run(payload);
+      medicamento = db.prepare('SELECT * FROM medicamentos WHERE id = ?').get(info.lastInsertRowid);
     }
+
+    // Calcular unidades base (nivel 3 = unidad individual)
+    const unidadesBase = calcularUnidadesBase(cantidad, factor_conversion);
+    const upc = medicamento.unidades_por_caja || 1;
+
+    // Crear/actualizar lote (el movimiento ENTRADA/AJUSTE lo crea el loteService).
+    // Se busca por clave única (medicamento, sede, número): el match anterior
+    // exigía igualdad exacta de empaque_nivel/gtin con `=`, donde NULL nunca
+    // iguala y cada segunda recepción creaba un lote duplicado en vez de
+    // acumular. La unicidad real es la de `lotes` (medicamento, sede, número).
+    const loteExistente = db.prepare(`
+      SELECT * FROM lotes
+      WHERE medicamento_id = ? AND sede_id = ? AND numero_lote = ?
+    `).get(medicamento.id, sedeEfectiva, lote.trim());
+
+    let loteFinal;
+    if (loteExistente) {
+      // Actualizar cantidad existente: el total manda, cajas/sueltas se derivan
+      const nuevasUnidadesBase = loteExistente.cantidad_total_unidades + unidadesBase;
+
+      loteFinal = loteService.ajustarCantidades(usuarioSesion, loteExistente.id, {
+        cantidad_cajas: Math.floor(nuevasUnidadesBase / upc),
+        cantidad_unidades_sueltas: nuevasUnidadesBase % upc,
+        motivo: `Recepción: +${cantidad} ${empaque_nivel === 1 ? 'cajas logísticas' : empaque_nivel === 2 ? 'cajas' : 'unidades'}`
+      });
+    } else {
+      // Crear nuevo lote con el total en unidades base (respeta factor conversión)
+      loteFinal = loteService.crear(usuarioSesion, {
+        medicamento_id: medicamento.id,
+        sede_id: sedeEfectiva,
+        numero_lote: lote.trim(),
+        fecha_expedicion: new Date().toISOString().split('T')[0],
+        fecha_vencimiento,
+        cantidad_cajas: cantidad,
+        cantidad_unidades_sueltas: 0,
+        cantidad_total_unidades: unidadesBase,
+        empaque_nivel,
+        empaque_gtin,
+        factor_conversion
+      });
+    }
+
+    // Reutilizar el movimiento generado por crear/ajustar (último del lote)
+    const movimiento = db.prepare(`
+      SELECT * FROM movimientos_inventario WHERE lote_id = ? ORDER BY id DESC LIMIT 1
+    `).get(loteFinal.id);
+
+    // Auditoría dentro de la misma transacción: si falla, se revierte el lote
+    auditoriaRepository.registrar({
+      usuario_id: usuarioSesion.id,
+      rol: usuarioSesion.rol_nombre,
+      sede_id: sedeEfectiva,
+      accion: AUDIT_ACTIONS.RECEPCION_REGISTRAR,
+      modulo: 'RECEPCION',
+      registro_afectado: `lote:${loteFinal.id}`,
+      resultado: 'EXITO',
+      valores_nuevos: {
+        catalogo_cum_id,
+        medicamento_id: medicamento.id,
+        lote: lote.trim(),
+        fecha_vencimiento,
+        cantidad_recibida: cantidad,
+        empaque_nivel,
+        empaque_gtin,
+        factor_conversion,
+        unidades_base: unidadesBase,
+        movimiento_id: movimiento ? movimiento.id : null
+      }
+    });
+
+    return { medicamento, loteFinal, movimiento, unidadesBase };
   });
+
+  const { medicamento, loteFinal, movimiento, unidadesBase } = tx();
 
   return {
     ok: true,
@@ -264,13 +270,13 @@ async function registrarRecepcion(usuarioSesion, datos) {
       fecha_vencimiento: loteFinal.fecha_vencimiento,
       cantidad_total_unidades: loteFinal.cantidad_total_unidades
     },
-    movimiento: {
+    movimiento: movimiento ? {
       id: movimiento.id,
       tipo: movimiento.tipo,
       cantidad: movimiento.cantidad,
       empaque_nivel: movimiento.empaque_nivel,
       cantidad_unidades_base: movimiento.cantidad_unidades_base
-    },
+    } : null,
     equivalencias: {
       recibido_nivel_escan: cantidad,
       factor_conversion,

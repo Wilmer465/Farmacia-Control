@@ -219,7 +219,7 @@ export default function Ordenes({ usuario, sedeActiva, params, onClearParams }) 
               className={`btn-toggle-action ${mostrarFormOrden ? 'btn-cancelar' : 'btn-primario'}`}
               onClick={() => setMostrarFormOrden(!mostrarFormOrden)}
             >
-              {mostrarFormOrden ? '✕ Cerrar formulario' : '+ Nueva Orden'}
+              {mostrarFormOrden ? '× Cerrar formulario' : '+ Nueva Orden'}
             </button>
           </div>
         )}
@@ -232,74 +232,73 @@ export default function Ordenes({ usuario, sedeActiva, params, onClearParams }) 
         </div>
       )}
 
-      {/* MODAL PARA VER DETALLES DE LA ORDEN ("👁️ VER") */}
+      {/* MODAL PARA VER DETALLES DE LA ORDEN (" VER") */}
       {ordenParaVer && (
         <div className="modal-overlay" onClick={() => setOrdenParaVer(null)}>
           <div className="modal-card modal-lg" onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem', marginBottom: '1.25rem' }}>
+            <div className="modal-cabecera">
               <div>
-                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800 }}>
-                  📋 Detalles de Orden {ordenParaVer.numero}
+                <h3>
+                   Detalles de Orden {ordenParaVer.numero}
                 </h3>
-                <span style={{ fontSize: '0.82rem', color: '#64748b' }}>
+                <span className="modal-subtitulo">
                   Sede: <strong>{ordenParaVer.sede_nombre}</strong> | Creada por: <strong>{ordenParaVer.creador_nombre}</strong>
                 </span>
               </div>
               <button
                 type="button"
-                className="btn-clear-search"
+                className="btn-cerrar"
                 onClick={() => setOrdenParaVer(null)}
-                style={{ fontSize: '1.4rem', cursor: 'pointer', padding: '0.2rem 0.5rem', background: 'transparent', border: 'none', color: '#64748b' }}
                 title="Cerrar modal"
               >
-                ✕
+                ×
               </button>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem', background: '#f8fafc', padding: '0.85rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+            <div className="detalle-tarjeta detalle-tarjeta--columnas-estrechas">
               <div>
-                <span style={{ fontSize: '0.74rem', color: '#64748b', display: 'block' }}>Estado general:</span>
-                <span className={`pill ${ESTADO_CLASE[ordenParaVer.estado] || ''}`} style={{ marginTop: '0.2rem' }}>
+                <span className="detalle-etiqueta">Estado general:</span>
+                <span className={`pill detalle-con-insignia ${ESTADO_CLASE[ordenParaVer.estado] || ''}`}>
                   {ordenParaVer.estado}
                 </span>
               </div>
               <div>
-                <span style={{ fontSize: '0.74rem', color: '#64748b', display: 'block' }}>Tipo de Salida / Destino:</span>
+                <span className="detalle-etiqueta">Tipo de Salida / Destino:</span>
                 {ordenParaVer.tipo_destino === 'MUNICIPIO_VEREDA' ? (
-                  <span className="pill estado-amarillo" style={{ marginTop: '0.2rem' }} title="Identidad registrada; firma y huella pendientes">
-                    🚚 {ordenParaVer.destino_detalle || 'Municipio / Vereda'} (Firma/Huella pendientes)
+                  <span className="pill detalle-con-insignia estado-amarillo" title="Identidad registrada; firma y huella pendientes">
+                     {ordenParaVer.destino_detalle || 'Municipio / Vereda'} (Firma/Huella pendientes)
                   </span>
                 ) : (
-                  <span className="pill estado-gris" style={{ marginTop: '0.2rem' }}>
-                    🏢 Despacho Local (Firma/Huella)
+                  <span className="pill detalle-con-insignia estado-gris">
+                     Despacho Local (Firma/Huella)
                   </span>
                 )}
               </div>
               <div>
-                <span style={{ fontSize: '0.74rem', color: '#64748b', display: 'block' }}>Fecha de creación:</span>
-                <strong style={{ fontSize: '0.85rem' }}>{ordenParaVer.fecha_creacion}</strong>
+                <span className="detalle-etiqueta">Fecha de creación:</span>
+                <strong className="detalle-valor detalle-valor--pequeno">{ordenParaVer.fecha_creacion}</strong>
               </div>
               <div>
-                <span style={{ fontSize: '0.74rem', color: '#64748b', display: 'block' }}>Última actualización:</span>
-                <strong style={{ fontSize: '0.85rem' }}>{ordenParaVer.fecha_actualizacion || '—'}</strong>
+                <span className="detalle-etiqueta">Última actualización:</span>
+                <strong className="detalle-valor detalle-valor--pequeno">{ordenParaVer.fecha_actualizacion || '—'}</strong>
               </div>
             </div>
 
-            <h4 style={{ margin: '0 0 0.6rem 0', fontSize: '0.95rem', fontWeight: 700 }}>
-              📦 Medicamentos Solicitados en este Pedido:
+            <h4 className="detalle-subtitulo">
+               Medicamentos Solicitados en este Pedido:
             </h4>
 
-            <div className="table-responsive" style={{ marginBottom: '1.25rem' }}>
+            <div className="table-responsive tabla-detalle">
               <table className="tabla">
                 <thead>
                   <tr>
                     <th>Código</th>
                     <th>Medicamento</th>
-                    <th style={{ textAlign: 'center' }}>Cajas Sol.</th>
-                    <th style={{ textAlign: 'center' }}>Sueltas Sol.</th>
-                    <th style={{ textAlign: 'center' }}>Total Solicitado</th>
-                    <th style={{ textAlign: 'center' }}>Despachado</th>
-                    <th style={{ textAlign: 'center' }}>Pendiente</th>
+                    <th className="celda-centrada">Cajas Sol.</th>
+                    <th className="celda-centrada">Sueltas Sol.</th>
+                    <th className="celda-centrada">Total Solicitado</th>
+                    <th className="celda-centrada">Despachado</th>
+                    <th className="celda-centrada">Pendiente</th>
                     <th>Estado Línea</th>
                   </tr>
                 </thead>
@@ -312,16 +311,16 @@ export default function Ordenes({ usuario, sedeActiva, params, onClearParams }) 
                       <tr key={det.id}>
                         <td><span className="mono-tag">{det.medicamento_codigo}</span></td>
                         <td><strong>{det.medicamento_nombre}</strong></td>
-                        <td style={{ textAlign: 'center' }}>{det.cantidad_cajas_solicitada}</td>
-                        <td style={{ textAlign: 'center' }}>{det.cantidad_unidades_solicitada}</td>
-                        <td style={{ textAlign: 'center' }}><strong>{det.cantidad_total_solicitada}</strong></td>
-                        <td style={{ textAlign: 'center' }}>
-                          <span style={{ color: det.cantidad_total_despachada > 0 ? '#16a34a' : '#64748b', fontWeight: 700 }}>
+                        <td className="celda-centrada">{det.cantidad_cajas_solicitada}</td>
+                        <td className="celda-centrada">{det.cantidad_unidades_solicitada}</td>
+                        <td className="celda-centrada"><strong>{det.cantidad_total_solicitada}</strong></td>
+                        <td className="celda-centrada">
+                          <span className={det.cantidad_total_despachada > 0 ? 'numero-positivo' : 'numero-neutro'}>
                             {det.cantidad_total_despachada}
                           </span>
                         </td>
-                        <td style={{ textAlign: 'center' }}>
-                          <span style={{ color: pendiente > 0 ? '#d97706' : '#64748b', fontWeight: 700 }}>
+                        <td className="celda-centrada">
+                          <span className={pendiente > 0 ? 'numero-pendiente' : 'numero-neutro'}>
                             {Math.max(0, pendiente)}
                           </span>
                         </td>
@@ -347,62 +346,62 @@ export default function Ordenes({ usuario, sedeActiva, params, onClearParams }) 
             </div>
 
             {/* DOCUMENTACIÓN DE QUIEN RECIBE */}
-            <h4 style={{ margin: '0 0 0.6rem 0', fontSize: '0.95rem', fontWeight: 700 }}>
-              👤 Documentación de quien recibe
+            <h4 className="detalle-subtitulo">
+               Documentación de quien recibe
             </h4>
-            <div style={{ background: '#f8fafc', padding: '0.85rem', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '1.25rem' }}>
+            <div className="detalle-tarjeta">
               {ordenParaVer.tipo_destino === 'MUNICIPIO_VEREDA' && (
-                <div style={{ background: '#eff6ff', padding: '0.6rem 0.85rem', borderRadius: '8px', border: '1px solid #bfdbfe', fontSize: '0.82rem', color: '#1e40af', marginBottom: '0.85rem' }}>
-                  🚚 Salida a municipio/vereda: identidad registrada; la firma y la huella quedan <strong>pendientes</strong>. Detalle: <strong>{ordenParaVer.destino_detalle || '—'}</strong>
+                <div className="alerta-informativa">
+                   Salida a municipio/vereda: identidad registrada; la firma y la huella quedan <strong>pendientes</strong>. Detalle: <strong>{ordenParaVer.destino_detalle || '—'}</strong>
                 </div>
               )}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
+              <div className="detalle-grid detalle-grid--columnas-anchas">
                 <div>
-                  <span style={{ fontSize: '0.74rem', color: '#64748b', display: 'block' }}>Receptor</span>
-                  <strong style={{ fontSize: '0.88rem' }}>{ordenParaVer.receptor_nombre || '—'}</strong>
+                  <span className="detalle-etiqueta">Receptor</span>
+                  <strong className="detalle-valor">{ordenParaVer.receptor_nombre || '—'}</strong>
                 </div>
                 <div>
-                  <span style={{ fontSize: '0.74rem', color: '#64748b', display: 'block' }}>Documento</span>
-                  <strong style={{ fontSize: '0.88rem' }}>{ordenParaVer.receptor_documento || '—'}</strong>
+                  <span className="detalle-etiqueta">Documento</span>
+                  <strong className="detalle-valor">{ordenParaVer.receptor_documento || '—'}</strong>
                 </div>
                 <div>
-                  <span style={{ fontSize: '0.74rem', color: '#64748b', display: 'block' }}>Teléfono</span>
-                  <strong style={{ fontSize: '0.88rem' }}>{ordenParaVer.receptor_telefono || '—'}</strong>
+                  <span className="detalle-etiqueta">Teléfono</span>
+                  <strong className="detalle-valor">{ordenParaVer.receptor_telefono || '—'}</strong>
                 </div>
                 <div>
-                  <span style={{ fontSize: '0.74rem', color: '#64748b', display: 'block' }}>Correo</span>
-                  <strong style={{ fontSize: '0.88rem' }}>{ordenParaVer.receptor_correo || '—'}</strong>
+                  <span className="detalle-etiqueta">Correo</span>
+                  <strong className="detalle-valor">{ordenParaVer.receptor_correo || '—'}</strong>
                 </div>
                 <div>
-                  <span style={{ fontSize: '0.74rem', color: '#64748b', display: 'block' }}>Firma digital</span>
+                  <span className="detalle-etiqueta">Firma digital</span>
                   {ordenParaVer.tipo_destino === 'MUNICIPIO_VEREDA' ? (
                     <span className="pill estado-amarillo">⏳ Pendiente</span>
                   ) : ordenParaVer.firma_data ? (
-                    <span className="pill estado-verde">✓ Registrada</span>
+                    <span className="pill estado-verde"> Registrada</span>
                   ) : (
-                    <span className="pill estado-rojo">❌ Sin firma</span>
+                    <span className="pill estado-rojo"> Sin firma</span>
                   )}
                 </div>
                 <div>
-                  <span style={{ fontSize: '0.74rem', color: '#64748b', display: 'block' }}>Huella dactilar</span>
+                  <span className="detalle-etiqueta">Huella dactilar</span>
                   {ordenParaVer.tipo_destino === 'MUNICIPIO_VEREDA' ? (
                     <span className="pill estado-amarillo">⏳ Pendiente</span>
                   ) : ordenParaVer.huella_registrada ? (
-                    <span className="pill estado-verde">✓ Capturada</span>
+                    <span className="pill estado-verde"> Capturada</span>
                   ) : (
-                    <span className="pill estado-rojo">❌ Sin huella</span>
+                    <span className="pill estado-rojo"> Sin huella</span>
                   )}
                 </div>
                 <div>
-                  <span style={{ fontSize: '0.74rem', color: '#64748b', display: 'block' }}>Doc. identidad adjunto</span>
+                  <span className="detalle-etiqueta">Doc. identidad adjunto</span>
                   {ordenParaVer.documento_adjunto_data ? (
-                    <span className="pill estado-verde">📄 Adjunto</span>
+                    <span className="pill estado-verde"> Adjunto</span>
                   ) : (
                     <span className="pill estado-gris">Sin adjunto</span>
                   )}
                 </div>
                 <div>
-                  <span style={{ fontSize: '0.74rem', color: '#64748b', display: 'block' }}>Estado documental</span>
+                  <span className="detalle-etiqueta">Estado documental</span>
                   {ordenParaVer.documentacion_completa ? (
                     <span className="pill estado-verde">COMPLETA</span>
                   ) : ordenParaVer.tipo_destino === 'MUNICIPIO_VEREDA' ? (
@@ -413,14 +412,14 @@ export default function Ordenes({ usuario, sedeActiva, params, onClearParams }) 
                 </div>
               </div>
               {ordenParaVer.estado === 'CANCELADA' && (
-                <div style={{ background: '#fee2e2', padding: '0.6rem 0.85rem', borderRadius: '8px', border: '1px solid #fecaca', marginTop: '0.85rem' }}>
-                  <span style={{ fontSize: '0.75rem', color: '#991b1b', fontWeight: 700, display: 'block' }}>Motivo de cancelación:</span>
-                  <span style={{ fontSize: '0.85rem', color: '#7f1d1d' }}>{ordenParaVer.motivo_cancelacion || '—'}</span>
+                <div className="alerta-peligro-suave">
+                  <span className="detalle-etiqueta">Motivo de cancelación:</span>
+                  <span className="detalle-valor detalle-valor--pequeno">{ordenParaVer.motivo_cancelacion || '—'}</span>
                 </div>
               )}
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', borderTop: '1px solid #e2e8f0', paddingTop: '1rem' }}>
+            <div className="modal-acciones">
               {['SUPERADMIN', 'ADMIN'].includes(usuario.rol_nombre) && ['PENDIENTE', 'PARCIAL', 'COMPLETADA'].includes(ordenParaVer.estado) && (
                 <button
                   type="button"
@@ -428,7 +427,7 @@ export default function Ordenes({ usuario, sedeActiva, params, onClearParams }) 
                   onClick={() => { setOrdenParaVer(null); abrirCompletarDoc(ordenParaVer); }}
                   title="Editar o corregir los datos, firma o huella de quien recibe"
                 >
-                  ✏️ Editar documentación
+                   Editar documentación
                 </button>
               )}
               {puedeDespachar && ESTADOS_DESPACHABLES.includes(ordenParaVer.estado) && (
@@ -440,7 +439,7 @@ export default function Ordenes({ usuario, sedeActiva, params, onClearParams }) 
                     abrirDespacho(ordenParaVer.id);
                   }}
                 >
-                  📦 Proceder al Despacho
+                   Proceder al Despacho
                 </button>
               )}
               <button
@@ -459,29 +458,28 @@ export default function Ordenes({ usuario, sedeActiva, params, onClearParams }) 
       {ordenParaCancelar && (
         <div className="modal-overlay" onClick={() => setOrdenParaCancelar(null)}>
           <div className="modal-card modal-sm" onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem', marginBottom: '1rem' }}>
-              <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#991b1b', fontWeight: 800 }}>
-                🚫 Cancelar Orden {ordenParaCancelar.numero}
+            <div className="modal-cabecera modal-cabecera--compacta modal-cabecera--peligro">
+              <h3>
+                 Cancelar Orden {ordenParaCancelar.numero}
               </h3>
               <button
                 type="button"
-                className="btn-clear-search"
+                className="btn-cerrar"
                 onClick={() => setOrdenParaCancelar(null)}
-                style={{ fontSize: '1.4rem', cursor: 'pointer', padding: '0.2rem 0.5rem', background: 'transparent', border: 'none', color: '#64748b' }}
               >
-                ✕
+                ×
               </button>
             </div>
 
             <form onSubmit={handleEjecutarCancelacion}>
-              <p style={{ fontSize: '0.85rem', color: '#334155', margin: '0 0 0.85rem 0' }}>
+              <p className="modal-descripcion">
                 Por favor ingrese el motivo por el cual se cancela esta orden. Este evento quedará registrado en la auditoría inmutable:
               </p>
 
-              <div style={{ marginBottom: '1rem' }}>
+              <div className="form-field">
                 <textarea
                   rows="3"
-                  style={{ width: '100%', padding: '0.65rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.88rem', outline: 'none', resize: 'vertical' }}
+                  className="form-textarea"
                   placeholder="Ej: Pedido duplicado / Cancelado a solicitud de la sede..."
                   value={motivoCancelacion}
                   onChange={(e) => setMotivoCancelacion(e.target.value)}
@@ -489,9 +487,9 @@ export default function Ordenes({ usuario, sedeActiva, params, onClearParams }) 
                 />
               </div>
 
-              {errorCancelacion && <div className="login-error" style={{ marginBottom: '1rem' }}>{errorCancelacion}</div>}
+              {errorCancelacion && <div className="login-error alerta-formulario">{errorCancelacion}</div>}
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', borderTop: '1px solid #e2e8f0', paddingTop: '1rem' }}>
+              <div className="modal-acciones">
                 <button
                   type="button"
                   className="btn-secundario"
@@ -532,23 +530,22 @@ export default function Ordenes({ usuario, sedeActiva, params, onClearParams }) 
       {ordenParaDoc && (
         <div className="modal-overlay" onClick={() => setOrdenParaDoc(null)}>
           <div className="modal-card modal-lg" onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem', marginBottom: '1.25rem' }}>
+            <div className="modal-cabecera">
               <div>
-                <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>
-                  ✏️ Editar documentación de {ordenParaDoc.numero}
+                <h3>
+                   Editar documentación de {ordenParaDoc.numero}
                 </h3>
-                <span style={{ fontSize: '0.82rem', color: '#64748b' }}>
+                <span className="modal-subtitulo">
                   Complete o corrija los datos que quedaron pendientes de quien recibe. Podrá hacerlo nuevamente hasta que la orden se cierre.
                 </span>
               </div>
               <button
                 type="button"
-                className="btn-clear-search"
+                className="btn-cerrar"
                 onClick={() => setOrdenParaDoc(null)}
-                style={{ fontSize: '1.4rem', cursor: 'pointer', padding: '0.2rem 0.5rem', background: 'transparent', border: 'none', color: '#64748b' }}
                 title="Cerrar"
               >
-                ✕
+                ×
               </button>
             </div>
 
@@ -571,9 +568,9 @@ export default function Ordenes({ usuario, sedeActiva, params, onClearParams }) 
               onChange={setDocActual}
             />
 
-            {errorDoc && <div className="login-error" style={{ marginTop: '1rem' }}>{errorDoc}</div>}
+            {errorDoc && <div className="login-error alerta-formulario alerta-formulario--separada">{errorDoc}</div>}
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', borderTop: '1px solid #e2e8f0', paddingTop: '1rem' }}>
+            <div className="modal-acciones">
               <button
                 type="button"
                 className="btn-secundario"
@@ -588,7 +585,7 @@ export default function Ordenes({ usuario, sedeActiva, params, onClearParams }) 
                 onClick={handleGuardarDoc}
                 disabled={guardandoDoc}
               >
-                {guardandoDoc ? 'Guardando...' : '💾 Guardar documentación'}
+                {guardandoDoc ? 'Guardando...' : ' Guardar documentación'}
               </button>
             </div>
           </div>
@@ -598,7 +595,7 @@ export default function Ordenes({ usuario, sedeActiva, params, onClearParams }) 
       {/* Filtros */}
       <div className="filtros-card">
         <div className="search-bar-wrap">
-          <span className="search-icon">🔍</span>
+          <span className="search-icon" aria-hidden="true" />
           <input
             type="text"
             className="search-input"
@@ -649,11 +646,11 @@ export default function Ordenes({ usuario, sedeActiva, params, onClearParams }) 
                 <td>
                   {o.tipo_destino === 'MUNICIPIO_VEREDA' ? (
                     <span className="pill estado-amarillo" title={o.destino_detalle || 'Salida foránea'}>
-                      🚚 {o.destino_detalle || 'Municipio / Vereda'}
+                       {o.destino_detalle || 'Municipio / Vereda'}
                     </span>
                   ) : (
                     <span className="pill estado-gris" title="Despacho local en sede">
-                      🏢 Local
+                       Local
                     </span>
                   )}
                 </td>
@@ -661,15 +658,14 @@ export default function Ordenes({ usuario, sedeActiva, params, onClearParams }) 
                 <td><strong>{o.receptor_nombre || '—'}</strong></td>
                 <td>{o.fecha_creacion}</td>
                 <td><span className={`pill ${ESTADO_CLASE[o.estado] || ''}`}>{o.estado}</span></td>
-                <td className="acciones" style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                <td className="acciones">
                   {/* Botón VER siempre disponible para todas las órdenes */}
                   <button
-                    className="btn-secundario"
-                    style={{ padding: '0.3rem 0.6rem', fontSize: '0.78rem' }}
+                    className="btn-secundario btn-tabla"
                     onClick={() => abrirVerOrden(o.id)}
                     title="Ver detalle completo de lo que se pide en esta orden"
                   >
-                    👁️ Ver
+                     Ver
                   </button>
 
                   {puedeGestionar && ['PENDIENTE', 'PARCIAL'].includes(o.estado) && (
@@ -687,7 +683,7 @@ export default function Ordenes({ usuario, sedeActiva, params, onClearParams }) 
                       className="btn-accion-azul"
                       onClick={() => abrirDespacho(o.id)}
                     >
-                      📦 Despachar
+                       Despachar
                     </button>
                   )}
                 </td>

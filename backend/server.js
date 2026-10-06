@@ -40,6 +40,14 @@ function crearApp() {
   const app = express();
 
   app.disable('x-powered-by');
+  // Cabeceras mínimas (sin dependencia helmet): evitan MIME-sniffing,
+  // clickjacking del login y fuga de referrer por LAN sin TLS.
+  app.use((req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    next();
+  });
   app.use(
     cors({
       origin: origenPermitido,
@@ -74,9 +82,13 @@ function crearApp() {
 // El servidor vive dentro del proceso principal de Electron para compartir la
 // misma conexion de better-sqlite3 y el mismo Map de sesiones que usan los
 // handlers IPC. Puerto configurable con API_PORT / API_HOST.
+//
+// Por defecto escucha SOLO en loopback (127.0.0.1): exponer 0.0.0.0 publica el
+// login (con tokens Bearer en claro, sin TLS) a toda la LAN. Para móvil físico
+// en red local, exporte explícitamente API_HOST=0.0.0.0 aceptando el riesgo.
 function iniciarServidorHttp(opciones = {}) {
   const puerto = Number(opciones.puerto ?? process.env.API_PORT ?? PUERTO_POR_DEFECTO);
-  const host = opciones.host ?? process.env.API_HOST ?? '0.0.0.0';
+  const host = opciones.host ?? process.env.API_HOST ?? '127.0.0.1';
   const app = opciones.app ?? crearApp();
 
   return new Promise((resolve, reject) => {

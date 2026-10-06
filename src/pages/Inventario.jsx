@@ -179,7 +179,7 @@ export default function Inventario({ usuario, sedeActiva, params, onClearParams,
                 className="btn-toggle-action btn-primario"
                 onClick={() => onNavigate('recepcion')}
               >
-                📦 Escanear / Recibir
+                 Escanear / Recibir
               </button>
             )}
             <button
@@ -189,7 +189,7 @@ export default function Inventario({ usuario, sedeActiva, params, onClearParams,
                 if (!mostrarFormMed) setMostrarFormLote(false);
               }}
             >
-              {mostrarFormMed ? '✕ Cerrar formulario' : '+ Nuevo Medicamento'}
+              {mostrarFormMed ? '× Cerrar formulario' : '+ Nuevo Medicamento'}
             </button>
             <button
               className={`btn-toggle-action ${mostrarFormLote ? 'btn-cancelar' : 'btn-verde'}`}
@@ -198,16 +198,16 @@ export default function Inventario({ usuario, sedeActiva, params, onClearParams,
                 if (!mostrarFormLote) setMostrarFormMed(false);
               }}
             >
-              {mostrarFormLote ? '✕ Cerrar formulario' : '+ Registrar Lote'}
+              {mostrarFormLote ? '× Cerrar formulario' : '+ Registrar Lote'}
             </button>
           </div>
         )}
       </div>
 
       {exitoMensaje && (
-        <div className="aviso-ok" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>✅ {exitoMensaje}</span>
-          <button className="btn-clear-search" onClick={() => setExitoMensaje(null)}>✕</button>
+        <div className="aviso-ok aviso-ok--cerrable">
+          <span> {exitoMensaje}</span>
+          <button className="btn-cerrar-alerta" onClick={() => setExitoMensaje(null)}>×</button>
         </div>
       )}
 
@@ -238,31 +238,32 @@ export default function Inventario({ usuario, sedeActiva, params, onClearParams,
               title="Cerrar panel"
               aria-label="Cerrar panel"
             >
-              ✕
+              ×
             </button>
-            <h3 style={{ margin: '0 0 0.75rem 0', fontSize: '1.15rem', color: '#991b1b', fontWeight: 800 }}>
-              🗑️ Solicitar Baja de Lote
+            <h3 className="modal-titulo modal-titulo--peligro">
+              Solicitar Baja de Lote
             </h3>
 
             <form onSubmit={handleConfirmarBaja}>
-              <div style={{ background: '#f8fafc', padding: '0.75rem', borderRadius: '8px', marginBottom: '1rem', border: '1px solid #e2e8f0', fontSize: '0.84rem' }}>
+              <div className="detalle-tarjeta detalle-tarjeta--compacta">
                 <div>Medicamento: <strong>{loteParaBaja.medicamento_codigo} - {loteParaBaja.medicamento_nombre}</strong></div>
                 <div>Lote: <span className="mono-tag">{loteParaBaja.numero_lote}</span> | Sede: <strong>{loteParaBaja.sede_nombre}</strong></div>
                 <div>Existencias: <strong>{loteParaBaja.cantidad_total_unidades} unidades</strong> ({loteParaBaja.cantidad_cajas} cajas)</div>
                 <div>Fecha vencimiento: <strong>{loteParaBaja.fecha_vencimiento}</strong></div>
               </div>
 
-              <p style={{ fontSize: '0.82rem', color: '#64748b', margin: '0 0 0.5rem 0' }}>
+              <p className="modal-subtitulo">
                 De acuerdo a la normativa, ningún lote se borra directamente. Esta solicitud pasará al Superadmin para su aprobación y quedará en la bitácora inmutable.
               </p>
 
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
+              <div className="form-field">
+                <label className="form-label" htmlFor="motivo-baja">
                   Motivo de la baja / eliminación (obligatorio):
                 </label>
                 <textarea
+                  id="motivo-baja"
                   rows="3"
-                  style={{ width: '100%', padding: '0.65rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.88rem', outline: 'none', resize: 'vertical' }}
+                  className="form-textarea"
                   placeholder="Ej: Lote vencido / Frascos deteriorados en transporte / Retiro por alerta sanitaria..."
                   value={motivoBaja}
                   onChange={(e) => setMotivoBaja(e.target.value)}
@@ -270,16 +271,16 @@ export default function Inventario({ usuario, sedeActiva, params, onClearParams,
                 />
               </div>
 
-              {errorSolicitud && <div className="login-error" style={{ marginBottom: '1rem' }}>{errorSolicitud}</div>}
+              {errorSolicitud && <div className="login-error alerta-formulario">{errorSolicitud}</div>}
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', borderTop: '1px solid #e2e8f0', paddingTop: '1rem' }}>
+              <div className="modal-acciones">
                 <button
                   type="button"
                   className="btn-secundario"
                   onClick={() => setLoteParaBaja(null)}
                   disabled={enviandoBaja}
                 >
-                  ✕ Cancelar
+                  × Cancelar
                 </button>
                 <button
                   type="submit"
@@ -297,7 +298,7 @@ export default function Inventario({ usuario, sedeActiva, params, onClearParams,
       {/* Barra de búsqueda y filtros rápidos */}
       <div className="filtros-card">
         <div className="search-bar-wrap">
-          <span className="search-icon">🔍</span>
+          <span className="search-icon" aria-hidden="true" />
           <input
             type="text"
             className="search-input"
@@ -371,7 +372,7 @@ export default function Inventario({ usuario, sedeActiva, params, onClearParams,
                 {puedeEscribir && (
                   <td className="acciones">
                     {l.estado === 'DADO_DE_BAJA' ? (
-                      <span style={{ fontSize: '0.76rem', color: '#94a3b8' }}>Baja aprobada</span>
+                      <span className="texto-estado-pendiente">Baja aprobada</span>
                     ) : (
                       <button
                         className="btn-peligro"

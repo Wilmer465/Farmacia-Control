@@ -313,7 +313,7 @@ setGuardandoIntercambio(true);
       sede_origen_nombre: s.sede_nombre,
       sede_destino_nombre: '—',
       cantidad_texto: `${s.lote_cantidad ?? '—'} unidades`,
-      icono: '🗑️'
+      icono: ''
     }));
 
     const intercambiosEstandarizados = solicitudesIntercambio.map((i) => ({
@@ -324,7 +324,7 @@ setGuardandoIntercambio(true);
       recibe_texto: i.tipo === 'INTERCAMBIO' && i.medicamento_recibe_nombre
         ? `${i.medicamento_recibe_codigo} - ${i.medicamento_recibe_nombre} | ${i.cantidad_recibe_total_unidades || i.cantidad_total_unidades} unidades desde ${i.sede_recibe_nombre}`
         : null,
-      icono: i.tipo === 'INTERCAMBIO' ? '🔄' : '🚚'
+      icono: ''
     }));
 
     let combinadas = [];
@@ -367,14 +367,14 @@ setGuardandoIntercambio(true);
               : `Sede asignada: ${usuario.sede_nombre}`}
           </p>
         </div>
-        <div className="header-actions" style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+        <div className="header-actions header-actions--envolvente">
           {puedeSolicitarIntercambio && (
             <button className="btn-primario" onClick={handleAbrirNuevoIntercambio}>
-              🚚 + Solicitar Envío / Intercambio
+               + Solicitar Envío / Intercambio
             </button>
           )}
           <button className="btn-refrescar" onClick={cargar} title="Recargar">
-            🔄 Actualizar
+             Actualizar
           </button>
         </div>
       </div>
@@ -385,42 +385,42 @@ setGuardandoIntercambio(true);
       {/* FILTROS Y CATEGORÍAS */}
       <div className="filtros-card">
         {/* Pestañas de categoría */}
-        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.6rem', flexWrap: 'wrap' }}>
+        <div className="grupo-pestanas">
           <button
             type="button"
             className={`filter-chip ${filtroCategoria === 'TODAS' ? 'chip-activo' : ''}`}
             onClick={() => setFiltroCategoria('TODAS')}
           >
-            📋 Todas las Solicitudes ({solicitudesBaja.length + solicitudesIntercambio.length})
+             Todas las Solicitudes ({solicitudesBaja.length + solicitudesIntercambio.length})
           </button>
           <button
             type="button"
             className={`filter-chip ${filtroCategoria === 'INTERCAMBIOS' ? 'chip-activo' : ''}`}
             onClick={() => setFiltroCategoria('INTERCAMBIOS')}
           >
-            🚚 Envíos e Intercambios ({solicitudesIntercambio.length})
+             Envíos e Intercambios ({solicitudesIntercambio.length})
           </button>
           <button
             type="button"
             className={`filter-chip ${filtroCategoria === 'BAJAS' ? 'chip-activo' : ''}`}
             onClick={() => setFiltroCategoria('BAJAS')}
           >
-            🗑️ Bajas de Lotes ({solicitudesBaja.length})
+             Bajas de Lotes ({solicitudesBaja.length})
           </button>
           <button
             type="button"
             className={`filter-chip ${filtroCategoria === 'CANCELADAS' ? 'chip-activo' : ''}`}
             onClick={() => setFiltroCategoria('CANCELADAS')}
           >
-            🚫 Órdenes Canceladas ({ordenesCanceladas.length})
+             Órdenes Canceladas ({ordenesCanceladas.length})
           </button>
         </div>
 
         {/* Buscador y filtro por Estado */}
         {filtroCategoria !== 'CANCELADAS' && (
-          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            <div className="search-bar-wrap" style={{ flex: 1, minWidth: '240px' }}>
-              <span className="search-icon">🔍</span>
+          <div className="fila-filtros">
+            <div className="search-bar-wrap buscador-flexible">
+              <span className="search-icon" aria-hidden="true" />
               <input
                 type="text"
                 className="search-input"
@@ -482,17 +482,17 @@ setGuardandoIntercambio(true);
                   <tr key={`${s.tipo_solicitud}_${s.id}`}>
                     <td><strong>#{s.id}</strong></td>
                     <td>
-                      <span className="mono-tag" style={{ background: esBaja ? '#fee2e2' : '#dbeafe', color: esBaja ? '#991b1b' : '#1e40af' }}>
-                        {s.icono} {s.etiqueta_tipo}
+                      <span className={`mono-tag ${esBaja ? 'mono-tag--tipo-baja' : 'mono-tag--tipo-envio'}`}>
+                        {s.etiqueta_tipo}
                       </span>
                     </td>
                     <td><strong>{s.sede_origen_nombre}</strong></td>
                     <td>{s.sede_destino_nombre || '—'}</td>
                     <td>
                       <div><strong>{s.medicamento_codigo}</strong> - {s.medicamento_nombre}</div>
-                      <span className="mono-tag" style={{ fontSize: '0.72rem' }}>Lote: {s.numero_lote}</span>
+                      <span className="mono-tag mono-tag--pequena">Lote: {s.numero_lote}</span>
                       {s.recibe_texto && (
-                        <div style={{ fontSize: '0.74rem', color: '#047857', fontWeight: 600, marginTop: '0.25rem' }}>
+                        <div className="texto-exito">
                           Recibe: {s.recibe_texto}
                         </div>
                       )}
@@ -500,9 +500,9 @@ setGuardandoIntercambio(true);
                     <td><strong>{s.cantidad_texto}</strong></td>
                     <td>
                       <div>{s.solicitante_nombre}</div>
-                      <div style={{ fontSize: '0.72rem', color: '#64748b' }}>{s.motivo}</div>
+                      <div className="texto-suave-pequeno">{s.motivo}</div>
                     </td>
-                    <td style={{ fontSize: '0.78rem' }}>{s.fecha_solicitud}</td>
+                    <td className="celda-fecha">{s.fecha_solicitud}</td>
                     <td>
                       <span className={`pill ${ESTADO_CLASE[s.estado] || ''}`}>
                         {s.estado}
@@ -513,16 +513,16 @@ setGuardandoIntercambio(true);
                         <div>
                           <strong>{s.resolutor_nombre}</strong>
                           {s.observacion_resolucion && (
-                            <div style={{ fontSize: '0.74rem', color: s.estado === 'RECHAZADA' ? '#dc2626' : '#64748b', fontWeight: s.estado === 'RECHAZADA' ? 600 : 400 }}>
+                            <div className={s.estado === 'RECHAZADA' ? 'texto-resolucion-rechazada' : 'texto-suave-pequeno'}>
                               "{s.observacion_resolucion}"
                             </div>
                           )}
                         </div>
                       ) : (
-                        <span className="text-muted" style={{ fontSize: '0.78rem' }}>Pendiente de revisión</span>
+                        <span className="text-muted texto-secundario-pequeno">Pendiente de revisión</span>
                       )}
                     </td>
-                    <td className="acciones" style={{ whiteSpace: 'nowrap' }}>
+                    <td className="acciones">
                       {s.estado === 'PENDIENTE' && puedeResolver ? (
                         <>
                           <button
@@ -531,7 +531,7 @@ setGuardandoIntercambio(true);
                             onClick={() => esBaja ? handleAprobarBaja(s.id) : handleAprobarIntercambio(s.id)}
                             title="Aprobar solicitud"
                           >
-                            {accionEnCurso === `${esBaja ? 'baja' : 'inter'}_${s.id}` ? '...' : '✓ Aprobar'}
+                            {accionEnCurso === `${esBaja ? 'baja' : 'inter'}_${s.id}` ? '...' : ' Aprobar'}
                           </button>
                           <button
                             className="btn-peligro"
@@ -539,11 +539,11 @@ setGuardandoIntercambio(true);
                             onClick={() => abrirModalRechazar(esBaja ? 'BAJA' : 'INTERCAMBIO', s)}
                             title="Rechazar con motivo"
                           >
-                            ✕ Rechazar
+                            × Rechazar
                           </button>
                         </>
                       ) : (
-                        <span style={{ fontSize: '0.76rem', color: '#94a3b8' }}>
+                        <span className="texto-estado-pendiente">
                           {s.estado === 'PENDIENTE' ? 'En espera' : 'Resuelta'}
                         </span>
                       )}
@@ -587,18 +587,18 @@ setGuardandoIntercambio(true);
                   <td>
                     {o.tipo_destino === 'MUNICIPIO_VEREDA' ? (
                       <span className="pill estado-amarillo" title={o.destino_detalle || 'Salida foránea'}>
-                        🚚 {o.destino_detalle || 'Municipio / Vereda'}
+                         {o.destino_detalle || 'Municipio / Vereda'}
                       </span>
                     ) : (
                       <span className="pill estado-gris" title="Despacho local en sede">
-                        🏢 Local
+                         Local
                       </span>
                     )}
                   </td>
                   <td>{o.creador_nombre}</td>
                   <td><strong>{o.receptor_nombre || '—'}</strong></td>
                   <td>{o.fecha_creacion}</td>
-                  <td style={{ color: '#dc2626', fontWeight: 600 }}>{o.motivo_cancelacion || '—'}</td>
+                  <td className="celda-motivo-cancelacion">{o.motivo_cancelacion || '—'}</td>
                   <td><span className="pill estado-gris">CANCELADA</span></td>
                 </tr>
               ))}
@@ -624,27 +624,28 @@ setGuardandoIntercambio(true);
               onClick={() => setModalRechazo(null)}
               title="Cerrar panel"
             >
-              ✕
+              ×
             </button>
 
-            <h3 style={{ margin: '0 0 0.75rem 0', fontSize: '1.15rem', color: '#991b1b', fontWeight: 800 }}>
-              🚫 Rechazar Solicitud #{modalRechazo.item.id} ({modalRechazo.tipo === 'BAJA' ? 'Baja' : 'Intercambio'})
+            <h3 className="modal-titulo modal-titulo--peligro">
+               Rechazar Solicitud #{modalRechazo.item.id} ({modalRechazo.tipo === 'BAJA' ? 'Baja' : 'Intercambio'})
             </h3>
 
             <form onSubmit={handleConfirmarRechazo}>
-              <div style={{ background: '#f8fafc', padding: '0.75rem', borderRadius: '8px', marginBottom: '1rem', border: '1px solid #e2e8f0', fontSize: '0.84rem' }}>
+              <div className="detalle-tarjeta detalle-tarjeta--compacta">
                 <div>Medicamento: <strong>{modalRechazo.item.medicamento_nombre}</strong> (Lote: {modalRechazo.item.numero_lote})</div>
                 <div>Motivo original solicitado: <em>"{modalRechazo.item.motivo}"</em></div>
                 <div>Solicitado por: <strong>{modalRechazo.item.solicitante_nombre}</strong></div>
               </div>
 
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
+              <div className="form-field">
+                <label className="form-label" htmlFor="motivo-rechazo">
                   Motivo o justificación del rechazo (obligatorio):
                 </label>
                 <textarea
+                  id="motivo-rechazo"
                   rows="3"
-                  style={{ width: '100%', padding: '0.65rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.88rem', outline: 'none', resize: 'vertical' }}
+                  className="form-textarea"
                   placeholder="Explique claramente por qué se rechaza esta solicitud..."
                   value={motivoRechazo}
                   onChange={(e) => setMotivoRechazo(e.target.value)}
@@ -652,16 +653,16 @@ setGuardandoIntercambio(true);
                 />
               </div>
 
-              {errorRechazo && <div className="login-error" style={{ marginBottom: '1rem' }}>{errorRechazo}</div>}
+              {errorRechazo && <div className="login-error alerta-formulario">{errorRechazo}</div>}
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', borderTop: '1px solid #e2e8f0', paddingTop: '1rem' }}>
+              <div className="modal-acciones">
                 <button
                   type="button"
                   className="btn-secundario"
                   onClick={() => setModalRechazo(null)}
                   disabled={accionEnCurso === 'rechazando'}
                 >
-                  ✕ Cancelar
+                  × Cancelar
                 </button>
                 <button
                   type="submit"
@@ -686,13 +687,13 @@ setGuardandoIntercambio(true);
               onClick={() => setModalNuevoIntercambio(false)}
               title="Cerrar modal"
             >
-              ✕
+              ×
             </button>
 
-            <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.2rem', fontWeight: 800, color: '#1e293b' }}>
-              🚚 Solicitud de Envío / Intercambio de Medicamentos
+            <h3 className="modal-titulo">
+               Solicitud de Envío / Intercambio de Medicamentos
             </h3>
-            <p style={{ fontSize: '0.82rem', color: '#64748b', margin: '0 0 1.25rem 0' }}>
+            <p className="modal-subtitulo modal-subtitulo--separado">
               Autorizado exclusivamente para Superadmin y Administradores de Sede. El stock será descontado y traspasado tras la aprobación.
             </p>
 
@@ -710,8 +711,8 @@ setGuardandoIntercambio(true);
                       cantidad_recibe_total_unidades: ''
                     }))}
                   >
-                    <option value="ENVIO">🚚 Envío de medicamentos (Traspaso regular)</option>
-                    <option value="INTERCAMBIO">🔄 Intercambio de medicamentos</option>
+                    <option value="ENVIO"> Envío de medicamentos (Traspaso regular)</option>
+                    <option value="INTERCAMBIO"> Intercambio de medicamentos</option>
                   </select>
                 </div>
 
@@ -731,15 +732,14 @@ setGuardandoIntercambio(true);
                   ) : (
                     <input
                       type="text"
-                      value={`📍 ${usuario.sede_nombre}`}
+                      value={` ${usuario.sede_nombre}`}
                       disabled
-                      style={{ background: '#f1f5f9', cursor: 'not-allowed' }}
                     />
                   )}
                 </div>
               </div>
 
-              <div className="form-grid" style={{ marginTop: '0.75rem' }}>
+              <div className="form-grid form-grid--separada">
                 <div>
                   <label>Sede de Destino (Receptora):</label>
                   <select
@@ -771,7 +771,7 @@ setGuardandoIntercambio(true);
                     ))}
                   </select>
                   {lotesParaForm.length === 0 && formIntercambio.sede_origen_id && (
-                    <span style={{ fontSize: '0.73rem', color: '#dc2626', display: 'block', marginTop: '0.2rem' }}>
+                    <span className="form-error">
                       No hay lotes con stock disponibles en la sede de origen.
                     </span>
                   )}
@@ -779,7 +779,7 @@ setGuardandoIntercambio(true);
               </div>
 
               {loteSeleccionadoObj && (
-                <div style={{ background: '#f8fafc', padding: '0.75rem', borderRadius: '8px', border: '1px solid #e2e8f0', marginTop: '0.75rem', fontSize: '0.82rem' }}>
+                <div className="detalle-tarjeta detalle-tarjeta--compacta detalle-tarjeta--separada">
                   <div>Medicamento: <strong>{loteSeleccionadoObj.medicamento_codigo} - {loteSeleccionadoObj.medicamento_nombre}</strong></div>
                   <div>Stock actual en sede: <strong>{loteSeleccionadoObj.cantidad_total_unidades} unidades</strong> ({loteSeleccionadoObj.cantidad_cajas} cajas)</div>
                   <div>Vence: <strong>{loteSeleccionadoObj.fecha_vencimiento}</strong></div>
@@ -788,8 +788,8 @@ setGuardandoIntercambio(true);
 
               {formIntercambio.tipo === 'INTERCAMBIO' && (
                 <>
-                  <div style={{ borderTop: '1px solid #e2e8f0', marginTop: '1rem', paddingTop: '1rem' }}>
-                    <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.95rem', color: '#0f172a' }}>
+                  <div className="detalle-separador">
+                    <h4 className="detalle-subtitulo">
                       Medicamento que se va a recibir
                     </h4>
                   </div>
@@ -826,7 +826,7 @@ setGuardandoIntercambio(true);
                         ))}
                       </select>
                       {lotesRecibeParaForm.length === 0 && formIntercambio.sede_recibe_id && (
-                        <span style={{ fontSize: '0.73rem', color: '#dc2626', display: 'block', marginTop: '0.2rem' }}>
+                        <span className="form-error">
                           No hay lotes con stock disponibles en esa sede.
                         </span>
                       )}
@@ -834,14 +834,14 @@ setGuardandoIntercambio(true);
                   </div>
 
                   {loteRecibeSeleccionadoObj && (
-                    <div style={{ background: '#f0fdf4', padding: '0.75rem', borderRadius: '8px', border: '1px solid #bbf7d0', marginTop: '0.75rem', fontSize: '0.82rem' }}>
+                    <div className="detalle-tarjeta detalle-tarjeta--compacta detalle-tarjeta--separada detalle-tarjeta--exito">
                       <div>Recibe: <strong>{loteRecibeSeleccionadoObj.medicamento_codigo} - {loteRecibeSeleccionadoObj.medicamento_nombre}</strong></div>
                       <div>Stock en sede: <strong>{loteRecibeSeleccionadoObj.cantidad_total_unidades} unidades</strong> ({loteRecibeSeleccionadoObj.cantidad_cajas} cajas)</div>
                       <div>Vence: <strong>{loteRecibeSeleccionadoObj.fecha_vencimiento}</strong></div>
                     </div>
                   )}
 
-                  <div className="form-grid" style={{ marginTop: '0.75rem' }}>
+                  <div className="form-grid form-grid--separada">
                     <div>
                       <label>Cantidad de unidades a recibir:</label>
                       <input
@@ -857,7 +857,7 @@ setGuardandoIntercambio(true);
                 </>
               )}
 
-              <div className="form-grid" style={{ marginTop: '0.75rem' }}>
+              <div className="form-grid form-grid--separada">
                 <div>
                   <label>Cantidad de unidades a transferir:</label>
                   <input
@@ -870,7 +870,7 @@ setGuardandoIntercambio(true);
                     required
                   />
                   {loteSeleccionadoObj?.unidades_por_caja && formIntercambio.cantidad_total_unidades && (
-                    <span style={{ fontSize: '0.73rem', color: '#64748b', display: 'block', marginTop: '0.2rem' }}>
+                    <span className="form-error form-error--suave">
                       Equivalente aproximado: {Math.floor(Number(formIntercambio.cantidad_total_unidades) / loteSeleccionadoObj.unidades_por_caja)} cajas y {Number(formIntercambio.cantidad_total_unidades) % loteSeleccionadoObj.unidades_por_caja} unidades sueltas.
                     </span>
                   )}
@@ -880,32 +880,32 @@ setGuardandoIntercambio(true);
                   <label>Motivo o justificación de la solicitud:</label>
                   <textarea
                     rows="2"
+                    className="form-textarea"
                     placeholder="Ej: Desabastecimiento crítico en sede receptora / Rebalanceo de inventario..."
                     value={formIntercambio.motivo}
                     onChange={(e) => setFormIntercambio((prev) => ({ ...prev, motivo: e.target.value }))}
                     required
-                    style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
                   />
                 </div>
               </div>
 
-              {errorIntercambio && <div className="login-error" style={{ marginTop: '1rem' }}>{errorIntercambio}</div>}
+              {errorIntercambio && <div className="login-error alerta-formulario alerta-formulario--separada">{errorIntercambio}</div>}
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', borderTop: '1px solid #e2e8f0', paddingTop: '1rem', marginTop: '1.25rem' }}>
+              <div className="modal-acciones modal-acciones--separada">
                 <button
                   type="button"
                   className="btn-secundario"
                   onClick={() => setModalNuevoIntercambio(false)}
                   disabled={guardandoIntercambio}
                 >
-                  ✕ Cancelar
+                  × Cancelar
                 </button>
                 <button
                   type="submit"
                   className="btn-primario"
                   disabled={guardandoIntercambio}
                 >
-                  {guardandoIntercambio ? 'Enviando solicitud...' : '🚀 Enviar Solicitud'}
+                  {guardandoIntercambio ? 'Enviando solicitud...' : ' Enviar Solicitud'}
                 </button>
               </div>
             </form>

@@ -71,15 +71,36 @@ function findByClaveUnica(medicamentoId, sedeId, numeroLote) {
 
 function create(data) {
   const db = getDb();
+  // Las columnas de empaque (021) pueden no existir en BDs viejas sin migrar;
+  // se detectan por PRAGMA para no romper el INSERT.
+  const cols = new Set(db.prepare('PRAGMA table_info(lotes)').all().map((c) => c.name));
+  const extras = [];
+  if (cols.has('empaque_nivel')) extras.push('empaque_nivel');
+  if (cols.has('empaque_gtin')) extras.push('empaque_gtin');
+  if (cols.has('factor_conversion')) extras.push('factor_conversion');
+  const columnas = [
+    'medicamento_id', 'sede_id', 'numero_lote', 'fecha_expedicion', 'fecha_vencimiento',
+    'cantidad_cajas', 'cantidad_unidades_sueltas', 'cantidad_total_unidades',
+    ...extras
+  ];
+  const params = {
+    medicamento_id: data.medicamento_id,
+    sede_id: data.sede_id,
+    numero_lote: data.numero_lote,
+    fecha_expedicion: data.fecha_expedicion,
+    fecha_vencimiento: data.fecha_vencimiento,
+    cantidad_cajas: data.cantidad_cajas,
+    cantidad_unidades_sueltas: data.cantidad_unidades_sueltas,
+    cantidad_total_unidades: data.cantidad_total_unidades,
+    empaque_nivel: data.empaque_nivel ?? null,
+    empaque_gtin: data.empaque_gtin ?? null,
+    factor_conversion: data.factor_conversion ?? 1
+  };
   const stmt = db.prepare(`
-    INSERT INTO lotes
-      (medicamento_id, sede_id, numero_lote, fecha_expedicion, fecha_vencimiento,
-       cantidad_cajas, cantidad_unidades_sueltas, cantidad_total_unidades)
-    VALUES
-      (@medicamento_id, @sede_id, @numero_lote, @fecha_expedicion, @fecha_vencimiento,
-       @cantidad_cajas, @cantidad_unidades_sueltas, @cantidad_total_unidades)
+    INSERT INTO lotes (${columnas.join(', ')})
+    VALUES (${columnas.map((c) => `@${c}`).join(', ')})
   `);
-  const info = stmt.run(data);
+  const info = stmt.run(params);
   return findById(info.lastInsertRowid);
 }
 

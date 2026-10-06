@@ -95,10 +95,13 @@ async function listar(usuarioSesion, filtros = {}) {
     };
   }));
 
-  // Filtrado por sede: si se seleccionó una sede, mostrar respaldos de esa sede o globales
+  // Filtrado por sede: un respaldo contiene la BD COMPLETA (todas las sedes,
+  // hashes y auditoría), así que un ADMIN de sede solo ve los de su sede.
+  // Los `_global` (sedeId null, incluidos todos los automáticos) son exclusivos
+  // de SUPERADMIN (visión global). Mostrarlos a ADMIN era escalación cross-sede.
   const filtrados = listado.filter((b) => {
     if (sedeEfectiva !== null && sedeEfectiva !== undefined) {
-      return b.sedeId === Number(sedeEfectiva) || b.sedeId === null;
+      return b.sedeId === Number(sedeEfectiva);
     }
     return true;
   });
@@ -130,7 +133,15 @@ function comprobarEspacioDisponible(dir) {
 
   let tamanoBase = 0;
   try {
-    tamanoBase = fs.statSync(resolveDbPath()).size;
+    const rutaBase = resolveDbPath();
+    tamanoBase = fs.statSync(rutaBase).size;
+    // Incluir WAL/SHM vivos: db.backup() los recorre página a página y el
+    // chequeo solo con el .db subestimaba el espacio necesario.
+    for (const sufijo of ['-wal', '-shm']) {
+      try {
+        tamanoBase += fs.statSync(rutaBase + sufijo).size;
+      } catch (_) { /* companion inexistente: no suma */ }
+    }
   } catch (err) {
     return null;
   }
@@ -335,8 +346,26 @@ async function crear(usuarioSesion, opciones = {}) {
   };
 }
 
-function restaurar(usuarioSesion, nombreArchivo) {
+function sedeDeArchivoRespaldo(nombreArchivo) {
+  const match = String(nombreArchivo || '').match(/_sede_(\d+)/);
+  return match ? Number(match[1]) : null;
+}
+
+function verificarPermisoRestaurar(usuarioSesion, nombreArchivo) {
   verificarAccesoRespaldos(usuarioSesion);
+  // El archivo contiene la BD entera: un ADMIN solo puede restaurar respaldos
+  // de su propia sede; los `_global` (automáticos incluidos) son de SUPERADMIN.
+  const sedeEfectiva = permisoService.resolverSedeEfectiva(usuarioSesion, null);
+  if (sedeEfectiva !== null && sedeEfectiva !== undefined) {
+    const sedeArchivo = sedeDeArchivoRespaldo(nombreArchivo);
+    if (sedeArchivo === null || Number(sedeArchivo) !== Number(sedeEfectiva)) {
+      throw new permisoService.PermisoError('Solo puede restaurar respaldos de su propia sede.');
+    }
+  }
+}
+
+function restaurar(usuarioSesion, nombreArchivo) {
+  verificarPermisoRestaurar(usuarioSesion, nombreArchivo);
 
   if (!nombreArchivo || typeof nombreArchivo !== 'string') {
     throw new ValidationError('Nombre de respaldo inválido.');
@@ -367,8 +396,24 @@ function restaurar(usuarioSesion, nombreArchivo) {
 
   const dbPath = resolveDbPath();
 
+  // Vaciar el WAL vivo antes de cerrar: sin checkpoint, las transacciones
+  // confirmadas que aún están solo en el -wal se pierden al borrarlo abajo.
+  try {
+    getDb().pragma('wal_checkpoint(TRUNCATE)');
+  } catch (err) {
+    console.warn('[backupService] No se pudo hacer checkpoint antes de restaurar:', err.message);
+  }
   closeDb();
   fs.copyFileSync(rutaRespaldo, dbPath);
+  // Resetear el cursor de sync: la BD restaurada es un punto antiguo y el
+  // cursor futuro filtraría (`WHERE fecha >= lastSync`) tanto la re-subida de
+  // lo restaurado como la bajada intermedia. Sin reset, hueco post-restore.
+  try {
+    const syncState = path.join(path.dirname(dbPath), 'cloud_sync_state.json');
+    if (fs.existsSync(syncState)) fs.unlinkSync(syncState);
+  } catch (err) {
+    console.warn('[backupService] No se pudo resetear cloud_sync_state.json:', err.message);
+  }
   for (const sufijo of ['-wal', '-shm']) {
     const rutaObsoleta = dbPath + sufijo;
     if (fs.existsSync(rutaObsoleta)) fs.unlinkSync(rutaObsoleta);

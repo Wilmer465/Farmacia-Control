@@ -16,6 +16,9 @@ class AuthError extends Error {
 
 const MAX_INTENTOS = 5;
 const TIEMPO_BLOQUEO_MS = 10 * 60 * 1000; // 10 minutos
+// Hash dummy con costo 12 para igualar el tiempo de bcrypt en usuarios
+// inexistentes (mitiga oráculo de enumeración por timing).
+const DUMMY_HASH = bcrypt.hashSync('credencial-dummy-para-timing-constante', 12);
 
 function getDbConnection() {
   return getDb();
@@ -23,11 +26,24 @@ function getDbConnection() {
 
 function verificarBloqueo(username) {
   const db = getDbConnection();
-  const clave = username.toLowerCase().trim();
+  const clave = String(username || '').toLowerCase().trim();
+  if (!clave) return;
   const row = db.prepare('SELECT * FROM rate_limit_login WHERE username = ?').get(clave);
   if (!row) return;
 
   const ahora = Date.now();
+  // Bloqueo explícito con progresión: si sigue vigente, se mantiene.
+  if (row.bloqueado_hasta) {
+    const hasta = new Date(row.bloqueado_hasta).getTime();
+    if (Number.isFinite(hasta) && ahora < hasta) {
+      const minutosRestantes = Math.max(1, Math.ceil((hasta - ahora) / 60000));
+      throw new AuthError(`Demasiados intentos fallidos. Por seguridad, la cuenta está temporalmente bloqueada por ${minutosRestantes} minuto(s).`, 'CUENTA_BLOQUEADA');
+    }
+    // Bloqueo expirado: reiniciar ventana completa.
+    db.prepare('DELETE FROM rate_limit_login WHERE username = ?').run(clave);
+    return;
+  }
+
   const primerIntento = new Date(row.primer_intento).getTime();
   if (ahora - primerIntento > TIEMPO_BLOQUEO_MS) {
     db.prepare('DELETE FROM rate_limit_login WHERE username = ?').run(clave);
@@ -35,15 +51,23 @@ function verificarBloqueo(username) {
   }
 
   if (row.intento_count >= MAX_INTENTOS) {
-    const bloqueadoHasta = row.bloqueado_hasta ? new Date(row.bloqueado_hasta).getTime() : (primerIntento + TIEMPO_BLOQUEO_MS);
-    const minutosRestantes = Math.ceil((bloqueadoHasta - ahora) / 60000);
-    throw new AuthError(`Demasiados intentos fallidos. Por seguridad, la cuenta está temporalmente bloqueada por ${minutosRestantes} minuto(s).`, 'CUENTA_BLOQUEADA');
+    // Primera vez que se alcanza el máximo: fijar bloqueo explícito progresivo
+    // (10min * 2^reincidencias dentro de la ventana) para frenar fuerza bruta
+    // lenta que antes se contentaba con 5 intentos/10min indefinidos.
+    const reincidencias = Math.max(0, row.intento_count - MAX_INTENTOS);
+    const duracion = TIEMPO_BLOQUEO_MS * Math.pow(2, Math.min(reincidencias, 4));
+    const hasta = new Date(ahora + duracion).toISOString();
+    db.prepare('UPDATE rate_limit_login SET bloqueado_hasta = ?, ultimo_intento = ? WHERE username = ?')
+      .run(hasta, new Date(ahora).toISOString(), clave);
+    const minutos = Math.max(1, Math.ceil(duracion / 60000));
+    throw new AuthError(`Demasiados intentos fallidos. Por seguridad, la cuenta está temporalmente bloqueada por ${minutos} minuto(s).`, 'CUENTA_BLOQUEADA');
   }
 }
 
 function registrarFallo(username) {
   const db = getDbConnection();
-  const clave = username.toLowerCase().trim();
+  const clave = String(username || '').toLowerCase().trim();
+  if (!clave) return;
   const ahora = new Date().toISOString();
   const row = db.prepare('SELECT * FROM rate_limit_login WHERE username = ?').get(clave);
 
@@ -51,11 +75,20 @@ function registrarFallo(username) {
     db.prepare('INSERT INTO rate_limit_login (username, intento_count, primer_intento, ultimo_intento) VALUES (?, 1, ?, ?)')
       .run(clave, ahora, ahora);
   } else {
+    // Si hay bloqueo vigente, cada fallo adicional alarga la progresión.
+    if (row.bloqueado_hasta && Date.now() < new Date(row.bloqueado_hasta).getTime()) {
+      const reincidencias = Math.max(0, row.intento_count - MAX_INTENTOS + 1);
+      const duracion = TIEMPO_BLOQUEO_MS * Math.pow(2, Math.min(reincidencias, 4));
+      const hasta = new Date(Date.now() + duracion).toISOString();
+      db.prepare('UPDATE rate_limit_login SET intento_count = intento_count + 1, ultimo_intento = ?, bloqueado_hasta = ? WHERE username = ?')
+        .run(ahora, hasta, clave);
+      return;
+    }
     const primerIntento = new Date(row.primer_intento).getTime();
     const ahoraMs = Date.now();
     if (ahoraMs - primerIntento > TIEMPO_BLOQUEO_MS) {
       // Ventana expirada, reiniciar contador
-      db.prepare('UPDATE rate_limit_login SET intento_count = 1, primer_intento = ?, ultimo_intento = ? WHERE username = ?')
+      db.prepare('UPDATE rate_limit_login SET intento_count = 1, primer_intento = ?, ultimo_intento = ?, bloqueado_hasta = NULL WHERE username = ?')
         .run(ahora, ahora, clave);
     } else {
       db.prepare('UPDATE rate_limit_login SET intento_count = intento_count + 1, ultimo_intento = ? WHERE username = ?')
@@ -77,6 +110,11 @@ function login(username, password) {
   const usuario = usuarioRepository.findByUsername(nombreLimpio);
 
   if (!usuario || usuario.estado !== ESTADOS_REGISTRO.ACTIVO) {
+    // Comparación dummy para no distinguir por tiempo entre "no existe" y
+    // "clave errónea" (~100ms de bcrypt): el oráculo de enumeración queda ciego.
+    try {
+      bcrypt.compareSync(String(password || ''), DUMMY_HASH);
+    } catch (_) { /* ignorar: solo consume tiempo constante */ }
     registrarFallo(nombreLimpio);
     auditoriaRepository.registrar({
       usuario_id: usuario ? usuario.id : null,

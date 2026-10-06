@@ -2,6 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { inventarioApi } from '../services/inventarioApi.js';
 import { useEscapeCerrarModal } from '../hooks/useEscapeCerrarModal.js';
 
+// Tono de la insignia de rol. El color no se calcula en el JSX: se elige la
+// clase y el CSS resuelve el par fondo/texto de la escala semántica.
+const ROL_CLASE = {
+  SUPERADMIN: 'pill pill-rol-superadmin',
+  ADMIN: 'pill pill-rol-admin',
+  default: 'pill pill-rol-otro'
+};
+
+function claseRol(rolNombre) {
+  return ROL_CLASE[rolNombre] || ROL_CLASE.default;
+}
+
 export default function Usuarios({ usuario }) {
   const [usuarios, setUsuarios] = useState([]);
   const [roles, setRoles] = useState([]);
@@ -204,10 +216,9 @@ export default function Usuarios({ usuario }) {
 
   if (!esWilmer) {
     return (
-      <div className="card" style={{ padding: '2rem', textAlign: 'center' }}>
-        <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔒</div>
-        <h2 style={{ color: '#dc2626', marginBottom: '0.5rem' }}>Acceso Restringido</h2>
-        <p style={{ color: '#64748b' }}>
+      <div className="card card-acceso-restringido">
+        <h2>Acceso Restringido</h2>
+        <p>
           Este módulo está reservado exclusivamente para la administración principal del sistema (Superadmin <strong>Wilmer</strong>).
         </p>
       </div>
@@ -217,288 +228,199 @@ export default function Usuarios({ usuario }) {
   const rolFormSeleccionado = roles.find((r) => String(r.id) === String(formulario.rol_id));
   const esSuperadminForm = rolFormSeleccionado && rolFormSeleccionado.nombre === 'SUPERADMIN';
 
+  // La cuenta principal no se puede degradar ni desactivar desde su propia fila.
+  const esFilaWilmer = usuarioEditando && usuarioEditando.username.toLowerCase() === 'wilmer';
+  const bloqueadoPorProtegido = Boolean(usuarioEditando && esFilaWilmer);
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      {/* Header del módulo */}
-      <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        flexWrap: 'wrap', gap: '1rem', background: '#fff', padding: '1.25rem 1.5rem',
-        borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
-      }}>
+    <div className="page-container usuarios-view">
+      <div className="page-header-row">
         <div>
-          <h2 style={{ margin: 0, fontSize: '1.35rem', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span>👥</span> Gestión de Cuentas y Accesos
-          </h2>
-          <p style={{ margin: '0.25rem 0 0', color: '#64748b', fontSize: '0.85rem' }}>
+          <h2>Gestión de Cuentas y Accesos</h2>
+          <p className="page-scope">
             Panel exclusivo para el Superadministrador <strong>Wilmer</strong>. Control total de roles, credenciales y estados.
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={abrirModalCrear}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '0.5rem',
-            backgroundColor: '#2563eb', color: '#fff', border: 'none',
-            padding: '0.65rem 1.25rem', borderRadius: '8px', fontWeight: '600',
-            cursor: 'pointer', fontSize: '0.9rem', transition: 'background 0.2s'
-          }}
-        >
-          <span>➕</span> Nuevo Usuario
-        </button>
+        <div className="header-actions">
+          <button type="button" className="btn-primario" onClick={abrirModalCrear}>
+            <span aria-hidden="true">+</span> Nuevo Usuario
+          </button>
+        </div>
       </div>
 
-      {/* Alertas */}
-      {mensajeExito && (
-        <div style={{
-          backgroundColor: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0',
-          padding: '0.75rem 1.25rem', borderRadius: '8px', fontSize: '0.9rem'
-        }}>
-          ✅ {mensajeExito}
-        </div>
-      )}
-      {error && (
-        <div style={{
-          backgroundColor: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca',
-          padding: '0.75rem 1.25rem', borderRadius: '8px', fontSize: '0.9rem'
-        }}>
-          ⚠️ {error}
-        </div>
-      )}
+      {mensajeExito && <div className="aviso-ok">{mensajeExito}</div>}
+      {error && <div className="aviso-error">{error}</div>}
 
-      {/* Tabla de usuarios */}
-      <div style={{
-        background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.05)', overflow: 'hidden'
-      }}>
-        {cargando ? (
-          <div style={{ padding: '3rem', textAlign: 'center', color: '#64748b' }}>
-            Cargando lista de usuarios...
-          </div>
-        ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
-            <thead>
-              <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569' }}>
-                <th style={{ padding: '0.85rem 1.25rem' }}>ID</th>
-                <th style={{ padding: '0.85rem 1.25rem' }}>Nombre</th>
-                <th style={{ padding: '0.85rem 1.25rem' }}>Usuario</th>
-                <th style={{ padding: '0.85rem 1.25rem' }}>Rol</th>
-                <th style={{ padding: '0.85rem 1.25rem' }}>Sede Asignada</th>
-                <th style={{ padding: '0.85rem 1.25rem' }}>Estado</th>
-                <th style={{ padding: '0.85rem 1.25rem', textAlign: 'right' }}>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {usuarios.map((u) => {
-                const esFilaWilmer = u.username.toLowerCase() === 'wilmer';
-                return (
-                  <tr key={u.id} style={{ borderBottom: '1px solid #f1f5f9', transition: 'background 0.15s' }}>
-                    <td style={{ padding: '0.85rem 1.25rem', color: '#64748b' }}>#{u.id}</td>
-                    <td style={{ padding: '0.85rem 1.25rem', fontWeight: '500', color: '#0f172a' }}>
-                      {u.nombre} {esFilaWilmer && <span style={{ fontSize: '0.75rem', background: '#dbeafe', color: '#1d4ed8', padding: '2px 6px', borderRadius: '4px', marginLeft: '6px' }}>TÚ</span>}
-                    </td>
-                    <td style={{ padding: '0.85rem 1.25rem', fontFamily: 'monospace', color: '#2563eb' }}>
-                      {u.username}
-                    </td>
-                    <td style={{ padding: '0.85rem 1.25rem' }}>
-                      <span style={{
-                        padding: '3px 8px', borderRadius: '6px', fontSize: '0.78rem', fontWeight: '600',
-                        background: u.rol_nombre === 'SUPERADMIN' ? '#fef3c7' : u.rol_nombre === 'ADMIN' ? '#ffedd5' : '#e0f2fe',
-                        color: u.rol_nombre === 'SUPERADMIN' ? '#92400e' : u.rol_nombre === 'ADMIN' ? '#9a3412' : '#0369a1'
-                      }}>
-                        {u.rol_nombre}
-                      </span>
-                    </td>
-                    <td style={{ padding: '0.85rem 1.25rem', color: '#475569' }}>
-                      {u.sede_nombre ? (
-                        <span>📍 {u.sede_nombre}</span>
-                      ) : (
-                        <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>Global (Todas las sedes)</span>
-                      )}
-                    </td>
-                    <td style={{ padding: '0.85rem 1.25rem' }}>
-                      <span style={{
-                        padding: '3px 8px', borderRadius: '6px', fontSize: '0.78rem', fontWeight: '600',
-                        background: u.estado === 'ACTIVO' ? '#dcfce7' : '#fee2e2',
-                        color: u.estado === 'ACTIVO' ? '#166534' : '#991b1b'
-                      }}>
-                        {u.estado}
-                      </span>
-                    </td>
-                    <td style={{ padding: '0.85rem 1.25rem', textAlign: 'right' }}>
-                      <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+      <div className="table-card">
+        <div className="table-responsive">
+          {cargando ? (
+            <div className="loading-state loading-state-compact">Cargando lista de usuarios...</div>
+          ) : usuarios.length === 0 ? (
+            <div className="tabla-vacia">No hay usuarios registrados.</div>
+          ) : (
+            <table className="tabla">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Nombre</th>
+                  <th>Usuario</th>
+                  <th>Rol</th>
+                  <th>Sede Asignada</th>
+                  <th>Estado</th>
+                  <th className="tabla-acciones">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {usuarios.map((u) => {
+                  const esPrincipal = u.username.toLowerCase() === 'wilmer';
+                  return (
+                    <tr key={u.id}>
+                      <td className="celda-texto-suave">#{u.id}</td>
+                      <td>
+                        <strong>{u.nombre}</strong>{' '}
+                        {esPrincipal && <span className="pill pill-marcador">TÚ</span>}
+                      </td>
+                      <td><span className="mono-tag mono-tag-acento">{u.username}</span></td>
+                      <td><span className={claseRol(u.rol_nombre)}>{u.rol_nombre}</span></td>
+                      <td className="celda-texto-suave">
+                        {u.sede_nombre ? u.sede_nombre : <em className="celda-vacia">Global (Todas las sedes)</em>}
+                      </td>
+                      <td>
+                        <span className={`pill ${u.estado === 'ACTIVO' ? 'estado-verde' : 'estado-rojo'}`}>
+                          {u.estado}
+                        </span>
+                      </td>
+                      <td className="acciones">
                         <button
                           type="button"
+                          className="btn-secundario btn-tabla"
                           onClick={() => abrirModalEditar(u)}
-                          style={{
-                            padding: '4px 10px', fontSize: '0.8rem', borderRadius: '6px',
-                            border: '1px solid #cbd5e1', background: '#fff', cursor: 'pointer'
-                          }}
+                          title="Editar datos de la cuenta"
                         >
-                          ✏️ Editar
+                          Editar
                         </button>
-                        {!esFilaWilmer && (
+                        {!esPrincipal && (
                           <button
                             type="button"
+                            className={`btn-secundario btn-tabla ${u.estado === 'ACTIVO' ? 'btn-estado-baja' : 'btn-estado-alta'}`}
                             onClick={() => handleToggleEstado(u)}
-                            style={{
-                              padding: '4px 10px', fontSize: '0.8rem', borderRadius: '6px',
-                              border: '1px solid #cbd5e1', background: u.estado === 'ACTIVO' ? '#fff1f2' : '#f0fdf4',
-                              color: u.estado === 'ACTIVO' ? '#e11d48' : '#16a34a',
-                              cursor: 'pointer'
-                            }}
+                            title={u.estado === 'ACTIVO' ? 'Desactivar la cuenta' : 'Reactivar la cuenta'}
                           >
                             {u.estado === 'ACTIVO' ? 'Desactivar' : 'Activar'}
                           </button>
                         )}
-                        {!esFilaWilmer && (
+                        {!esPrincipal && (
                           <button
                             type="button"
+                            className="btn-peligro btn-tabla"
                             onClick={() => handleEliminarDefinitivo(u)}
                             title="Anonimiza la cuenta y conserva el histórico de auditoría"
-                            style={{
-                              padding: '4px 10px', fontSize: '0.8rem', borderRadius: '6px',
-                              border: '1px solid #fecaca', background: '#fef2f2',
-                              color: '#b91c1c', cursor: 'pointer'
-                            }}
                           >
-                            🗑️ Eliminar
+                            Eliminar
                           </button>
                         )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
 
-      {/* Modal Crear / Editar */}
       {modalAbierto && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(3px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 9999, padding: '1rem'
-        }}>
-          <div style={{
-            background: '#fff', borderRadius: '14px', width: '100%', maxWidth: '520px',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)', overflow: 'hidden'
-          }}>
-            <div style={{
-              padding: '1.25rem 1.5rem', borderBottom: '1px solid #e2e8f0',
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-            }}>
-              <h3 style={{ margin: 0, fontSize: '1.15rem', color: '#0f172a' }}>
-                {usuarioEditando ? `✏️ Editar Usuario: ${usuarioEditando.username}` : '➕ Crear Nuevo Usuario'}
+        <div className="modal-overlay" onClick={() => setModalAbierto(false)}>
+          <div className="modal-card modal-md" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header-row">
+              <h3>
+                {usuarioEditando ? `Editar Usuario: ${usuarioEditando.username}` : 'Crear Nuevo Usuario'}
               </h3>
               <button
                 type="button"
+                className="modal-close-x"
                 onClick={() => setModalAbierto(false)}
-                style={{ background: 'none', border: 'none', fontSize: '1.25rem', cursor: 'pointer', color: '#64748b' }}
+                title="Cerrar"
               >
-                ✕
+                ×
               </button>
             </div>
 
-            <form onSubmit={handleGuardar} style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {errorModal && (
-                <div style={{
-                  backgroundColor: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca',
-                  padding: '0.65rem 1rem', borderRadius: '6px', fontSize: '0.85rem'
-                }}>
-                  ⚠️ {errorModal}
+            <form onSubmit={handleGuardar}>
+              {errorModal && <div className="aviso-error">{errorModal}</div>}
+
+              <div className="form-grid">
+                <div className="form-field">
+                  <label className="form-label" htmlFor="usuario-nombre">Nombre Completo *</label>
+                  <input
+                    id="usuario-nombre"
+                    className="form-input"
+                    type="text"
+                    required
+                    value={formulario.nombre}
+                    onChange={(e) => setFormulario({ ...formulario, nombre: e.target.value })}
+                    placeholder="Ej: Wilmer Díaz"
+                  />
                 </div>
-              )}
 
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#334155', marginBottom: '0.35rem' }}>
-                  Nombre Completo *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formulario.nombre}
-                  onChange={(e) => setFormulario({ ...formulario, nombre: e.target.value })}
-                  placeholder="Ej: Wilmer Díaz"
-                  style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }}
-                />
-              </div>
+                <div className="form-field">
+                  <label className="form-label" htmlFor="usuario-username">Nombre de Usuario (Login) *</label>
+                  <input
+                    id="usuario-username"
+                    className="form-input"
+                    type="text"
+                    required
+                    disabled={!!usuarioEditando}
+                    value={formulario.username}
+                    onChange={(e) => setFormulario({ ...formulario, username: e.target.value })}
+                    placeholder="Ej: farmaceutico_quibdo"
+                  />
+                </div>
 
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#334155', marginBottom: '0.35rem' }}>
-                  Nombre de Usuario (Login) *
-                </label>
-                <input
-                  type="text"
-                  required
-                  disabled={!!usuarioEditando}
-                  value={formulario.username}
-                  onChange={(e) => setFormulario({ ...formulario, username: e.target.value })}
-                  placeholder="Ej: farmaceutico_quibdo"
-                  style={{
-                    width: '100%', padding: '0.65rem 0.85rem', borderRadius: '6px',
-                    border: '1px solid #cbd5e1', fontSize: '0.9rem',
-                    backgroundColor: usuarioEditando ? '#f1f5f9' : '#fff'
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#334155', marginBottom: '0.35rem' }}>
-                  {usuarioEditando ? 'Nueva Contraseña (dejar en blanco para no cambiar)' : 'Contraseña Inicial *'}
-                </label>
-                <input
-                  type="password"
-                  required={!usuarioEditando}
-                  value={formulario.password}
-                  onChange={(e) => setFormulario({ ...formulario, password: e.target.value })}
-                  placeholder={usuarioEditando ? '••••••••' : 'Mínimo 6 caracteres'}
-                  style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }}
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#334155', marginBottom: '0.35rem' }}>
-                    Rol *
+                <div className="form-field">
+                  <label className="form-label" htmlFor="usuario-password">
+                    {usuarioEditando ? 'Nueva Contraseña (dejar en blanco para no cambiar)' : 'Contraseña Inicial *'}
                   </label>
+                  <input
+                    id="usuario-password"
+                    className="form-input"
+                    type="password"
+                    required={!usuarioEditando}
+                    value={formulario.password}
+                    onChange={(e) => setFormulario({ ...formulario, password: e.target.value })}
+                    placeholder={usuarioEditando ? 'Dejar vacío para conservar' : 'Mínimo 6 caracteres'}
+                  />
+                </div>
+
+                <div className="form-field">
+                  <label className="form-label" htmlFor="usuario-rol">Rol *</label>
                   <select
-                    disabled={usuarioEditando && usuarioEditando.username.toLowerCase() === 'wilmer'}
+                    id="usuario-rol"
+                    className="form-select"
+                    disabled={bloqueadoPorProtegido}
                     value={formulario.rol_id}
                     onChange={(e) => setFormulario({ ...formulario, rol_id: e.target.value })}
-                    style={{
-                      width: '100%', padding: '0.65rem 0.85rem', borderRadius: '6px',
-                      border: '1px solid #cbd5e1', fontSize: '0.9rem',
-                      backgroundColor: (usuarioEditando && usuarioEditando.username.toLowerCase() === 'wilmer') ? '#f1f5f9' : '#fff'
-                    }}
                   >
                     {roles.map((r) => (
                       <option key={r.id} value={r.id}>{r.nombre}</option>
                     ))}
                   </select>
-                  {usuarioEditando && usuarioEditando.username.toLowerCase() === 'wilmer' && (
-                    <small style={{ color: '#64748b', fontSize: '0.75rem', marginTop: '4px', display: 'block' }}>
+                  {bloqueadoPorProtegido && (
+                    <small className="form-hint">
                       Tu rol de Superadmin está protegido y no puede modificarse.
                     </small>
                   )}
                 </div>
 
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#334155', marginBottom: '0.35rem' }}>
-                    Sede
-                  </label>
+                <div className="form-field">
+                  <label className="form-label" htmlFor="usuario-sede">Sede</label>
                   <select
+                    id="usuario-sede"
+                    className="form-select"
                     disabled={esSuperadminForm}
                     value={formulario.sede_id}
                     onChange={(e) => setFormulario({ ...formulario, sede_id: e.target.value })}
-                    style={{
-                      width: '100%', padding: '0.65rem 0.85rem', borderRadius: '6px',
-                      border: '1px solid #cbd5e1', fontSize: '0.9rem',
-                      backgroundColor: esSuperadminForm ? '#f1f5f9' : '#fff'
-                    }}
                   >
                     <option value="">{esSuperadminForm ? 'Global (Sin sede)' : '-- Seleccionar Sede --'}</option>
                     {sedes.map((s) => (
@@ -506,44 +428,34 @@ export default function Usuarios({ usuario }) {
                     ))}
                   </select>
                 </div>
+
+                {usuarioEditando && (
+                  <div className="form-field">
+                    <label className="form-label" htmlFor="usuario-estado">Estado</label>
+                    <select
+                      id="usuario-estado"
+                      className="form-select"
+                      value={formulario.estado}
+                      disabled={bloqueadoPorProtegido}
+                      onChange={(e) => setFormulario({ ...formulario, estado: e.target.value })}
+                    >
+                      <option value="ACTIVO">ACTIVO</option>
+                      <option value="INACTIVO">INACTIVO</option>
+                    </select>
+                  </div>
+                )}
               </div>
 
-              {usuarioEditando && (
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#334155', marginBottom: '0.35rem' }}>
-                    Estado
-                  </label>
-                  <select
-                    value={formulario.estado}
-                    disabled={usuarioEditando.username.toLowerCase() === 'wilmer'}
-                    onChange={(e) => setFormulario({ ...formulario, estado: e.target.value })}
-                    style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }}
-                  >
-                    <option value="ACTIVO">ACTIVO</option>
-                    <option value="INACTIVO">INACTIVO</option>
-                  </select>
-                </div>
-              )}
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem' }}>
+              <div className="form-actions form-actions-modal">
                 <button
                   type="button"
+                  className="btn-secundario"
                   onClick={() => setModalAbierto(false)}
-                  style={{
-                    padding: '0.65rem 1.2rem', borderRadius: '8px', border: '1px solid #cbd5e1',
-                    background: '#fff', cursor: 'pointer', fontWeight: '500'
-                  }}
+                  disabled={guardando}
                 >
                   Cancelar
                 </button>
-                <button
-                  type="submit"
-                  disabled={guardando}
-                  style={{
-                    padding: '0.65rem 1.25rem', borderRadius: '8px', border: 'none',
-                    background: '#2563eb', color: '#fff', cursor: 'pointer', fontWeight: '600'
-                  }}
-                >
+                <button type="submit" className="btn-primario" disabled={guardando}>
                   {guardando ? 'Guardando...' : (usuarioEditando ? 'Guardar Cambios' : 'Crear Usuario')}
                 </button>
               </div>

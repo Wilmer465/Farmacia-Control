@@ -8,6 +8,9 @@ const despachoService = require('../../backend/services/despachoService');
 const cloudSyncService = require('../../backend/services/cloudSyncService');
 const { getDb } = require('../../backend/database/connection');
 
+// Firma mock realista (ver backend/validators/firmaValidator.js).
+const FIRMA_TEST = 'data:image/png;base64,' + 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='.repeat(4);
+
 describe('FASE 8 y 9 — Operación Offline y Resiliencia en Fallas de Sincronización', () => {
   let db;
   let sesionSuperadmin;
@@ -33,6 +36,7 @@ describe('FASE 8 y 9 — Operación Offline y Resiliencia en Fallas de Sincroniz
     const med = medicamentoService.crear(sesionSuperadmin, {
       codigo: 'OFFLINE-01',
       nombre: 'Medicamento Offline',
+      unidad_medida: 'TABLETA',
       unidades_por_caja: 20
     });
 
@@ -52,7 +56,7 @@ describe('FASE 8 y 9 — Operación Offline y Resiliencia en Fallas de Sincroniz
       tipo_destino: 'LOCAL',
       receptor_nombre: 'Paciente Local',
       receptor_documento: '55667788',
-      firma_data: 'data:image/png;base64,FIRMA_OFFLINE',
+      firma_data: FIRMA_TEST,
       huella_registrada: 1,
       items: [{ medicamento_id: med.id, cantidad_unidades_solicitada: 40 }]
     });
@@ -77,7 +81,9 @@ describe('FASE 8 y 9 — Operación Offline y Resiliencia en Fallas de Sincroniz
   });
 
   test('Sanitización de seguridad: columnas confidenciales (password_hash) nunca se exponen al sincronizar', () => {
-    const usuario = db.prepare('SELECT * FROM usuarios WHERE username = ?').get('wilmer');
+    // Comparación case-insensitive: el seed crea 'Wilmer' con mayúscula y `=`
+    // es case-sensitive en SQLite (findByUsername usa LOWER/TRIM por eso).
+    const usuario = db.prepare('SELECT * FROM usuarios WHERE LOWER(username) = ?').get('wilmer');
     assert.ok(usuario.password_hash, 'El usuario local debe tener su password_hash');
 
     // Probar getRowsToSync y sanitizarFila de cloudSyncService

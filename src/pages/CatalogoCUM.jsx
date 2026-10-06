@@ -327,19 +327,19 @@ export default function CatalogoCUM({ usuario, sedeActiva }) {
     <div className="page-container catalogo-cum-view">
       <div className="page-header-row">
         <div>
-          <h2>📋 Catálogo INVIMA (CUM)</h2>
+          <h2> Catálogo INVIMA (CUM)</h2>
           <p className="page-scope">Catálogo maestro de medicamentos - Fuente de referencia oficial</p>
         </div>
         {puedeAdmin && (
           <div className="header-actions">
             {actualizando && progreso && (
-              <div className="progreso-actualizacion" style={{ fontSize: '0.8rem', color: '#475569', margin: '0 0.5rem 0 0' }}>
+              <div className="texto-progreso">
                 Paso: {progreso.paso || 'descargando'} · Registros: {progreso.descargados || 0}
                 {progreso.total > 0 && ` / ${progreso.total}total`}
               </div>
             )}
             {actualizando && tiempoActualizacion > 0 && (
-              <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+              <span className="texto-temporizador">
                 ⏱ {Math.floor(tiempoActualizacion / 60)}:{(tiempoActualizacion % 60).toString().padStart(2, '0')}
               </span>
             )}
@@ -359,7 +359,7 @@ export default function CatalogoCUM({ usuario, sedeActiva }) {
                 }}
                 title="Cancelar actualización en curso"
               >
-                ✕ Cancelar
+                × Cancelar
               </button>
             )}
             <button
@@ -367,23 +367,23 @@ export default function CatalogoCUM({ usuario, sedeActiva }) {
               onClick={handleActualizarCatalogo}
               disabled={actualizando}
             >
-              {actualizando ? '⏳ Actualizando...' : '🔄 Comprobar/Actualizar Catálogo'}
+              {actualizando ? ' Actualizando...' : ' Comprobar/Actualizar Catálogo'}
             </button>
             <button
               className="btn-verde"
               onClick={() => setMostrarModalManual(true)}
               disabled={actualizando}
             >
-              ➕ Registrar Manual
+              + Registrar Manual
             </button>
           </div>
         )}
       </div>
 
-      {exito && <div className="aviso-ok">✅ {exito} <button className="btn-clear-search" onClick={() => setExito(null)}>✕</button></div>}
-      {error && <div className="login-error">{error} <button className="btn-clear-search" onClick={() => setError(null)}>✕</button></div>}
-      {docExito && <div className="aviso-ok">✅ {docExito} <button className="btn-clear-search" onClick={() => setDocExito(null)}>✕</button></div>}
-      {docError && <div className="login-error">{docError} <button className="btn-clear-search" onClick={() => setDocError(null)}>✕</button></div>}
+      {exito && <div className="aviso-ok"> {exito} <button className="btn-clear-search" onClick={() => setExito(null)}>×</button></div>}
+      {error && <div className="login-error">{error} <button className="btn-clear-search" onClick={() => setError(null)}>×</button></div>}
+      {docExito && <div className="aviso-ok"> {docExito} <button className="btn-clear-search" onClick={() => setDocExito(null)}>×</button></div>}
+      {docError && <div className="login-error">{docError} <button className="btn-clear-search" onClick={() => setDocError(null)}>×</button></div>}
 
       {/* Estado del catálogo */}
       {estadoCatalogo && (
@@ -450,7 +450,7 @@ export default function CatalogoCUM({ usuario, sedeActiva }) {
       {/* Filtros */}
       <div className="filtros-card">
         <div className="search-bar-wrap">
-          <span className="search-icon">🔍</span>
+          <span className="search-icon" aria-hidden="true" />
           <input
             type="text"
             className="search-input"
@@ -489,7 +489,7 @@ export default function CatalogoCUM({ usuario, sedeActiva }) {
               <th>GTIN</th>
               <th>Fuente</th>
               <th>Estado</th>
-              {puedeAdmin && <th>📄 Documento</th>}
+              {puedeAdmin && <th> Documento</th>}
               {puedeAdmin && <th>Acciones</th>}
             </tr>
           </thead>
@@ -509,13 +509,13 @@ export default function CatalogoCUM({ usuario, sedeActiva }) {
                 {puedeAdmin && (
                   <td className="acciones">
                     {item.tiene_adjunto || item.documento_adjunto_nombre ? (
-                      <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
-                        <span style={{ fontSize: '0.78rem', color: '#15803d', fontWeight: 600 }}>✓ {item.documento_adjunto_nombre || 'Archivo adjunto'}</span>
+                      <div className="grupo-documento">
+                        <span className="texto-documento"> {item.documento_adjunto_nombre || 'Archivo adjunto'}</span>
                         <button className="btn-accion-ok" onClick={() => handleVerDocumento(item)} title="Ver documento adjunto">
-                          👁️
+                          Ver
                         </button>
                         <button className="btn-peligro" onClick={() => handleQuitarDocumento(item)} title="Quitar documento adjunto">
-                          ✕
+                          ×
                         </button>
                       </div>
                     ) : (
@@ -524,7 +524,7 @@ export default function CatalogoCUM({ usuario, sedeActiva }) {
                         onClick={() => { setCumParaDocumento(item); setArchivoDocumento(null); setMostrarModalDocumento(true); }}
                         title="Adjuntar archivo (PDF/imagen)"
                       >
-                        📎 Adjuntar
+                         Adjuntar
                       </button>
                     )}
                   </td>
@@ -532,7 +532,7 @@ export default function CatalogoCUM({ usuario, sedeActiva }) {
                 {puedeAdmin && (
                   <td className="acciones">
                     <button className="btn-secundario" onClick={() => abrirModalEmpaque(item)} title="Agregar nivel de empaque">
-                      ➕ Empaque
+                      + Empaque
                     </button>
                   </td>
                 )}
@@ -560,9 +560,9 @@ export default function CatalogoCUM({ usuario, sedeActiva }) {
       {/* Modal Registro Manual */}
       {mostrarModalManual && (
         <div className="modal-overlay" onClick={() => setMostrarModalManual(false)}>
-          <div className="modal-card modal-lg" style={{ maxHeight: '90vh', overflow: 'auto' }} onClick={e => e.stopPropagation()}>
-            <button className="modal-close-x" onClick={() => setMostrarModalManual(false)}>✕</button>
-            <h3>➕ Registrar Medicamento Manual</h3>
+          <div className="modal-card modal-lg modal-card--alta" onClick={e => e.stopPropagation()}>
+            <button className="modal-close-x" onClick={() => setMostrarModalManual(false)}>×</button>
+            <h3 className="modal-titulo">+ Registrar Medicamento Manual</h3>
             <form onSubmit={handleCrearManual}>
               <div className="form-grid">
                 <div><label>Producto *</label><input value={formManual.producto} onChange={e => setFormManual(f => ({...f, producto: e.target.value}))} required /></div>
@@ -586,9 +586,9 @@ export default function CatalogoCUM({ usuario, sedeActiva }) {
                 <div><label>GTIN Empaque Logístico</label><input value={formManual.gtin_empaque_logistico} onChange={e => setFormManual(f => ({...f, gtin_empaque_logistico: e.target.value}))} /></div>
                 <div><label>GTIN Empaque Venta</label><input value={formManual.gtin_empaque_venta} onChange={e => setFormManual(f => ({...f, gtin_empaque_venta: e.target.value}))} /></div>
               </div>
-              <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+              <div className="modal-acciones modal-acciones--compactas">
                 <button type="button" className="btn-secundario" onClick={() => setMostrarModalManual(false)}>Cancelar</button>
-                <button type="submit" className="btn-primario">✅ Crear Registro Manual</button>
+                <button type="submit" className="btn-primario"> Crear Registro Manual</button>
               </div>
             </form>
           </div>
@@ -599,9 +599,9 @@ export default function CatalogoCUM({ usuario, sedeActiva }) {
       {mostrarModalEmpaque && catalogoParaEmpaque && (
         <div className="modal-overlay" onClick={() => { setMostrarModalEmpaque(false); setCatalogoParaEmpaque(null); }}>
           <div className="modal-card modal-sm" onClick={e => e.stopPropagation()}>
-            <button className="modal-close-x" onClick={() => { setMostrarModalEmpaque(false); setCatalogoParaEmpaque(null); }}>✕</button>
-            <h3>📦 Agregar Nivel de Empaque</h3>
-            <p style={{fontSize: '0.85rem', color: '#64748b'}}>{catalogoParaEmpaque.producto} (CUM: {catalogoParaEmpaque.cum})</p>
+            <button className="modal-close-x" onClick={() => { setMostrarModalEmpaque(false); setCatalogoParaEmpaque(null); }}>×</button>
+            <h3 className="modal-titulo"> Agregar Nivel de Empaque</h3>
+            <p className="modal-subtitulo">{catalogoParaEmpaque.producto} (CUM: {catalogoParaEmpaque.cum})</p>
             <form onSubmit={handleCrearEmpaque}>
               <div className="form-grid">
 <div><label>Nivel *</label><select value={formEmpaque.nivel} onChange={e => setFormEmpaque(f => ({...f, nivel: Number(e.target.value)}))} required><option value={1}>1 - Caja Logística</option><option value={2}>2 - Caja de Venta</option><option value={3}>3 - Unidad Individual</option></select></div>
@@ -610,11 +610,11 @@ export default function CatalogoCUM({ usuario, sedeActiva }) {
                   <div><label>Contenido Cantidad *</label><input type="number" min="1" value={formEmpaque.contenido_cantidad} onChange={e => setFormEmpaque(f => ({...f, contenido_cantidad: Number(e.target.value)}))} required /></div>
                   <div><label>Contenido Unidad *</label><input value={formEmpaque.contenido_unidad} onChange={e => setFormEmpaque(f => ({...f, contenido_unidad: e.target.value}))} required placeholder="CAJA, TABLETA, FRASCO..." /></div>
                   <div><label>Factor Conversión *</label><input type="number" min="1" value={formEmpaque.factor_conversion} onChange={e => setFormEmpaque(f => ({...f, factor_conversion: Number(e.target.value)}))} required /></div>
-                <div style={{gridColumn: 'span 2'}}><label><input type="checkbox" checked={formEmpaque.es_principal} onChange={e => setFormEmpaque(f => ({...f, es_principal: e.target.checked}))} /> GTIN Principal para búsquedas</label></div>
+                <div className="campo-completo"><label><input type="checkbox" checked={formEmpaque.es_principal} onChange={e => setFormEmpaque(f => ({...f, es_principal: e.target.checked}))} /> GTIN Principal para búsquedas</label></div>
               </div>
-              <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+              <div className="modal-acciones modal-acciones--compactas">
                 <button type="button" className="btn-secundario" onClick={() => { setMostrarModalEmpaque(false); setCatalogoParaEmpaque(null); }}>Cancelar</button>
-                <button type="submit" className="btn-primario">✅ Crear Empaque</button>
+                <button type="submit" className="btn-primario"> Crear Empaque</button>
               </div>
             </form>
           </div>
@@ -625,37 +625,38 @@ export default function CatalogoCUM({ usuario, sedeActiva }) {
       {mostrarModalDocumento && cumParaDocumento && (
         <div className="modal-overlay" onClick={() => { setMostrarModalDocumento(false); setCumParaDocumento(null); setArchivoDocumento(null); }}>
           <div className="modal-card modal-sm" onClick={e => e.stopPropagation()}>
-            <button className="modal-close-x" onClick={() => { setMostrarModalDocumento(false); setCumParaDocumento(null); setArchivoDocumento(null); }}>✕</button>
-            <h3>📎 Adjuntar Documento al CUM</h3>
-            <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '0.75rem' }}>
+            <button className="modal-close-x" onClick={() => { setMostrarModalDocumento(false); setCumParaDocumento(null); setArchivoDocumento(null); }}>×</button>
+            <h3 className="modal-titulo"> Adjuntar Documento al CUM</h3>
+            <p className="modal-subtitulo modal-subtitulo--compacto">
               {cumParaDocumento.producto} (CUM: <strong>{cumParaDocumento.cum}</strong>)
             </p>
 
-            {docError && <div className="login-error" style={{ marginBottom: '0.75rem' }}>{docError} <button className="btn-clear-search" onClick={() => setDocError(null)}>✕</button></div>}
+            {docError && <div className="login-error login-error--cerrable alerta-formulario alerta-formulario--compacta">{docError} <button className="btn-cerrar-alerta" onClick={() => setDocError(null)}>×</button></div>}
 
             <form onSubmit={handleSubirDocumento}>
-              <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: 700, fontSize: '0.82rem', color: '#1e293b' }}>
+              <div className="detalle-tarjeta detalle-tarjeta--compacta">
+                <label className="form-label form-label--titulo" htmlFor="archivo-cum">
                   Seleccione archivo (PDF o imagen, máx. 5MB):
                 </label>
                 <input
+                  id="archivo-cum"
                   type="file"
+                  className="entrada-archivo entrada-archivo--bloque"
                   accept="image/*,application/pdf"
                   onChange={handleSeleccionarArchivo}
                   required
-                  style={{ fontSize: '0.82rem', marginBottom: '0.5rem', display: 'block', width: '100%' }}
                 />
-                <span style={{ fontSize: '0.74rem', color: '#64748b', display: 'block' }}>
+                <span className="entrada-archivo-ayuda">
                   Formatos soportados: JPG, PNG, PDF. El archivo se almacenará localmente.
                 </span>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+              <div className="fila-derecha">
                 <button type="button" className="btn-secundario" onClick={() => { setMostrarModalDocumento(false); setCumParaDocumento(null); setArchivoDocumento(null); }} disabled={adjuntandoDocumento}>
                   Cancelar
                 </button>
                 <button type="submit" className="btn-verde" disabled={adjuntandoDocumento || !archivoDocumento}>
-                  {adjuntandoDocumento ? '⏳ Subiendo...' : '✅ Adjuntar Documento'}
+                  {adjuntandoDocumento ? ' Subiendo...' : ' Adjuntar Documento'}
                 </button>
               </div>
             </form>

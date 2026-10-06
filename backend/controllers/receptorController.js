@@ -1,7 +1,19 @@
 const receptorService = require('../services/receptorService');
+const { ROLES } = require('../../shared/constants');
 
-function buscar(documento) {
+const ROLES_LECTURA_RECEPTORES = [ROLES.SUPERADMIN, ROLES.ADMIN, ROLES.INVENTARIO];
+
+function verificarLecturaReceptores(usuarioSesion) {
+  if (!usuarioSesion || !ROLES_LECTURA_RECEPTORES.includes(usuarioSesion.rol_nombre)) {
+    return { ok: false, error: 'No tiene permisos para consultar receptores.' };
+  }
+  return null;
+}
+
+function buscar(usuarioSesion, documento) {
   try {
+    const denegado = verificarLecturaReceptores(usuarioSesion);
+    if (denegado) return denegado;
     const receptor = receptorService.buscarPorDocumento(documento);
     return { ok: true, data: receptor };
   } catch (err) {
@@ -10,8 +22,10 @@ function buscar(documento) {
   }
 }
 
-function listar() {
+function listar(usuarioSesion) {
   try {
+    const denegado = verificarLecturaReceptores(usuarioSesion);
+    if (denegado) return denegado;
     const listado = receptorService.listar();
     return { ok: true, data: listado };
   } catch (err) {
@@ -19,8 +33,6 @@ function listar() {
     return { ok: false, error: err.message };
   }
 }
-
-const { ROLES } = require('../../shared/constants');
 
 function guardar(usuarioSesion, data) {
   try {

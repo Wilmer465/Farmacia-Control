@@ -76,9 +76,9 @@ export default function OrdersScreen() {
               </View>
             </View>
             <View style={styles.orderDetails}>
-              <Text style={styles.orderReceptor}>👤 {item.receptor_nombre}</Text>
-              <Text style={styles.orderDate}>📅 {item.fecha_creacion}</Text>
-              <Text style={styles.orderItems}>📦 {item.total_items} items</Text>
+              <Text style={styles.orderReceptor}>{item.receptor_nombre}</Text>
+              <Text style={styles.orderDate}>{item.fecha_creacion}</Text>
+              <Text style={styles.orderItems}>{item.total_items} items</Text>
             </View>
           </TouchableOpacity>
         )}

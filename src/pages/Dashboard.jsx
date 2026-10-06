@@ -55,16 +55,13 @@ export default function Dashboard({ usuario, sedeActiva, onNavigate }) {
         </div>
         <div className="header-actions">
           <button className="btn-refrescar" onClick={cargar} title="Actualizar datos">
-            🔄 Actualizar
+            Actualizar
           </button>
         </div>
       </div>
 
       {/* Banner de estado de conciliación */}
       <div className={`conciliacion-card ${esConciliado ? 'conciliado-ok' : 'conciliado-alerta'}`}>
-        <div className="conciliacion-icon">
-          {esConciliado ? '🛡️' : '⚠️'}
-        </div>
         <div className="conciliacion-content">
           <div className="conciliacion-title">
             {esConciliado ? 'Inventario Conciliado Correctamente' : 'Alerta de Irregularidades / No Conciliado'}
@@ -83,7 +80,6 @@ export default function Dashboard({ usuario, sedeActiva, onNavigate }) {
       {/* Grid de KPIs principales */}
       <div className="kpi-grid">
         <div className="kpi-card" onClick={() => onNavigate && onNavigate('inventario')}>
-          <div className="kpi-icon-box bg-blue">📦</div>
           <div className="kpi-info">
             <span className="kpi-label">Medicamentos Registrados</span>
             <span className="kpi-value">{data.totalMedicamentos}</span>
@@ -92,7 +88,6 @@ export default function Dashboard({ usuario, sedeActiva, onNavigate }) {
         </div>
 
         <div className="kpi-card" onClick={() => onNavigate && onNavigate('inventario')}>
-          <div className="kpi-icon-box bg-indigo">💊</div>
           <div className="kpi-info">
             <span className="kpi-label">Stock Total de Unidades</span>
             <span className="kpi-value">{data.stockTotalUnidades}</span>
@@ -101,7 +96,6 @@ export default function Dashboard({ usuario, sedeActiva, onNavigate }) {
         </div>
 
         <div className="kpi-card card-warning" onClick={() => onNavigate && onNavigate('inventario', { filtroEstado: 'PROXIMO_VENCER' })}>
-          <div className="kpi-icon-box bg-amber">⏳</div>
           <div className="kpi-info">
             <span className="kpi-label">Próximos a Vencer (90d)</span>
             <span className="kpi-value">{data.proximosAVencer}</span>
@@ -110,7 +104,6 @@ export default function Dashboard({ usuario, sedeActiva, onNavigate }) {
         </div>
 
         <div className="kpi-card card-danger" onClick={() => onNavigate && onNavigate('inventario', { filtroEstado: 'VENCIDO' })}>
-          <div className="kpi-icon-box bg-red">🚫</div>
           <div className="kpi-info">
             <span className="kpi-label">Lotes Vencidos</span>
             <span className="kpi-value">{data.vencidos}</span>
@@ -119,7 +112,6 @@ export default function Dashboard({ usuario, sedeActiva, onNavigate }) {
         </div>
 
         <div className="kpi-card" onClick={() => onNavigate && onNavigate('solicitudes')}>
-          <div className="kpi-icon-box bg-purple">📝</div>
           <div className="kpi-info">
             <span className="kpi-label">Solicitudes Pendientes</span>
             <span className="kpi-value">{data.solicitudesPendientes}</span>
@@ -128,7 +120,6 @@ export default function Dashboard({ usuario, sedeActiva, onNavigate }) {
         </div>
 
         <div className="kpi-card card-danger" onClick={() => onNavigate && onNavigate('entregas', { filtroDoc: 'INCOMPLETA' })}>
-          <div className="kpi-icon-box bg-rose">📋</div>
           <div className="kpi-info">
             <span className="kpi-label">Entregas Incompletas</span>
             <span className="kpi-value">{data.entregasIncompletas}</span>
@@ -137,7 +128,6 @@ export default function Dashboard({ usuario, sedeActiva, onNavigate }) {
         </div>
 
         <div className="kpi-card card-action" onClick={() => onNavigate && onNavigate('ordenes', { filtroEstado: 'PENDIENTE' })}>
-          <div className="kpi-icon-box bg-emerald">📑</div>
           <div className="kpi-info">
             <span className="kpi-label">Pedidos y Órdenes</span>
             <span className="kpi-value">{data.ordenesActivas ?? 'Ver'}</span>

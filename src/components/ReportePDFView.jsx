@@ -32,7 +32,6 @@ export default function ReportePDFView({ reporte, usuario }) {
         <h2 className="pdf-section-title">1. ESTADO GENERAL DEL PERIODO</h2>
 
         <div className={`pdf-status-banner ${esConciliado ? 'banner-ok' : 'banner-error'}`}>
-          <span className="dot-indicator">{esConciliado ? '🟢' : '🔴'}</span>
           <strong>{esConciliado ? 'CONCILIADO — TODO EN ORDEN' : 'NO CONCILIADO — SE DETECTARON IRREGULARIDADES'}</strong>
         </div>
 
@@ -53,22 +52,22 @@ export default function ReportePDFView({ reporte, usuario }) {
             <tr>
               <td>Entradas del periodo</td>
               <td className="text-right">+{eg.entradas?.toLocaleString()}</td>
-              <td className="text-center">🟢</td>
+              <td className="text-center">Correcto</td>
             </tr>
             <tr>
               <td>Salidas con orden</td>
               <td className="text-right">-{eg.salidas_con_orden?.toLocaleString()}</td>
-              <td className="text-center">🟢</td>
+              <td className="text-center">Correcto</td>
             </tr>
             <tr>
               <td>Salidas sin orden</td>
               <td className="text-right">-{eg.salidas_sin_orden || 0}</td>
-              <td className="text-center">{eg.salidas_sin_orden > 0 ? '🔴' : '🟢'}</td>
+              <td className="text-center">{eg.salidas_sin_orden > 0 ? 'Con novedad' : 'Sin novedad'}</td>
             </tr>
             <tr>
               <td>Mermas/ajustes autorizados</td>
               <td className="text-right">-{eg.mermas_autorizadas || 0}</td>
-              <td className="text-center">🟢</td>
+              <td className="text-center">Correcto</td>
             </tr>
             <tr className="row-bold">
               <td>Stock esperado</td>
@@ -78,55 +77,55 @@ export default function ReportePDFView({ reporte, usuario }) {
             <tr className="row-bold">
               <td>Stock físico</td>
               <td className="text-right">{eg.stock_fisico?.toLocaleString()}</td>
-              <td className="text-center">🟢</td>
+              <td className="text-center">Correcto</td>
             </tr>
             <tr className="row-bold">
               <td>Diferencia de cantidad</td>
               <td className="text-right">{eg.diferencia || 0}</td>
-              <td className="text-center">{eg.diferencia === 0 ? '🟢' : '🔴'}</td>
+              <td className="text-center">{eg.diferencia === 0 ? 'Sin diferencia' : 'Con diferencia'}</td>
             </tr>
             <tr>
               <td>Salidas sin orden</td>
               <td className="text-right">{eg.salidas_sin_orden || 0}</td>
-              <td className="text-center">{eg.salidas_sin_orden > 0 ? '🔴' : '🟢'}</td>
+              <td className="text-center">{eg.salidas_sin_orden > 0 ? 'Con novedad' : 'Sin novedad'}</td>
             </tr>
             <tr>
               <td>Entregas sin firma</td>
               <td className="text-right">{eg.entregas_sin_firma || 0}</td>
-              <td className="text-center">{eg.entregas_sin_firma > 0 ? '🔴' : '🟢'}</td>
+              <td className="text-center">{eg.entregas_sin_firma > 0 ? 'Con faltantes' : 'Sin faltantes'}</td>
             </tr>
             <tr>
               <td>Entregas sin huella</td>
               <td className="text-right">{eg.entregas_sin_huella || 0}</td>
-              <td className="text-center">{eg.entregas_sin_huella > 0 ? '🔴' : '🟢'}</td>
+              <td className="text-center">{eg.entregas_sin_huella > 0 ? 'Con faltantes' : 'Sin faltantes'}</td>
             </tr>
             <tr>
               <td>Medicamentos vencidos</td>
               <td className="text-right">{eg.medicamentos_vencidos || 0}</td>
-              <td className="text-center">{eg.medicamentos_vencidos > 0 ? '🔴' : '🟢'}</td>
+              <td className="text-center">{eg.medicamentos_vencidos > 0 ? 'Con vencidos' : 'Sin vencidos'}</td>
             </tr>
             <tr>
               <td>Lotes próximos a vencer</td>
               <td className="text-right">{eg.lotes_proximos_vencer || 0}</td>
-              <td className="text-center">{eg.lotes_proximos_vencer > 0 ? '🟡' : '🟢'}</td>
+              <td className="text-center">{eg.lotes_proximos_vencer > 0 ? 'En seguimiento' : 'Sin próximos'}</td>
             </tr>
             <tr>
               <td>Solicitudes de eliminación</td>
               <td className="text-right">{eg.solicitudes_eliminacion || 0}</td>
-              <td className="text-center">🟡</td>
+              <td className="text-center">Pendiente</td>
             </tr>
             <tr>
               <td>Solicitudes pendientes</td>
               <td className="text-right">{eg.solicitudes_pendientes || 0}</td>
-              <td className="text-center">{eg.solicitudes_pendientes > 0 ? '🟡' : '🟢'}</td>
+              <td className="text-center">{eg.solicitudes_pendientes > 0 ? 'Pendiente' : 'Sin pendientes'}</td>
             </tr>
           </tbody>
         </table>
 
         <div className="pdf-summary-lines">
-          <div><strong>Conciliación de cantidades:</strong> {eg.conciliacion_cantidades === 'Correcta' ? '🟢 Correcta' : '🔴 Con diferencias'}</div>
-          <div><strong>Control documental:</strong> {eg.control_documental === 'Correcto' ? '🟢 Correcto' : '🔴 Incorrecto'}</div>
-          <div><strong>Estado general:</strong> {esConciliado ? '🟢 CONCILIADO' : '🔴 NO CONCILIADO'}</div>
+          <div><strong>Conciliación de cantidades:</strong> {eg.conciliacion_cantidades === 'Correcta' ? 'Correcta' : 'Con diferencias'}</div>
+          <div><strong>Control documental:</strong> {eg.control_documental === 'Correcto' ? 'Correcto' : 'Incorrecto'}</div>
+          <div><strong>Estado general:</strong> {esConciliado ? 'CONCILIADO' : 'NO CONCILIADO'}</div>
         </div>
 
         <p className="pdf-disclaimer">
@@ -205,9 +204,9 @@ export default function ReportePDFView({ reporte, usuario }) {
                 <td>{d.medicamento_nombre}</td>
                 <td className="text-right">{d.cantidad}</td>
                 <td>{d.despachado_por}</td>
-                <td className="text-center">{d.es_exento ? 'Pendiente' : d.firma_receptor ? '✅' : '❌'}</td>
-                <td className="text-center">{d.es_exento ? 'Pendiente' : d.huella_receptor ? '✅' : '❌'}</td>
-                <td className="text-center">{d.documentacion_completa ? '🟢' : '🔴'}</td>
+                <td className="text-center">{d.es_exento ? 'Pendiente' : d.firma_receptor ? 'Sí' : 'No'}</td>
+                <td className="text-center">{d.es_exento ? 'Pendiente' : d.huella_receptor ? 'Sí' : 'No'}</td>
+                <td className="text-center">{d.documentacion_completa ? 'Completa' : 'Incompleta'}</td>
               </tr>
             ))}
             {(reporte.despachosConOrden || []).length === 0 && (
@@ -228,9 +227,9 @@ export default function ReportePDFView({ reporte, usuario }) {
               <li><strong>Medicamento:</strong> {d.medicamento_nombre}</li>
               <li><strong>Cantidad:</strong> {d.cantidad}</li>
               <li><strong>Despachado por:</strong> {d.despachado_por}</li>
-              <li><strong>Firma del receptor:</strong> {d.firma_receptor ? '✅ Registrada' : '❌ Faltante'}</li>
-              <li><strong>Huella del receptor:</strong> {d.huella_receptor ? '✅ Capturada' : '❌ Faltante'}</li>
-              <li><strong>Estado:</strong> 🔴 DOCUMENTACIÓN INCOMPLETA</li>
+              <li><strong>Firma del receptor:</strong> {d.firma_receptor ? 'Registrada' : 'Faltante'}</li>
+              <li><strong>Huella del receptor:</strong> {d.huella_receptor ? 'Capturada' : 'Faltante'}</li>
+              <li><strong>Estado:</strong> DOCUMENTACIÓN INCOMPLETA</li>
             </ul>
           </div>
         ))}
@@ -263,7 +262,7 @@ export default function ReportePDFView({ reporte, usuario }) {
                 <td className="text-right">{s.cantidad}</td>
                 <td>{s.salida_realizada_por}</td>
                 <td>{s.motivo}</td>
-                <td className="text-center">🔴</td>
+                <td className="text-center">Con novedad</td>
               </tr>
             ))}
             {(reporte.salidasSinOrden || []).length === 0 && (
@@ -303,9 +302,9 @@ export default function ReportePDFView({ reporte, usuario }) {
                 <td>{e.fecha}</td>
                 <td>{e.receptor_nombre}</td>
                 <td>{e.entregado_por}</td>
-                <td className="text-center">{e.firma ? '✅' : '❌'}</td>
-                <td className="text-center">{e.huella ? '✅' : '❌'}</td>
-                <td className="text-center">🔴</td>
+                <td className="text-center">{e.firma ? 'Sí' : 'No'}</td>
+                <td className="text-center">{e.huella ? 'Sí' : 'No'}</td>
+                <td className="text-center">Con novedad</td>
               </tr>
             ))}
             {(reporte.entregasIncompletas || []).length === 0 && (
@@ -346,9 +345,9 @@ export default function ReportePDFView({ reporte, usuario }) {
                 <td>{s.solicitado_por}</td>
                 <td>{s.motivo}</td>
                 <td className="text-center">
-                  {s.estado === 'APROBADA' && '🟢 Aprobada'}
-                  {s.estado === 'RECHAZADA' && '🔴 Rechazada'}
-                  {s.estado === 'PENDIENTE' && '🟡 Pendiente'}
+                  {s.estado === 'APROBADA' && 'Aprobada'}
+                  {s.estado === 'RECHAZADA' && 'Rechazada'}
+                  {s.estado === 'PENDIENTE' && 'Pendiente'}
                 </td>
               </tr>
             ))}
@@ -389,7 +388,7 @@ export default function ReportePDFView({ reporte, usuario }) {
                 <td>{p.fecha_expedicion}</td>
                 <td>{p.fecha_vencimiento}</td>
                 <td className="text-right">{p.cantidad}</td>
-                <td className="text-center">🟡</td>
+                <td className="text-center">Pendiente</td>
               </tr>
             ))}
             {(reporte.proximosAVencer || []).length === 0 && (
@@ -428,7 +427,7 @@ export default function ReportePDFView({ reporte, usuario }) {
                 <td>{v.fecha_expedicion}</td>
                 <td>{v.fecha_vencimiento}</td>
                 <td className="text-right">{v.cantidad}</td>
-                <td className="text-center">🔴</td>
+                <td className="text-center">Con novedad</td>
               </tr>
             ))}
             {(reporte.vencidos || []).length === 0 && (
@@ -467,9 +466,9 @@ export default function ReportePDFView({ reporte, usuario }) {
                 </tbody>
               </table>
               <div className="med-conc-status">
-                <div><strong>Cantidad:</strong> {cd.diferencia === 0 ? '🟢 Correcta' : '🔴 Con diferencia'}</div>
-                <div><strong>Control documental:</strong> {cd.tiene_ajustes_irregulares ? '🔴 Irregular' : '🟢 Correcto'}</div>
-                <div><strong>Estado:</strong> {cd.estado === 'CONCILIADO' ? '🟢 CONCILIADO' : '🔴 NO CONCILIADO'}</div>
+                <div><strong>Cantidad:</strong> {cd.diferencia === 0 ? 'Correcta' : 'Con diferencia'}</div>
+                <div><strong>Control documental:</strong> {cd.tiene_ajustes_irregulares ? 'Irregular' : 'Correcto'}</div>
+                <div><strong>Estado:</strong> {cd.estado === 'CONCILIADO' ? 'CONCILIADO' : 'NO CONCILIADO'}</div>
               </div>
             </div>
           ))}
@@ -498,7 +497,7 @@ export default function ReportePDFView({ reporte, usuario }) {
                 <td><strong>{irr.tipo}</strong></td>
                 <td>{irr.registro}</td>
                 <td>{irr.detalle}</td>
-                <td className="text-center">{irr.estado === 'ROJO' ? '🔴' : '🟡'}</td>
+                <td className="text-center">{irr.estado === 'ROJO' ? 'Con novedad' : 'En seguimiento'}</td>
               </tr>
             ))}
             {(reporte.irregularidades || []).length === 0 && (
@@ -529,7 +528,7 @@ export default function ReportePDFView({ reporte, usuario }) {
               <td className="text-center">{reporte.sincronizacion?.operaciones_registradas || 0}</td>
               <td className="text-center">{reporte.sincronizacion?.sincronizadas || 0}</td>
               <td className="text-center">{reporte.sincronizacion?.pendientes || 0}</td>
-              <td className="text-center">🟢 Activa</td>
+              <td className="text-center">Activa</td>
             </tr>
           </tbody>
         </table>
@@ -562,7 +561,7 @@ export default function ReportePDFView({ reporte, usuario }) {
                 <td>{a.rol}</td>
                 <td><strong>{a.accion}</strong></td>
                 <td>{a.registro_afectado}</td>
-                <td className="text-center">{a.resultado === 'EXITO' ? '🟢 Exitoso' : '🔴 Fallido'}</td>
+                <td className="text-center">{a.resultado === 'EXITO' ? 'Exitoso' : 'Fallido'}</td>
               </tr>
             ))}
             {(reporte.auditoria || []).length === 0 && (
@@ -603,7 +602,6 @@ export default function ReportePDFView({ reporte, usuario }) {
         <div className="pdf-final-verdict">
           <h3 className="final-verdict-title">ESTADO FINAL DE LA SEDE</h3>
           <div className={`final-verdict-badge ${esConciliado ? 'verdict-ok' : 'verdict-error'}`}>
-            <span className="dot-indicator">{esConciliado ? '🟢' : '🔴'}</span>
             <strong>{esConciliado ? 'CONCILIADO — REGISTROS CONFORMES' : 'NO CONCILIADO — IRREGULARIDADES DETECTADAS'}</strong>
           </div>
 

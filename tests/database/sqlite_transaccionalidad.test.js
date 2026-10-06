@@ -9,6 +9,9 @@ const despachoRepository = require('../../backend/repositories/despachoRepositor
 const auditoriaRepository = require('../../backend/repositories/auditoriaRepository');
 const { getDb } = require('../../backend/database/connection');
 
+// Firma mock realista (ver backend/validators/firmaValidator.js).
+const FIRMA_TEST = 'data:image/png;base64,' + 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='.repeat(4);
+
 describe('FASE 5 — SQLite & Transaccionalidad Atómica: Despacho e Integridad', () => {
   let db;
   let sesionSuperadmin;
@@ -29,6 +32,7 @@ describe('FASE 5 — SQLite & Transaccionalidad Atómica: Despacho e Integridad'
     medicamento = medicamentoService.crear(sesionSuperadmin, {
       codigo: 'MED-TRANS-01',
       nombre: 'Amoxicilina 500mg',
+      unidad_medida: 'TABLETA',
       unidades_por_caja: 10
     });
 
@@ -47,7 +51,7 @@ describe('FASE 5 — SQLite & Transaccionalidad Atómica: Despacho e Integridad'
       tipo_destino: 'LOCAL',
       receptor_nombre: 'Receptor Juan Perez',
       receptor_documento: '12345678',
-      firma_data: 'data:image/png;base64,FIRMA_VALIDA_MOCK',
+      firma_data: FIRMA_TEST,
       huella_registrada: 1,
       items: [
         {

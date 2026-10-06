@@ -121,12 +121,12 @@ export default function DashboardScreen({ navigation }: any) {
       </View>
 
       <View style={styles.alertCard}>
-        <Text style={styles.alertTitle}>⚠️ 5 lotes próximos a vencer</Text>
+        <Text style={styles.alertTitle}>5 lotes próximos a vencer</Text>
         <Text style={styles.alertBody}>Revisar inventario para gestionar vencimientos</Text>
       </View>
 
       <View style={styles.alertCard}>
-        <Text style={styles.alertTitle}>📦 3 órdenes pendientes de despacho</Text>
+        <Text style={styles.alertTitle}>3 órdenes pendientes de despacho</Text>
         <Text style={styles.alertBody}>Procesar despachos para evitar retrasos</Text>
       </View>
     </ScrollView>

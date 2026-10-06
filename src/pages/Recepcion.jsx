@@ -140,7 +140,7 @@ export default function Recepcion({ usuario, sedeActiva, onNavigate }) {
       });
       
       if (res.ok) {
-        setExito(`✅ Recepción registrada: ${res.medicamento.nombre} - ${res.equivalencias.unidades_base_calculadas} unidades base (${res.equivalencias.recibido_nivel_escan} x factor ${res.equivalencias.factor_conversion})`);
+        setExito(` Recepción registrada: ${res.medicamento.nombre} - ${res.equivalencias.unidades_base_calculadas} unidades base (${res.equivalencias.recibido_nivel_escan} x factor ${res.equivalencias.factor_conversion})`);
         // Limpiar formulario
         setResultadoEscaneo(null);
         setLote('');
@@ -177,40 +177,41 @@ export default function Recepcion({ usuario, sedeActiva, onNavigate }) {
   return (
     <div className="page-container recepcion-view">
       <div className="page-header-row">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+        <div className="grupo-titulo">
           {onNavigate && (
             <button
               type="button"
-              className="btn-secundario"
+              className="btn-secundario btn-secundario--regreso"
               onClick={() => onNavigate('inventario')}
-              style={{ padding: '0.4rem 0.85rem', fontSize: '0.82rem', fontWeight: 600 }}
             >
               ← Volver a Inventario
             </button>
           )}
           <div>
-            <h2>📦 Recepción de Medicamentos</h2>
+            <h2> Recepción de Medicamentos</h2>
             <p className="page-scope">Escanee código de barras (GTIN/EAN/GS1/DataMatrix) para identificar y recibir automáticamente</p>
           </div>
         </div>
       </div>
 
       {exito && (
-        <div className="aviso-ok">
+        <div className="aviso-ok aviso-ok--cerrable">
           {exito}
-          <button className="btn-clear-search" onClick={() => setExito(null)}>✕</button>
-          {onNavigate && (
-            <button className="btn-accion-ok" onClick={() => { setExito(null); onNavigate('inventario'); }}>📦 Ver Inventario</button>
-          )}
+          <div className="grupo-mini-acciones">
+            <button className="btn-cerrar-alerta" onClick={() => setExito(null)}>×</button>
+            {onNavigate && (
+              <button className="btn-accion-ok" onClick={() => { setExito(null); onNavigate('inventario'); }}> Ver Inventario</button>
+            )}
+          </div>
         </div>
       )}
-      {error && <div className="login-error">{error} <button className="btn-clear-search" onClick={() => setError(null)}>✕</button></div>}
+      {error && <div className="login-error login-error--cerrable">{error} <button className="btn-cerrar-alerta" onClick={() => setError(null)}>×</button></div>}
 
       <div className="recepcion-grid">
         {/* Panel Izquierdo: Escaneo y Resultado */}
         <div className="recepcion-panel">
           <div className="panel-card">
-            <h3>📷 Escanear Código de Barras</h3>
+            <h3> Escanear Código de Barras</h3>
             <div className="scan-area">
               <input
                 ref={inputRef}
@@ -224,13 +225,13 @@ export default function Recepcion({ usuario, sedeActiva, onNavigate }) {
                 autoComplete="off"
                 spellCheck="false"
               />
-              {procesandoEscaneo && <span className="scan-loading">⏳ Procesando...</span>}
+              {procesandoEscaneo && <span className="scan-loading"> Procesando...</span>}
             </div>
           </div>
 
           {resultadoEscaneo && (
             <div className="panel-card resultado-escaneo">
-              <h3>✅ Producto Identificado</h3>
+              <h3> Producto Identificado</h3>
               <div className="resultado-grid">
                 <div className="resultado-item"><label>Producto</label><strong>{resultadoEscaneo.catalogo?.producto || 'No encontrado en catálogo'}</strong></div>
                 <div className="resultado-item"><label>CUM</label><span className="mono-tag">{resultadoEscaneo.catalogo?.cum || '-'}</span></div>
@@ -261,7 +262,7 @@ export default function Recepcion({ usuario, sedeActiva, onNavigate }) {
               
               {resultadoEscaneo.requiere_registro_manual && (
                 <div className="aviso-advertencia">
-                  ⚠️ Producto no encontrado en catálogo INVIMA. 
+                   Producto no encontrado en catálogo INVIMA. 
                   <a href="#catalogo" onClick={e => { e.preventDefault(); alert('Use el módulo Catálogo CUM → Registrar Manual'); }}>Registrar manualmente en Catálogo CUM</a>
                 </div>
               )}
@@ -270,7 +271,7 @@ export default function Recepcion({ usuario, sedeActiva, onNavigate }) {
 
           {resultadoEscaneo && !resultadoEscaneo.requiere_registro_manual && (
             <div className="panel-card formulario-recepcion">
-              <h3>📝 Registrar Recepción</h3>
+              <h3> Registrar Recepción</h3>
               <form onSubmit={handleRegistrar}>
                 <div className="form-grid">
                   <div>
@@ -321,9 +322,9 @@ export default function Recepcion({ usuario, sedeActiva, onNavigate }) {
                     <strong>Equivalencia:</strong> {cantidad} × {resultadoEscaneo.empaque.factor_conversion} = <strong>{cantidad * resultadoEscaneo.empaque.factor_conversion} unidades base</strong>
                   </div>
                 )}
-                <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-                  <button type="button" className="btn-secundario" onClick={() => { setResultadoEscaneo(null); setLote(''); setFechaVencimiento(''); setCantidad(1); inputRef.current?.focus(); }}>✕ Limpiar</button>
-                  <button type="submit" className="btn-verde" disabled={registrando}>{registrando ? '⏳ Registrando...' : '✅ Confirmar Recepción'}</button>
+                <div className="fila-formulario">
+                  <button type="button" className="btn-secundario" onClick={() => { setResultadoEscaneo(null); setLote(''); setFechaVencimiento(''); setCantidad(1); inputRef.current?.focus(); }}>× Limpiar</button>
+                  <button type="submit" className="btn-verde" disabled={registrando}>{registrando ? ' Registrando...' : ' Confirmar Recepción'}</button>
                 </div>
               </form>
             </div>
@@ -333,23 +334,23 @@ export default function Recepcion({ usuario, sedeActiva, onNavigate }) {
         {/* Panel Derecho: Historial */}
         <div className="recepcion-panel">
           <div className="panel-card">
-            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem'}}>
-              <h3>📋 Historial de Recepciones</h3>
+            <div className="cabecera-historial">
+              <h3> Historial de Recepciones</h3>
               {esSuperadmin && sedes.length > 0 && (
-                <select value={sedeSeleccionada} onChange={e => { setSedeSeleccionada(e.target.value === '' ? '' : Number(e.target.value)); cargarHistorial(); }} style={{width: 'auto', padding: '0.4rem'}}>
+                <select className="form-select form-select--compacto" value={sedeSeleccionada} onChange={e => { setSedeSeleccionada(e.target.value === '' ? '' : Number(e.target.value)); cargarHistorial(); }}>
                   <option value="">Todas las sedes</option>
                   {sedes.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
                 </select>
               )}
             </div>
             
-            <div className="search-bar-wrap" style={{marginBottom: '1rem'}}>
-              <span className="search-icon">🔍</span>
+            <div className="search-bar-wrap buscador--separado">
+              <span className="search-icon" aria-hidden="true" />
               <input type="text" className="search-input" placeholder="Filtrar historial..." value={filtroHistorial} onChange={e => setFiltroHistorial(e.target.value)} />
             </div>
 
             {cargandoHistorial ? (
-              <div style={{textAlign: 'center', padding: '2rem', color: '#64748b'}}>Cargando historial...</div>
+              <div className="cargando-historial">Cargando historial...</div>
             ) : (
               <div className="table-responsive">
                 <table className="tabla">

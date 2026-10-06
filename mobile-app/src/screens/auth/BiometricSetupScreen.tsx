@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, Alert } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { useAuth } from '../../hooks';
 
@@ -52,7 +53,7 @@ export default function BiometricSetupScreen() {
       <View style={{ backgroundColor: 'white', borderRadius: 16, padding: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 }}>
         <View style={{ alignItems: 'center', marginBottom: 24 }}>
           <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: available ? '#d1fae5' : '#fee2e2', justifyContent: 'center', alignItems: 'center' }}>
-            <Text style={{ fontSize: 36 }}>{available ? '🔐' : '🔓'}</Text>
+            <Ionicons name={available ? 'finger-print' : 'finger-print-outline'} size={36} color="white" />
           </View>
           <Text style={{ fontSize: 18, fontWeight: '600', color: '#1e293b', marginTop: 16, marginBottom: 8 }}>
             {available ? 'Biometría disponible' : 'Biometría no disponible'}

@@ -74,13 +74,13 @@ function lotesDelMedicamento(medicamentoId) {
         title="Cerrar panel"
         aria-label="Cerrar panel"
       >
-        ✕
+        ×
       </button>
 
-      <div className="modal-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem', paddingRight: '2.75rem' }}>
+      <div className="modal-cabecera modal-cabecera--apartada">
         <div>
-          <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>📦 Despachar Orden {orden.numero} (por Unidad)</h3>
-          <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.82rem', color: '#64748b' }}>
+          <h3> Despachar Orden {orden.numero} (por Unidad)</h3>
+          <p className="modal-subtitulo">
             Sede: <strong>{orden.sede_nombre}</strong> | Despacho total o parcial por lote en unidades
           </p>
         </div>
@@ -89,7 +89,7 @@ function lotesDelMedicamento(medicamentoId) {
       {lineasPendientes.length === 0 ? (
         <p className="tabla-vacia">Esta orden no tiene líneas pendientes por despachar.</p>
       ) : (
-        <div className="despacho-lineas-container" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginBottom: '1.5rem' }}>
+        <div className="despacho-lineas-container">
           {lineasPendientes.map((d) => {
             const pendiente = d.cantidad_total_solicitada - d.cantidad_total_despachada;
             const opcionesLote = lotesDelMedicamento(d.medicamento_id);
@@ -101,22 +101,13 @@ function lotesDelMedicamento(medicamentoId) {
               <div
                 key={d.id}
                 className="despacho-card-linea"
-                style={{
-                  background: '#f8fafc',
-                  border: '1px solid #cbd5e1',
-                  borderRadius: '10px',
-                  padding: '1rem',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '0.75rem'
-                }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <div className="linea-despacho-cabecera">
                   <div>
-                    <strong style={{ fontSize: '0.95rem', color: '#0f172a' }}>{d.medicamento_codigo} — {d.medicamento_nombre}</strong>
+                    <strong className="linea-despacho-titulo">{d.medicamento_codigo} — {d.medicamento_nombre}</strong>
                   </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <span className="pill estado-amarillo" style={{ fontSize: '0.8rem' }}>
+                  <div className="linea-despacho-estado">
+                    <span className="pill estado-amarillo linea-despacho-pildora">
                       Pendiente: <strong>{pendiente}</strong> unidades
                     </span>
                   </div>
@@ -124,59 +115,59 @@ function lotesDelMedicamento(medicamentoId) {
 
                 {/* Selección de Lote */}
                 <div>
-                  <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.25rem' }}>
+                  <label className="form-label">
                     Seleccionar Lote Disponible:
                   </label>
                   <select
-                    style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem', background: '#ffffff' }}
+                    className="form-select"
                     value={c.lote_id}
                     onChange={(e) => set(d.id, 'lote_id', e.target.value)}
                   >
                     <option value="">-- Seleccionar lote a despachar --</option>
                     {opcionesLote.map((l) => (
                       <option key={l.id} value={l.id}>
-                        Lote: {l.numero_lote} | Vence: {l.fecha_vencimiento} | Stock disponible: {l.cantidad_total_unidades} unidades {l.estado === 'PROXIMO_VENCER' ? '⚠️ (Próximo a vencer)' : ''}
+                        Lote: {l.numero_lote} | Vence: {l.fecha_vencimiento} | Stock disponible: {l.cantidad_total_unidades} unidades {l.estado === 'PROXIMO_VENCER' ? ' (Próximo a vencer)' : ''}
                       </option>
                     ))}
                   </select>
                   {opcionesLote.length === 0 && (
-                    <span style={{ fontSize: '0.75rem', color: '#dc2626', display: 'block', marginTop: '0.2rem' }}>
-                      ⚠️ No hay lotes disponibles con stock en esta sede para este medicamento.
+                    <span className="form-error">
+                       No hay lotes disponibles con stock en esta sede para este medicamento.
                     </span>
                   )}
                 </div>
 
                 {/* Input de cantidad en unidades */}
-                <div style={{ maxWidth: '280px' }}>
-                  <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '0.2rem' }}>
+                <div className="campo-cantidad">
+                  <label className="form-label">
                     Cantidad a despachar (unidades):
                   </label>
                   <input
                     type="number"
+                    className="form-input"
                     min="1"
                     max={pendiente}
                     placeholder={`Máx. ${pendiente}`}
                     value={c.unidades}
                     onChange={(e) => set(d.id, 'unidades', e.target.value)}
-                    style={{ width: '100%', padding: '0.5rem 0.65rem', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '0.85rem' }}
                   />
                 </div>
 
                 {/* Resumen del despacho de esta línea */}
                 {totalADespachar > 0 && (
-                  <div style={{ background: '#eff6ff', padding: '0.5rem 0.75rem', borderRadius: '6px', fontSize: '0.8rem', color: '#1e40af', border: '1px solid #bfdbfe' }}>
-                    <span>➡️ Total a despachar: <strong>{totalADespachar} unidades</strong>.</span>
+                  <div className="resumen-despacho">
+                    <span> Total a despachar: <strong>{totalADespachar} unidades</strong>.</span>
                     {sobrante > 0 ? (
-                      <span style={{ display: 'block', color: '#b45309', marginTop: '0.2rem' }}>
-                        ⚠️ <strong>Despacho Parcial:</strong> Quedarán <strong>{sobrante} unidades pendientes</strong> por despachar.
+                      <span className="resumen-despacho--parcial">
+                         <strong>Despacho Parcial:</strong> Quedarán <strong>{sobrante} unidades pendientes</strong> por despachar.
                       </span>
                     ) : sobrante === 0 ? (
-                      <span style={{ display: 'block', color: '#15803d', marginTop: '0.2rem' }}>
-                        ✅ <strong>Despacho Completo:</strong> Cumple con el 100% de lo solicitado para esta línea.
+                      <span className="resumen-despacho--completo">
+                         <strong>Despacho Completo:</strong> Cumple con el 100% de lo solicitado para esta línea.
                       </span>
                     ) : (
-                      <span style={{ display: 'block', color: '#dc2626', marginTop: '0.2rem' }}>
-                        ❌ <strong>Atención:</strong> La cantidad a despachar supera las {pendiente} unidades pendientes.
+                      <span className="resumen-despacho--exceso">
+                         <strong>Atención:</strong> La cantidad a despachar supera las {pendiente} unidades pendientes.
                       </span>
                     )}
                   </div>
@@ -187,19 +178,18 @@ function lotesDelMedicamento(medicamentoId) {
         </div>
       )}
 
-      {error && <div className="login-error" style={{ marginBottom: '1rem' }}>{error}</div>}
+      {error && <div className="login-error alerta-formulario">{error}</div>}
 
-      <div className="despacho-acciones" style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', borderTop: '1px solid #e2e8f0', paddingTop: '1rem' }}>
-        <button type="button" className="btn-secundario" onClick={onCancelar} style={{ cursor: 'pointer' }}>
-          ✕ Cancelar
+      <div className="modal-acciones">
+        <button type="button" className="btn-secundario" onClick={onCancelar}>
+          × Cancelar
         </button>
         <button
           type="submit"
           className="btn-primario"
           disabled={enviando || lineasPendientes.length === 0}
-          style={{ cursor: 'pointer' }}
         >
-          {enviando ? 'Procesando despacho...' : '📦 Confirmar Despacho'}
+          {enviando ? 'Procesando despacho...' : ' Confirmar Despacho'}
         </button>
       </div>
     </form>

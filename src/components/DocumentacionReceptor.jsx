@@ -135,16 +135,16 @@ export default function DocumentacionReceptor({ exenta, onChange, valoresInicial
   }
 
   return (
-    <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '10px', border: '1px solid #cbd5e1', marginTop: '1.25rem' }}>
-      <label style={{ display: 'block', marginBottom: '0.45rem', fontWeight: 700, fontSize: '0.85rem', color: '#1e293b' }}>
-        👤 Documentación de quien recibe (obligatoria)
+    <div className="documento-receptor">
+      <label className="form-label form-label--titulo">
+         Documentación de quien recibe (obligatoria)
       </label>
       {exenta ? (
-        <div style={{ background: '#eff6ff', padding: '0.7rem 0.85rem', borderRadius: '8px', border: '1px solid #bfdbfe', fontSize: '0.82rem', color: '#1e40af', marginBottom: '0.85rem' }}>
-          🚚 Envío a municipio/vereda: registre la identidad de quien recibe. La <strong>firma</strong> y la <strong>huella</strong> quedarán <strong>pendientes</strong>.
+        <div className="aviso-receptor aviso-receptor--informativo">
+           Envío a municipio/vereda: registre la identidad de quien recibe. La <strong>firma</strong> y la <strong>huella</strong> quedarán <strong>pendientes</strong>.
         </div>
       ) : (
-        <p style={{ fontSize: '0.78rem', color: '#475569', margin: '0 0 0.85rem 0' }}>
+        <p className="aviso-receptor">
           Si la persona ya está registrada, al escribir su identificación se llenarán automáticamente sus datos, firma y huella.
         </p>
       )}
@@ -152,7 +152,7 @@ export default function DocumentacionReceptor({ exenta, onChange, valoresInicial
       <div className="form-grid">
         <div>
           <label>Documento de identificación (C.C. / T.I.)</label>
-          <div style={{ position: 'relative' }}>
+          <div className="campo-con-estado">
             <input
               placeholder="Número de cédula..."
               value={documento}
@@ -160,14 +160,14 @@ export default function DocumentacionReceptor({ exenta, onChange, valoresInicial
               required
             />
             {buscandoReceptor && (
-              <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.75rem', color: '#64748b' }}>
-                🔍 Buscando...
+              <span className="estado-busqueda">
+                 Buscando...
               </span>
             )}
           </div>
           {receptorGuardado && (
-            <span style={{ fontSize: '0.75rem', color: '#15803d', fontWeight: 600, display: 'block', marginTop: '0.2rem' }}>
-              ✓ Persona registrada en el sistema — datos autocompletados
+            <span className="receptor-autocompletado">
+               Persona registrada en el sistema — datos autocompletados
             </span>
           )}
         </div>
@@ -183,7 +183,7 @@ export default function DocumentacionReceptor({ exenta, onChange, valoresInicial
         </div>
       </div>
 
-      <div className="form-grid" style={{ marginTop: '0.75rem' }}>
+      <div className="form-grid form-grid--separada">
         <div>
           <label>Número de teléfono del receptor</label>
           <input
@@ -205,40 +205,39 @@ export default function DocumentacionReceptor({ exenta, onChange, valoresInicial
       </div>
 
       {/* DOCUMENTO DE IDENTIDAD ADJUNTO */}
-      <div style={{ background: '#ffffff', padding: '0.85rem', borderRadius: '8px', border: '1px solid #e2e8f0', marginTop: '1rem' }}>
-        <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: 700, fontSize: '0.82rem', color: '#1e293b' }}>
-          📄 Documento de Identidad del Receptor (Foto Cédula / PDF):
+      <div className="documento-adjunto">
+        <label className="form-label form-label--titulo">
+           Documento de Identidad del Receptor (Foto Cédula / PDF):
         </label>
 
         {adjunto ? (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#ffffff', padding: '0.6rem 0.85rem', borderRadius: '6px', border: '1px solid #93c5fd' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-              <span style={{ fontSize: '1.4rem' }}>{adjunto.tipo === 'PDF' ? '📑' : '🖼️'}</span>
+          <div className="archivo-adjunto">
+            <div className="archivo-adjunto-datos">
+              <span className="archivo-adjunto-icono" aria-hidden="true">{adjunto.tipo === 'PDF' ? 'PDF' : 'Imagen'}</span>
               <div>
-                <strong style={{ fontSize: '0.85rem', color: '#1e40af' }}>{adjunto.nombre}</strong>
-                <span style={{ fontSize: '0.75rem', color: '#64748b', display: 'block' }}>
+                <strong className="archivo-adjunto-nombre">{adjunto.nombre}</strong>
+                <span className="archivo-adjunto-tipo">
                   {adjunto.tipo === 'PDF' ? 'Documento PDF adjunto' : 'Imagen de documento adjunta'}
                 </span>
               </div>
             </div>
             <button
               type="button"
-              className="btn-clear-search"
-              style={{ color: '#dc2626', fontSize: '0.85rem', cursor: 'pointer' }}
+              className="btn-quitar-adjunto"
               onClick={() => setAdjunto(null)}
             >
-              ✕ Quitar
+              × Quitar
             </button>
           </div>
         ) : (
           <div>
             <input
               type="file"
+              className="entrada-archivo"
               accept="image/*,application/pdf"
               onChange={handleCargarArchivo}
-              style={{ fontSize: '0.82rem' }}
             />
-            <span style={{ fontSize: '0.74rem', color: '#64748b', display: 'block', marginTop: '0.25rem' }}>
+            <span className="entrada-archivo-ayuda">
               Puede subir una foto (JPG, PNG) o PDF del documento de identidad. Quedará guardado para futuras órdenes.
             </span>
           </div>
@@ -248,31 +247,29 @@ export default function DocumentacionReceptor({ exenta, onChange, valoresInicial
       {!exenta && (
       <>
       {/* FIRMA DIGITAL */}
-      <div style={{ marginTop: '1rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-          <label style={{ fontWeight: 600, fontSize: '0.82rem', margin: 0 }}>
+      <div className="bloque-biometrico">
+        <div className="cabecera-bloque">
+          <label>
             Firma digital del receptor:
           </label>
-          <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+          <div className="grupo-mini-acciones">
             {firma && (
               <button
                 type="button"
-                className="filter-chip"
-                style={{ padding: '0.2rem 0.5rem', fontSize: '0.74rem', color: '#dc2626', borderColor: '#fca5a5' }}
+                className="filter-chip filter-chip--compacto filter-chip--peligro"
                 onClick={() => {
                   setFirma(null);
                   setUsarFirmaGuardada(false);
                 }}
                 title="Quitar firma actual"
               >
-                🗑️ Quitar firma
+                 Quitar firma
               </button>
             )}
             {receptorGuardado?.firma_guardada && (
               <button
                 type="button"
-                className="filter-chip chip-activo"
-                style={{ padding: '0.2rem 0.5rem', fontSize: '0.74rem' }}
+                className="filter-chip chip-activo filter-chip--compacto"
                 onClick={() => {
                   if (usarFirmaGuardada) {
                     setUsarFirmaGuardada(false);
@@ -283,59 +280,56 @@ export default function DocumentacionReceptor({ exenta, onChange, valoresInicial
                   }
                 }}
               >
-                {usarFirmaGuardada ? '✏️ Dibujar firma libre' : '📋 Usar firma guardada'}
+                {usarFirmaGuardada ? ' Dibujar firma libre' : ' Usar firma guardada'}
               </button>
             )}
           </div>
         </div>
 
         {usarFirmaGuardada && receptorGuardado?.firma_guardada ? (
-          <div style={{ background: '#ffffff', padding: '0.75rem', borderRadius: '8px', border: '1px solid #10b981', textAlign: 'center' }}>
+          <figure className="firma-guardada">
             <img
               src={receptorGuardado.firma_guardada}
               alt="Firma guardada"
-              style={{ maxHeight: '100px', maxWidth: '100%', objectFit: 'contain' }}
             />
-            <span style={{ display: 'block', fontSize: '0.76rem', color: '#047857', marginTop: '0.3rem' }}>
-              ✓ Usando firma guardada previamente de esta persona.
-            </span>
-          </div>
+            <figcaption>
+               Usando firma guardada previamente de esta persona.
+            </figcaption>
+          </figure>
         ) : (
           <SignaturePad onChange={setFirma} valorInicial={valoresIniciales?.firma || null} />
         )}
       </div>
 
       {/* HUELLA DACTILAR */}
-      <div style={{ marginTop: '1rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-          <label style={{ fontWeight: 600, fontSize: '0.82rem', margin: 0 }}>
+      <div className="bloque-biometrico">
+        <div className="cabecera-bloque">
+          <label>
             Huella dactilar biométrica:
           </label>
           {huella && (
             <button
               type="button"
-              className="filter-chip"
-              style={{ padding: '0.2rem 0.5rem', fontSize: '0.74rem', color: '#dc2626', borderColor: '#fca5a5' }}
+              className="filter-chip filter-chip--compacto filter-chip--peligro"
               onClick={() => setHuella(false)}
               title="Remover registro de huella"
             >
-              ✕ Quitar huella
+              × Quitar huella
             </button>
           )}
         </div>
         <div className="huella-row">
           <button
             type="button"
-            className={`btn-secundario ${huella ? 'btn-verde' : ''}`}
+            className={`btn-secundario btn-captura ${huella ? 'btn-verde' : ''}`}
             disabled={capturandoHuella}
             onClick={handleCapturarHuella}
-            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
           >
-            {huella ? '✅ Huella registrada (Clic para recapturar)' : capturandoHuella ? 'Capturando biométrico...' : '👆 Capturar Huella'}
+            {huella ? ' Huella registrada (Clic para recapturar)' : capturandoHuella ? 'Capturando biométrico...' : 'Capturar huella'}
           </button>
           {receptorGuardado?.huella_guardada ? (
-            <span style={{ fontSize: '0.78rem', color: '#15803d', fontWeight: 600 }}>
-              ✓ Huella biométrica verificada en sistema
+            <span className="huella-verificada">
+               Huella biométrica verificada en sistema
             </span>
           ) : (
             <span className="page-scope">Sin lector físico conectado: captura simulada.</span>
@@ -346,14 +340,14 @@ export default function DocumentacionReceptor({ exenta, onChange, valoresInicial
       )}
 
       {exenta && (
-        <div style={{ background: '#fffbeb', padding: '0.7rem 0.85rem', borderRadius: '8px', border: '1px solid #fde68a', fontSize: '0.82rem', color: '#92400e', marginTop: '1rem' }}>
+        <div className="aviso-receptor aviso-receptor--pendiente">
           ⏳ Firma y huella quedan <strong>pendientes</strong> por ser salida a municipio/vereda. Se registrarán cuando se complete la entrega.
         </div>
       )}
 
       {faltantes.length > 0 && (
-        <div className="aviso-incompleta" style={{ marginTop: '1rem' }}>
-          ⚠️ La orden no podrá generarse sin: {faltantes.join(', ')}.
+        <div className="aviso-incompleta aviso-incompleta--separada">
+           La orden no podrá generarse sin: {faltantes.join(', ')}.
         </div>
       )}
     </div>

@@ -39,6 +39,16 @@ function crear(usuarioSesion, data) {
     throw new ValidationError(`Stock insuficiente en el lote (${lote.cantidad_total_unidades} unidades disponibles, solicitadas: ${cantidadTotal}).`);
   }
 
+  // Anti-duplicado: un solo PENDIENTE por lote (doble-clic/reintento). Sin esto,
+  // dos solicitudes del mismo lote podían aprobarse y descontar dos veces.
+  // (Las bajas ya tienen índice parcial 024; intercambios se controla aquí.)
+  const pendienteMismoLote = getDb().prepare(`
+    SELECT id FROM solicitudes_intercambio WHERE lote_id = ? AND estado = 'PENDIENTE' LIMIT 1
+  `).get(lote.id);
+  if (pendienteMismoLote) {
+    throw new ValidationError('Ya existe una solicitud pendiente para este lote. Resuélvala antes de crear otra.');
+  }
+
   const medicamento = medicamentoRepository.findById(lote.medicamento_id);
   const unidadesPorCaja = medicamento?.unidades_por_caja || 1;
   const cajas = Number(data.cantidad_cajas ?? Math.floor(cantidadTotal / unidadesPorCaja));
@@ -62,35 +72,42 @@ function crear(usuarioSesion, data) {
     }
   }
 
-  const nuevaSolicitud = solicitudRepository.create({
-    tipo: esIntercambio ? 'INTERCAMBIO' : 'ENVIO',
-    sede_origen_id: lote.sede_id,
-    sede_destino_id: Number(data.sede_destino_id),
-    lote_id: lote.id,
-    medicamento_id: lote.medicamento_id,
-    cantidad_cajas: cajas,
-    cantidad_unidades: unidadesSueltas,
-    cantidad_total_unidades: cantidadTotal,
-    sede_recibe_id: esIntercambio ? Number(data.sede_recibe_id) : null,
-    lote_recibe_id: esIntercambio ? loteRecibe.id : null,
-    medicamento_recibe_id: esIntercambio ? loteRecibe.medicamento_id : null,
-    cantidad_recibe_total_unidades: esIntercambio ? cantidadRecibeTotal : null,
-    motivo: data.motivo.trim(),
-    usuario_solicitante_id: usuarioSesion.id
+  // Crear + auditoría en una sola transacción: si la auditoría falla no queda
+  // solicitud sin rastro (antes quedaba huérfana).
+  const dbTx = getDb();
+  const txCrear = dbTx.transaction(() => {
+    const nueva = solicitudRepository.create({
+      tipo: esIntercambio ? 'INTERCAMBIO' : 'ENVIO',
+      sede_origen_id: lote.sede_id,
+      sede_destino_id: Number(data.sede_destino_id),
+      lote_id: lote.id,
+      medicamento_id: lote.medicamento_id,
+      cantidad_cajas: cajas,
+      cantidad_unidades: unidadesSueltas,
+      cantidad_total_unidades: cantidadTotal,
+      sede_recibe_id: esIntercambio ? Number(data.sede_recibe_id) : null,
+      lote_recibe_id: esIntercambio ? loteRecibe.id : null,
+      medicamento_recibe_id: esIntercambio ? loteRecibe.medicamento_id : null,
+      cantidad_recibe_total_unidades: esIntercambio ? cantidadRecibeTotal : null,
+      motivo: data.motivo.trim(),
+      usuario_solicitante_id: usuarioSesion.id
+    });
+
+    auditoriaRepository.registrar({
+      usuario_id: usuarioSesion.id,
+      rol: usuarioSesion.rol_nombre,
+      sede_id: lote.sede_id,
+      accion: AUDIT_ACTIONS.SOLICITAR_INTERCAMBIO,
+      modulo: 'INTERCAMBIOS',
+      registro_afectado: `solicitud:${nueva.id}`,
+      resultado: 'EXITO',
+      valores_nuevos: nueva
+    });
+
+    return nueva;
   });
 
-  auditoriaRepository.registrar({
-    usuario_id: usuarioSesion.id,
-    rol: usuarioSesion.rol_nombre,
-    sede_id: lote.sede_id,
-    accion: AUDIT_ACTIONS.SOLICITAR_INTERCAMBIO,
-    modulo: 'INTERCAMBIOS',
-    registro_afectado: `solicitud:${nuevaSolicitud.id}`,
-    resultado: 'EXITO',
-    valores_nuevos: nuevaSolicitud
-  });
-
-  return nuevaSolicitud;
+  return txCrear();
 }
 
 function resolver(usuarioSesion, id, { decision, observacion }) {
@@ -125,25 +142,31 @@ function resolver(usuarioSesion, id, { decision, observacion }) {
   const db = getDb();
 
   if (decision === 'RECHAZADA') {
-    const actualizada = solicitudRepository.resolver(id, {
-      estado: 'RECHAZADA',
-      usuario_resolutor_id: usuarioSesion.id,
-      observacion_resolucion: observacion?.trim() || 'Rechazada'
+    // Resolver + auditoría en una sola transacción (antes el rechazo quedaba
+    // sin rastro si la auditoría fallaba después del UPDATE).
+    const txRechazo = db.transaction(() => {
+      const actualizada = solicitudRepository.resolver(id, {
+        estado: 'RECHAZADA',
+        usuario_resolutor_id: usuarioSesion.id,
+        observacion_resolucion: observacion?.trim() || 'Rechazada'
+      });
+
+      auditoriaRepository.registrar({
+        usuario_id: usuarioSesion.id,
+        rol: usuarioSesion.rol_nombre,
+        sede_id: solicitud.sede_origen_id,
+        accion: AUDIT_ACTIONS.RECHAZAR_INTERCAMBIO,
+        modulo: 'INTERCAMBIOS',
+        registro_afectado: `solicitud:${id}`,
+        resultado: 'EXITO',
+        valores_anteriores: { estado: 'PENDIENTE' },
+        valores_nuevos: { estado: 'RECHAZADA', observacion: observacion?.trim() }
+      });
+
+      return actualizada;
     });
 
-    auditoriaRepository.registrar({
-      usuario_id: usuarioSesion.id,
-      rol: usuarioSesion.rol_nombre,
-      sede_id: solicitud.sede_origen_id,
-      accion: AUDIT_ACTIONS.RECHAZAR_INTERCAMBIO,
-      modulo: 'INTERCAMBIOS',
-      registro_afectado: `solicitud:${id}`,
-      resultado: 'EXITO',
-      valores_anteriores: { estado: 'PENDIENTE' },
-      valores_nuevos: { estado: 'RECHAZADA', observacion: observacion?.trim() }
-    });
-
-    return actualizada;
+    return txRechazo();
   }
 
   // Si decision === 'APROBADA': ejecutar traspaso físico de inventario en una transacción

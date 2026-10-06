@@ -593,10 +593,10 @@ function buscarPorProducto(texto, limite = 20) {
   const like = `%${textoEscapado}%`;
   const startsWith = `${textoEscapado}%`;
   return db.prepare(`
-    SELECT * FROM catalogo_cum 
-    WHERE producto LIKE ? OR principio_activo LIKE ? OR registro_sanitario LIKE ?
-    ORDER BY 
-      CASE WHEN producto LIKE ? THEN 0 ELSE 1 END,
+    SELECT * FROM catalogo_cum
+    WHERE producto LIKE ? ESCAPE '\\' OR principio_activo LIKE ? ESCAPE '\\' OR registro_sanitario LIKE ? ESCAPE '\\'
+    ORDER BY
+      CASE WHEN producto LIKE ? ESCAPE '\\' THEN 0 ELSE 1 END,
       producto
     LIMIT ?
   `).all(like, like, like, startsWith, limite);

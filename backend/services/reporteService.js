@@ -8,6 +8,40 @@ const permisoService = require('./permisoService');
 const conciliacionService = require('./conciliacionService');
 const loteService = require('./loteService');
 
+// Estado real de sincronización: lee cloud_sync_state.json en vez de números
+// hardcodeados (antes `pendientes: 2, estado: ACTIVA` fijos). Si no hay estado,
+// se reporta como NO_CONFIGURADA en lugar de inventar cifras.
+function leerEstadoSincronizacion(nombreSede, operacionesRegistradas) {
+  const fs = require('fs');
+  const path = require('path');
+  try {
+    const { resolveDbPath } = require('../database/connection');
+    const ruta = path.join(path.dirname(resolveDbPath()), 'cloud_sync_state.json');
+    if (fs.existsSync(ruta)) {
+      const state = JSON.parse(fs.readFileSync(ruta, 'utf8'));
+      const subidos = Number(state.subidos || 0);
+      return {
+        sede_nombre: nombreSede,
+        operaciones_registradas: operacionesRegistradas,
+        sincronizadas: subidos,
+        pendientes: Math.max(0, operacionesRegistradas - subidos),
+        estado: state.last_sync_timestamp ? 'ACTIVA' : 'SIN_SINCRONIZAR',
+        ultima_sincronizacion: state.last_sync_timestamp || null,
+        direccion: state.last_sync_direction || null
+      };
+    }
+  } catch (_) { /* cae al valor por defecto */ }
+  return {
+    sede_nombre: nombreSede,
+    operaciones_registradas: operacionesRegistradas,
+    sincronizadas: 0,
+    pendientes: operacionesRegistradas,
+    estado: 'NO_CONFIGURADA',
+    ultima_sincronizacion: null,
+    direccion: null
+  };
+}
+
 function resolverNombreSede(sedeEfectiva, usuarioSesion) {
   if (sedeEfectiva) {
     const sede = sedeRepository.findById(Number(sedeEfectiva));
@@ -71,30 +105,51 @@ function calcularRango({ tipoPeriodo = 'HOY', fecha, fechaInicio, fechaFin } = {
   return { inicio: inicioStr, fin: finStr, etiquetaPeriodo };
 }
 
+// Las marcas `fecha`/`fecha_creacion` se guardan con datetime('now') = UTC,
+// pero el rango del reporte se pide en día local (COT, UTC-5 sin DST: todas
+// las sedes son Colombia). Comparar UTC contra límites locales perdía los
+// movimientos de la noche (19:00-23:59 COT = 00:00-04:59 UTC del día
+// siguiente): el reporte de "hoy" salía vacío de noche. El rango UTC del día
+// local [00:00, 23:59] COT es [05:00, 04:59+1d] UTC, es decir, límites +5h.
+const COT_UTC_OFFSET_HORAS = 5;
+const COT_DESPLAZAMIENTO_ISO = `-0${COT_UTC_OFFSET_HORAS}:00`;
+
+function aRangoUTC(inicioLocal, finLocal) {
+  const desplazar = (s) => {
+    const d = new Date(s.replace(' ', 'T') + COT_DESPLAZAMIENTO_ISO);
+    const u = new Date(d.getTime());
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${u.getUTCFullYear()}-${pad(u.getUTCMonth() + 1)}-${pad(u.getUTCDate())} ${pad(u.getUTCHours())}:${pad(u.getUTCMinutes())}:${pad(u.getUTCSeconds())}`;
+  };
+  return { inicioUTC: desplazar(inicioLocal), finUTC: desplazar(finLocal) };
+}
+
 function reporteDiario(usuarioSesion, filtros = {}) {
   const sedeEfectiva = permisoService.resolverSedeEfectiva(usuarioSesion, filtros.sedeId);
   const nombreSede = resolverNombreSede(sedeEfectiva, usuarioSesion);
   const { inicio, fin, etiquetaPeriodo } = calcularRango(filtros);
+  const { inicioUTC, finUTC } = aRangoUTC(inicio, fin);
 
-  // 1. Movimientos en el periodo
+  // 1. Movimientos en el periodo (rango UTC: las fechas se guardan en UTC)
   const entradas = movimientoRepository.findByRango({
-    sedeId: sedeEfectiva, fechaInicio: inicio, fechaFin: fin, tipo: 'ENTRADA'
+    sedeId: sedeEfectiva, fechaInicio: inicioUTC, fechaFin: finUTC, tipo: 'ENTRADA'
   });
   const salidasOrden = movimientoRepository.findByRango({
-    sedeId: sedeEfectiva, fechaInicio: inicio, fechaFin: fin, tipo: 'SALIDA_ORDEN'
+    sedeId: sedeEfectiva, fechaInicio: inicioUTC, fechaFin: finUTC, tipo: 'SALIDA_ORDEN'
   });
   const ajustesPeriodo = movimientoRepository.findByRango({
-    sedeId: sedeEfectiva, fechaInicio: inicio, fechaFin: fin, tipo: 'AJUSTE'
+    sedeId: sedeEfectiva, fechaInicio: inicioUTC, fechaFin: finUTC, tipo: 'AJUSTE'
   });
 
   // Salidas sin orden: ajustes a la baja en el periodo
   const salidasSinOrden = ajustesPeriodo.filter((a) => a.cantidad < 0);
   const mermasAutorizadas = 0; // O ajustes autorizados por eliminación
 
-  // 2. Entregas / documentación en el periodo (se captura al GENERAR la orden)
+  // 2. Entregas / documentación en el periodo (se captura al GENERAR la orden).
+  // fecha_creacion también es UTC: se compara contra el rango UTC.
   const ordenesConDocs = ordenRepository.findAll({ sedeId: sedeEfectiva });
   const esExenta = (o) => o.tipo_destino === 'MUNICIPIO_VEREDA';
-  const entregasPeriodo = ordenesConDocs.filter((o) => o.estado !== 'CANCELADA' && o.fecha_creacion >= inicio && o.fecha_creacion <= fin);
+  const entregasPeriodo = ordenesConDocs.filter((o) => o.estado !== 'CANCELADA' && o.fecha_creacion >= inicioUTC && o.fecha_creacion <= finUTC);
   const entregasIncompletas = entregasPeriodo.filter((o) => !esExenta(o) && o.documentacion_completa === 0);
   const entregasLocales = entregasPeriodo.filter((o) => !esExenta(o));
   const entregasSinFirma = entregasLocales.filter((o) => !o.firma_data).length;
@@ -107,16 +162,16 @@ function reporteDiario(usuarioSesion, filtros = {}) {
   const proximosAVencer = lotesConEstado.filter((l) => l.estado === 'PROXIMO_VENCER');
   const vencidos = lotesConEstado.filter((l) => l.estado === 'VENCIDO');
 
-  // 4. Solicitudes de eliminación
+  // 4. Solicitudes de eliminación (fecha_solicitud UTC: rango UTC)
   const todasSolicitudes = solicitudEliminacionRepository.findAll({ sedeId: sedeEfectiva });
-  const solicitudesPeriodo = todasSolicitudes.filter((s) => s.fecha_solicitud >= inicio && s.fecha_solicitud <= fin);
+  const solicitudesPeriodo = todasSolicitudes.filter((s) => s.fecha_solicitud >= inicioUTC && s.fecha_solicitud <= finUTC);
   const solicitudesPendientes = todasSolicitudes.filter((s) => s.estado === 'PENDIENTE');
 
-  // 5. Auditoría del periodo
+  // 5. Auditoría del periodo (fecha UTC: rango UTC)
   const eventosAuditoria = auditoriaRepository.findAll({
     sedeId: sedeEfectiva,
-    fechaInicio: inicio,
-    fechaFin: fin,
+    fechaInicio: inicioUTC,
+    fechaFin: finUTC,
     limite: 100
   });
 
@@ -347,13 +402,7 @@ function reporteDiario(usuarioSesion, filtros = {}) {
     conciliacion_detalle: conciliacion.detalle,
     irregularidades,
 
-    sincronizacion: {
-      sede_nombre: nombreSede,
-      operaciones_registradas: eventosAuditoria.length + entradas.length + salidasOrden.length,
-      sincronizadas: Math.max(0, (eventosAuditoria.length + entradas.length + salidasOrden.length) - 2),
-      pendientes: 2,
-      estado: 'ACTIVA'
-    },
+    sincronizacion: leerEstadoSincronizacion(nombreSede, eventosAuditoria.length + entradas.length + salidasOrden.length),
 
     auditoria: eventosAuditoria.map((a) => ({
       id: a.id,

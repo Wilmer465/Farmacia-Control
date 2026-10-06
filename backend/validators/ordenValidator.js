@@ -9,8 +9,12 @@ function validarItemsOrden(items) {
   items.forEach((item, idx) => {
     if (!item.medicamento_id) errores.push(`Línea ${idx + 1}: falta el medicamento.`);
 
+    // Los servicios aceptan tres formas: desglose (cajas/sueltas), unidades
+    // sueltas, o total directo. El validador debe aceptar las tres en vez de
+    // solo el desglose (antes `cantidad_total_solicitada: 10000` sola fallaba
+    // aquí aunque el servicio la soportaba).
     const cajas = Number(item.cantidad_cajas_solicitada ?? 0);
-    const sueltas = Number(item.cantidad_unidades_solicitada ?? 0);
+    const sueltas = Number(item.cantidad_unidades_solicitada ?? item.cantidad_total_solicitada ?? 0);
 
     if (!Number.isInteger(cajas) || cajas < 0) errores.push(`Línea ${idx + 1}: cajas inválidas.`);
     if (!Number.isInteger(sueltas) || sueltas < 0) errores.push(`Línea ${idx + 1}: unidades sueltas inválidas.`);

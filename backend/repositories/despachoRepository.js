@@ -49,18 +49,22 @@ function findDetalleByDespachoId(despachoId) {
   `).all(despachoId);
 }
 
-// Obtiene detalles de múltiples despachos en una sola query (evita N+1)
+// Obtiene detalles de múltiples despachos en una sola query (evita N+1).
+// Acepta array o id único; cualquier otro tipo se normaliza para no romper
+// la query con placeholders por carácter (bug anterior: se pasaba "1,2").
 function findDetalleByDespachoIds(despachoIds) {
-  if (!despachoIds || despachoIds.length === 0) return [];
+  const lista = Array.isArray(despachoIds) ? despachoIds : (despachoIds == null ? [] : [despachoIds]);
+  const ids = lista.map((v) => Number(v)).filter((v) => Number.isInteger(v) && v > 0);
+  if (ids.length === 0) return [];
   const db = getDb();
-  const placeholders = despachoIds.map(() => '?').join(',');
+  const placeholders = ids.map(() => '?').join(',');
   return db.prepare(`
     SELECT dd.*, m.nombre AS medicamento_nombre, m.codigo AS medicamento_codigo, l.numero_lote
     FROM despacho_detalle dd
     JOIN medicamentos m ON m.id = dd.medicamento_id
     JOIN lotes l ON l.id = dd.lote_id
     WHERE dd.despacho_id IN (${placeholders})
-  `).all(...despachoIds);
+  `).all(...ids);
 }
 
 const auditoriaRepository = require('./auditoriaRepository');

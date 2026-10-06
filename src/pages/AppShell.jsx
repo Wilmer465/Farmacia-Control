@@ -20,16 +20,9 @@ const Recepcion     = lazy(() => import('./Recepcion.jsx'));
 // ─── Spinner de carga mientras el módulo se descarga ──────────────────────
 const CargandoModulo = memo(function CargandoModulo() {
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      height: '60vh', flexDirection: 'column', gap: '1rem', color: '#64748b'
-    }}>
-      <div style={{
-        width: '36px', height: '36px', border: '3px solid #e2e8f0',
-        borderTop: '3px solid #2563eb', borderRadius: '50%',
-        animation: 'spin 0.7s linear infinite'
-      }} />
-      <span style={{ fontSize: '0.85rem' }}>Cargando módulo...</span>
+    <div className="loading-state cargando-modulo">
+      <div className="spinner spinner--rapido" />
+      <span className="texto-cargando">Cargando módulo...</span>
     </div>
   );
 });
@@ -283,7 +276,6 @@ export default function AppShell({ usuario, onLogout }) {
       <aside className={`sidebar ${sidebarAbierto ? 'abierto' : 'cerrado'}`}>
         <div className="sidebar-header">
           <div className="sidebar-brand">
-            <span className="brand-logo">💊</span>
             <div className="brand-texts">
               <span className="brand-title">Farmacia Control</span>
               <span className="brand-subtitle">Gestión &amp; Trazabilidad</span>
@@ -328,7 +320,7 @@ export default function AppShell({ usuario, onLogout }) {
                 </select>
               ) : (
                 <span className="user-sede" title={usuario.sede_nombre}>
-                  📍 {usuario.sede_nombre}
+                  {usuario.sede_nombre}
                 </span>
               )}
             </div>
@@ -383,7 +375,7 @@ export default function AppShell({ usuario, onLogout }) {
           </div>
           <div className="topbar-right">
             <span className="topbar-sede-badge">
-              📍 {nombreSedeContexto}
+              {nombreSedeContexto}
             </span>
           </div>
         </header>

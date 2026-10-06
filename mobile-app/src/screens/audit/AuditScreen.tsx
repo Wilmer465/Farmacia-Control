@@ -48,9 +48,9 @@ export default function AuditScreen() {
               </View>
             </View>
             <View style={styles.itemDetails}>
-              <Text style={styles.itemDetail}>📦 {item.modulo}</Text>
-              <Text style={styles.itemDetail}>👤 {item.usuario}</Text>
-              <Text style={styles.itemDetail}>📅 {item.fecha}</Text>
+              <Text style={styles.itemDetail}>{item.modulo}</Text>
+              <Text style={styles.itemDetail}>{item.usuario}</Text>
+              <Text style={styles.itemDetail}>{item.fecha}</Text>
             </View>
             <Text style={styles.itemDetalle}>{item.detalle}</Text>
           </TouchableOpacity>

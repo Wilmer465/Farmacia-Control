@@ -74,7 +74,9 @@ function crear(usuarioSesion, {
   const receptorDocumento = (receptor_documento || '').trim() || null;
   const receptorTelefono = (receptor_telefono || '').trim() || null;
   const receptorCorreo = (receptor_correo || '').trim() || null;
-  const firma = firma_data || null;
+  // La firma debe ser un trazo real del pad, no cualquier string truthy.
+  const { esFirmaValida } = require('../validators/firmaValidator');
+  const firma = esFirmaValida(firma_data) ? firma_data : null;
   const huella = Boolean(huella_registrada);
   const numeroFactura = numero_factura || null;
   const facturaElectronica = factura_electronica || null;
@@ -117,37 +119,41 @@ function crear(usuarioSesion, {
     };
   });
 
-  // Guardar/actualizar en el catálogo de receptores para reutilización futura (autocompletado).
-  if (receptorDocumento && receptorNombre) {
-    try {
-      const datosReceptor = {
-        documento: receptorDocumento,
-        nombre: receptorNombre,
-        telefono: receptorTelefono,
-        correo_electronico: receptorCorreo,
-        documento_adjunto_nombre,
-        documento_adjunto_data,
-        documento_adjunto_tipo
-      };
-      if (!esMunicipioVereda) {
-        datosReceptor.firma_guardada = firma;
-        datosReceptor.huella_guardada = huella ? 1 : 0;
-      }
-      const receptorExistente = receptorService.buscarPorDocumento(receptorDocumento);
-      const medicamentosExistentes = medicamentosDesdeDb(receptorExistente?.medicamentos_uso);
-      const medicamentosOrden = itemsPreparados.map((item) => ({
-        medicamento_id: item.medicamento_id,
-        medicamento_codigo: item.medicamento_codigo,
-        medicamento_nombre: item.medicamento_nombre,
-        cantidad_unidades: item.cantidad_total_solicitada,
-        origen: 'ORDEN'
-      }));
-      datosReceptor.medicamentos_uso = mezclarMedicamentosUsuario(medicamentosExistentes, medicamentosOrden);
-      receptorService.guardarOActualizar(datosReceptor);
-    } catch (err) {
-      console.warn('[ordenService] Error no bloqueante al guardar receptor:', err.message);
+  // El receptor solo se persiste DESPUÉS de crear la orden con éxito: antes
+  // quedaba huérfano si la transacción de la orden fallaba (p. ej.
+  // STOCK_INSUFICIENTE).
+  const datosReceptor = (receptorDocumento && receptorNombre) ? (() => {
+    const d = {
+      documento: receptorDocumento,
+      nombre: receptorNombre,
+      telefono: receptorTelefono,
+      correo_electronico: receptorCorreo,
+      documento_adjunto_nombre,
+      documento_adjunto_data,
+      documento_adjunto_tipo
+    };
+    if (!esMunicipioVereda) {
+      d.firma_guardada = firma;
+      d.huella_guardada = huella ? 1 : 0;
     }
-  }
+    const receptorExistente = (() => {
+      try {
+        return receptorService.buscarPorDocumento(receptorDocumento);
+      } catch (_) {
+        return null;
+      }
+    })();
+    const medicamentosExistentes = medicamentosDesdeDb(receptorExistente?.medicamentos_uso);
+    const medicamentosOrden = itemsPreparados.map((item) => ({
+      medicamento_id: item.medicamento_id,
+      medicamento_codigo: item.medicamento_codigo,
+      medicamento_nombre: item.medicamento_nombre,
+      cantidad_unidades: item.cantidad_total_solicitada,
+      origen: 'ORDEN'
+    }));
+    d.medicamentos_uso = mezclarMedicamentosUsuario(medicamentosExistentes, medicamentosOrden);
+    return d;
+  })() : null;
 
   let orden;
   try {
@@ -181,6 +187,14 @@ function crear(usuarioSesion, {
       throw new ValidationError(`El medicamento "${med?.nombre || medId}" no tiene stock disponible en su sede.`);
     }
     throw err;
+  }
+
+  if (datosReceptor) {
+    try {
+      receptorService.guardarOActualizar(datosReceptor);
+    } catch (err) {
+      console.warn('[ordenService] Error no bloqueante al guardar receptor:', err.message);
+    }
   }
 
   auditoriaRepository.registrar({
@@ -230,7 +244,7 @@ function cancelar(usuarioSesion, id, { motivo } = {}) {
 }
 
 // Completa o corrige después la documentación de quien recibe de una orden ya creada.
-// Solo aplica a órdenes no cerradas (PENDIENTE o PARCIAL); las COMPLETADA/CANCELADA no se modifican.
+// Solo aplica a órdenes abiertas (PENDIENTE o PARCIAL); COMPLETADA/CANCELADA no se modifican.
 function actualizarDocumentacion(usuarioSesion, id, {
   receptor_nombre, receptor_documento, receptor_telefono, receptor_correo,
   firma_data, huella_registrada,
@@ -245,8 +259,10 @@ function actualizarDocumentacion(usuarioSesion, id, {
   if (!orden) throw new ValidationError('La orden no existe.');
   permisoService.verificarPerteneceASede(usuarioSesion, orden.sede_id);
 
-  // Las órdenes PENDIENTE, PARCIAL o COMPLETADA pueden corregirse; CANCELADA no.
-  if (!['PENDIENTE', 'PARCIAL', 'COMPLETADA'].includes(orden.estado)) {
+  // Solo órdenes abiertas (PENDIENTE/PARCIAL): una COMPLETADA es trazabilidad
+  // cerrada y mutarla reescribe historia sin reabrir estado ni auditoría de
+  // despacho. CANCELADA tampoco.
+  if (!['PENDIENTE', 'PARCIAL'].includes(orden.estado)) {
     throw new ValidationError(`No se puede modificar la documentación de una orden en estado ${orden.estado}.`);
   }
 
@@ -255,7 +271,8 @@ function actualizarDocumentacion(usuarioSesion, id, {
   const documento = (receptor_documento || '').trim() || null;
   const telefono = (receptor_telefono || '').trim() || null;
   const correo = (receptor_correo || '').trim() || null;
-  const firma = firma_data || null;
+  const { esFirmaValida: esFirmaValidaDoc } = require('../validators/firmaValidator');
+  const firma = esFirmaValidaDoc(firma_data) ? firma_data : null;
   const huella = Boolean(huella_registrada);
 
   const faltantes = [];
@@ -314,7 +331,7 @@ function actualizarDocumentacion(usuarioSesion, id, {
     usuario_id: usuarioSesion.id,
     rol: usuarioSesion.rol_nombre,
     sede_id: orden.sede_id,
-    accion: AUDIT_ACTIONS.CREAR_ORDEN,
+    accion: AUDIT_ACTIONS.ACTUALIZAR_DOCUMENTACION_ORDEN,
     modulo: 'ORDENES',
     registro_afectado: `orden:${id}`,
     resultado: documentacionCompleta ? 'EXITO' : 'DOCUMENTACION_INCOMPLETA',

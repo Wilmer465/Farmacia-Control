@@ -221,14 +221,14 @@ export default function Reportes({ usuario, sedeActiva }) {
             onClick={cargar}
             title="Actualizar reporte"
           >
-            🔄 Actualizar
+            Actualizar
           </button>
           <button
             type="button"
             className={`btn-toggle-action ${modoVisualizacion === 'VISTA_PDF' ? 'btn-primario' : 'btn-secundario'}`}
             onClick={() => setModoVisualizacion(modoVisualizacion === 'VISTA_PDF' ? 'INTERACTIVO' : 'VISTA_PDF')}
           >
-            {modoVisualizacion === 'VISTA_PDF' ? '📊 Vista Interactiva' : '📄 Vista Formato PDF'}
+            {modoVisualizacion === 'VISTA_PDF' ? 'Vista Interactiva' : 'Vista Formato PDF'}
           </button>
           <button
             type="button"
@@ -237,7 +237,7 @@ export default function Reportes({ usuario, sedeActiva }) {
             disabled={!reporte || descargandoPdf}
             title="Descargar reporte en PDF"
           >
-            {descargandoPdf ? 'Descargando PDF...' : '📄 Descargar PDF'}
+            {descargandoPdf ? 'Descargando PDF...' : 'Descargar PDF'}
           </button>
         </div>
       </div>
@@ -264,7 +264,7 @@ export default function Reportes({ usuario, sedeActiva }) {
               ))}
             </select>
           ) : (
-            <span className="sede-reporte-fija">📍 {usuario.sede_nombre}</span>
+            <span className="sede-reporte-fija">{usuario.sede_nombre}</span>
           )}
         </div>
 
@@ -314,7 +314,7 @@ export default function Reportes({ usuario, sedeActiva }) {
         )}
 
         <div className="search-bar-wrap">
-          <span className="search-icon">🔍</span>
+          <span className="search-icon" aria-hidden="true" />
           <input
             type="text"
             className="search-input"
@@ -340,7 +340,6 @@ export default function Reportes({ usuario, sedeActiva }) {
       {reporte && modoVisualizacion === 'INTERACTIVO' && (
         <div className="modo-interactivo-container">
           <div className={`conciliacion-card ${esConciliado ? 'conciliado-ok' : 'conciliado-alerta'}`}>
-            <div className="conciliacion-icon">{esConciliado ? '🛡️' : '⚠️'}</div>
             <div className="conciliacion-content">
               <div className="conciliacion-title">
                 {esConciliado ? 'Periodo conciliado' : 'Periodo no conciliado'}
@@ -355,42 +354,36 @@ export default function Reportes({ usuario, sedeActiva }) {
 
           <div className="reporte-summary-grid">
             <div className="summary-stat-box">
-              <span className="stat-icon">📥</span>
               <div className="stat-content">
                 <span className="stat-label">Entradas</span>
                 <span className="stat-num">{eg.entradas ?? 0}</span>
               </div>
             </div>
             <div className="summary-stat-box">
-              <span className="stat-icon">📤</span>
               <div className="stat-content">
                 <span className="stat-label">Salidas con orden</span>
                 <span className="stat-num">{eg.salidas_con_orden ?? 0}</span>
               </div>
             </div>
             <div className="summary-stat-box">
-              <span className="stat-icon">⚠️</span>
               <div className="stat-content">
                 <span className="stat-label">Salidas sin orden</span>
                 <span className="stat-num">{eg.salidas_sin_orden ?? 0}</span>
               </div>
             </div>
             <div className="summary-stat-box">
-              <span className="stat-icon">📦</span>
               <div className="stat-content">
                 <span className="stat-label">Stock físico</span>
                 <span className="stat-num">{eg.stock_fisico ?? 0}</span>
               </div>
             </div>
             <div className="summary-stat-box">
-              <span className="stat-icon">⏳</span>
               <div className="stat-content">
                 <span className="stat-label">Próximos a vencer</span>
                 <span className="stat-num">{eg.lotes_proximos_vencer ?? 0}</span>
               </div>
             </div>
             <div className="summary-stat-box">
-              <span className="stat-icon">🚫</span>
               <div className="stat-content">
                 <span className="stat-label">Unidades vencidas</span>
                 <span className="stat-num">{eg.medicamentos_vencidos ?? 0}</span>

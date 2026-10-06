@@ -66,10 +66,14 @@ function crear(usuarioSesion, data) {
   const medicamento = medicamentoRepository.findById(data.medicamento_id);
   if (!medicamento) throw new ValidationError('El medicamento no existe.');
 
-  // Entrada por unidades netas
-  const total = Number(data.cantidad_unidades ?? data.cantidad_total_unidades ?? (Number(data.cantidad_cajas || 0) * (medicamento.unidades_por_caja || 1) + Number(data.cantidad_unidades_sueltas || 0)));
-  const cajas = Number(data.cantidad_cajas ?? 0);
-  const sueltas = total;
+  // Entrada por unidades netas: el total manda; cajas/sueltas se derivan como
+  // descomposición (cajas = floor(total/upc)) para no descuadrar conciliación.
+  const upc = medicamento.unidades_por_caja || 1;
+  const total = Number(data.cantidad_unidades ?? data.cantidad_total_unidades ?? (Number(data.cantidad_cajas || 0) * upc + Number(data.cantidad_unidades_sueltas || 0)));
+  const cajas = Number.isInteger(Number(data.cantidad_cajas)) && data.cantidad_total_unidades == null && data.cantidad_unidades == null
+    ? Number(data.cantidad_cajas)
+    : Math.floor(total / upc);
+  const sueltas = total - cajas * upc;
 
   const payload = {
     medicamento_id: data.medicamento_id,
@@ -79,7 +83,10 @@ function crear(usuarioSesion, data) {
     fecha_vencimiento: data.fecha_vencimiento,
     cantidad_cajas: cajas,
     cantidad_unidades_sueltas: sueltas,
-    cantidad_total_unidades: total
+    cantidad_total_unidades: total,
+    empaque_nivel: data.empaque_nivel ?? null,
+    empaque_gtin: data.empaque_gtin ?? null,
+    factor_conversion: data.factor_conversion ?? 1
   };
 
   const { valido, errores } = validarLote(payload);

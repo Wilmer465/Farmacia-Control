@@ -22,7 +22,7 @@ export default function MedicamentoForm({ onCrear, error }) {
 
   return (
     <form className="panel-form" onSubmit={handleSubmit}>
-      <h3>💊 Nuevo Medicamento (Control por Unidad)</h3>
+      <h3> Nuevo Medicamento (Control por Unidad)</h3>
       <div className="form-grid">
         <div>
           <label>Código institucional</label>
@@ -53,9 +53,9 @@ export default function MedicamentoForm({ onCrear, error }) {
         </div>
       </div>
       {error && <div className="login-error">{error}</div>}
-      <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'flex-end' }}>
+      <div className="fila-formulario">
         <button type="submit" className="btn-primario" disabled={enviando}>
-          {enviando ? 'Guardando...' : '✅ Crear Medicamento'}
+          {enviando ? 'Guardando...' : ' Crear Medicamento'}
         </button>
       </div>
     </form>

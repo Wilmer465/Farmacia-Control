@@ -78,13 +78,13 @@ export default function RequestsScreen() {
               </View>
             </View>
             <View style={styles.itemDetails}>
-              <Text style={styles.itemDetail}>📦 Lote: {item.lote}</Text>
-              <Text style={styles.itemDetail}>📅 {item.fecha_solicitud}</Text>
+              <Text style={styles.itemDetail}>Lote: {item.lote}</Text>
+              <Text style={styles.itemDetail}>{item.fecha_solicitud}</Text>
               {activeTab === 'intercambios' && (
                 <>
-                  <Text style={styles.itemDetail}>🔄 {item.tipo}</Text>
-                  <Text style={styles.itemDetail}>📍 {item.sede_origen} → {item.sede_destino}</Text>
-                  <Text style={styles.itemDetail}>📊 Cantidad: {item.cantidad}</Text>
+                  <Text style={styles.itemDetail}>{item.tipo}</Text>
+                  <Text style={styles.itemDetail}>{item.sede_origen} → {item.sede_destino}</Text>
+                  <Text style={styles.itemDetail}>Cantidad: {item.cantidad}</Text>
                 </>
               )}
             </View>

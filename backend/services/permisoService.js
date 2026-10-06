@@ -27,7 +27,9 @@ function resolverSedeEfectiva(usuarioSesion, sedeIdSolicitada) {
 
 function verificarPerteneceASede(usuarioSesion, sedeIdRegistro) {
   if (ROLES_VISION_GLOBAL.includes(usuarioSesion.rol_nombre)) return;
-  if (usuarioSesion.sede_id !== sedeIdRegistro) {
+  // Comparación numérica: el renderer/IPC puede mandar la sede como string
+  // ("1" !== 1 con estricto) y denegaba accesos legítimos de la propia sede.
+  if (Number(usuarioSesion.sede_id) !== Number(sedeIdRegistro)) {
     throw new PermisoError('No tiene acceso a esta sede.');
   }
 }

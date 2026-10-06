@@ -16,6 +16,11 @@ const solicitudEliminacionRepository = require('../../backend/repositories/solic
 const usuarioRepository = require('../../backend/repositories/usuarioRepository');
 const { getDb } = require('../../backend/database/connection');
 
+// Firma mock realista: el backend exige data-URL PNG/JPEG con contenido real
+// (backend/validators/firmaValidator.js); el antiguo 'FIRMA_MOCK' de 10 chars
+// se rechaza como firma vacía.
+const FIRMA_TEST = 'data:image/png;base64,' + 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='.repeat(4);
+
 describe('FASE 6 — Reglas del Negocio de Farmacia-Control', () => {
   let db;
   let sesionSuperadmin;
@@ -109,15 +114,18 @@ med = medicamentoService.crear(sesionSuperadmin, {
       destino_detalle: 'Vereda El Salto',
       receptor_nombre: 'Conductor Envio',
       receptor_documento: '98765432',
-      firma_data: 'data:image/png;base64,FIRMA_MOCK',
+      firma_data: FIRMA_TEST,
       huella_registrada: 0,
       items: [{ medicamento_id: med.id, cantidad_unidades_solicitada: 20 }]
     });
 
+    // La orden MUNICIPIO_VEREDA no persiste firma: se pasa explícita para
+    // llegar al chequeo de huella (si no, falla firma antes).
     assert.throws(
       () => despachoService.crear(sesionSuperadmin, {
         orden_id: ordenSinHuella.id,
-        items: [{ orden_detalle_id: ordenSinHuella.detalles[0].id, lote_id: lote.id, cantidad_unidades_despachada: 20 }]
+        firma_data: FIRMA_TEST,
+        items: [{ orden_detalle_id: ordenSinHuella.detalles[0].id, lote_id: lote.id, cantidad_unidades_sueltas_despachada: 20 }]
       }),
       /se requiere huella registrada/
     );
@@ -129,7 +137,7 @@ med = medicamentoService.crear(sesionSuperadmin, {
       tipo_destino: 'LOCAL',
       receptor_nombre: 'Receptor Paciente',
       receptor_documento: '11223344',
-      firma_data: 'data:image/png;base64,FIRMA_MOCK',
+      firma_data: FIRMA_TEST,
       huella_registrada: 1,
       items: [{ medicamento_id: med.id, cantidad_unidades_solicitada: 50 }]
     });
@@ -137,7 +145,7 @@ med = medicamentoService.crear(sesionSuperadmin, {
     // Despacho parcial de 20 de 50
     const resParcial = despachoService.crear(sesionSuperadmin, {
       orden_id: orden.id,
-      items: [{ orden_detalle_id: orden.detalles[0].id, lote_id: lote.id, cantidad_unidades_despachada: 20 }]
+      items: [{ orden_detalle_id: orden.detalles[0].id, lote_id: lote.id, cantidad_unidades_sueltas_despachada: 20 }]
     });
 
     assert.equal(resParcial.nuevoEstadoOrden, 'PARCIAL');
@@ -150,7 +158,7 @@ med = medicamentoService.crear(sesionSuperadmin, {
     // Segundo despacho: restante 30
     const resCompleto = despachoService.crear(sesionSuperadmin, {
       orden_id: orden.id,
-      items: [{ orden_detalle_id: orden.detalles[0].id, lote_id: lote.id, cantidad_unidades_despachada: 30 }]
+      items: [{ orden_detalle_id: orden.detalles[0].id, lote_id: lote.id, cantidad_unidades_sueltas_despachada: 30 }]
     });
 
     assert.equal(resCompleto.nuevoEstadoOrden, 'COMPLETADA');

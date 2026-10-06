@@ -11,7 +11,7 @@ function validarItemsDespacho(items) {
     if (!item.lote_id) errores.push(`Línea ${idx + 1}: debe seleccionar un lote.`);
 
     const cajas = Number(item.cantidad_cajas_despachada ?? 0);
-    const sueltas = Number(item.cantidad_unidades_sueltas_despachada ?? 0);
+    const sueltas = Number(item.cantidad_unidades_sueltas_despachada ?? item.cantidad_total_despachada ?? item.cantidad_unidades_despachada ?? 0);
 
     if (!Number.isInteger(cajas) || cajas < 0) errores.push(`Línea ${idx + 1}: cajas inválidas.`);
     if (!Number.isInteger(sueltas) || sueltas < 0) errores.push(`Línea ${idx + 1}: unidades sueltas inválidas.`);

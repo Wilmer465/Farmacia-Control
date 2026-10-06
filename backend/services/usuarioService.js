@@ -63,7 +63,7 @@ function crear(usuarioSesion, datos) {
     modulo: 'USUARIOS',
     registro_afectado: nuevo.username,
     resultado: 'EXITO',
-    valores_nuevos: JSON.stringify({ id: nuevo.id, username: nuevo.username, rol: nuevo.rol_nombre })
+    valores_nuevos: { id: nuevo.id, username: nuevo.username, rol: nuevo.rol_nombre }
   });
 
   const { password_hash: _, ...seguro } = nuevo;
@@ -78,6 +78,9 @@ function actualizar(usuarioSesion, id, datos) {
   const { nombre, rol_id, sede_id, estado, password } = datos || {};
   if (!nombre || !nombre.trim()) throw new UsuarioError('El nombre es requerido.');
   if (!rol_id) throw new UsuarioError('El rol es requerido.');
+  if (estado !== undefined && estado !== null && ![ESTADOS_REGISTRO.ACTIVO, ESTADOS_REGISTRO.INACTIVO].includes(estado)) {
+    throw new UsuarioError(`Estado inválido: ${String(estado)}. Use cambiarEstado solo con ACTIVO/INACTIVO; ELIMINADO solo vía eliminarDefinitivo.`);
+  }
 
   // No permitir cambiar rol ni desactivar la cuenta principal (flag en BD, con
   // fallback a username para BDs legadas donde la migración 020 aún no corrió).
@@ -110,20 +113,25 @@ function actualizar(usuarioSesion, id, datos) {
     usuario_id: usuarioSesion.id,
     rol: usuarioSesion.rol_nombre,
     sede_id: usuarioSesion.sede_id,
-    accion: 'ACTUALIZAR_USUARIO',
+    accion: AUDIT_ACTIONS.ACTUALIZAR_USUARIO,
     modulo: 'USUARIOS',
     registro_afectado: actualizado.username,
     resultado: 'EXITO',
-    valores_anteriores: JSON.stringify({ nombre: usuario.nombre, rol_id: usuario.rol_id, estado: usuario.estado }),
-    valores_nuevos: JSON.stringify({ nombre: actualizado.nombre, rol_id: actualizado.rol_id, estado: actualizado.estado })
+    valores_anteriores: { nombre: usuario.nombre, rol_id: usuario.rol_id, estado: usuario.estado },
+    valores_nuevos: { nombre: actualizado.nombre, rol_id: actualizado.rol_id, estado: actualizado.estado }
   });
 
   const { password_hash: _, ...seguro } = actualizado;
   return seguro;
 }
 
+const ESTADOS_CAMBIABLES = [ESTADOS_REGISTRO.ACTIVO, ESTADOS_REGISTRO.INACTIVO];
+
 function cambiarEstado(usuarioSesion, id, nuevoEstado) {
   verificarAccesoWilmer(usuarioSesion);
+  if (!ESTADOS_CAMBIABLES.includes(nuevoEstado)) {
+    throw new UsuarioError(`Estado inválido: ${String(nuevoEstado)}. Valores permitidos: ${ESTADOS_CAMBIABLES.join(', ')}.`);
+  }
   const usuario = usuarioRepository.findById(id);
   if (!usuario) throw new UsuarioError('Usuario no encontrado.');
 
@@ -137,7 +145,7 @@ function cambiarEstado(usuarioSesion, id, nuevoEstado) {
     usuario_id: usuarioSesion.id,
     rol: usuarioSesion.rol_nombre,
     sede_id: usuarioSesion.sede_id,
-    accion: nuevoEstado === 'ACTIVO' ? 'ACTIVAR_USUARIO' : 'DESACTIVAR_USUARIO',
+    accion: nuevoEstado === 'ACTIVO' ? AUDIT_ACTIONS.ACTIVAR_USUARIO : AUDIT_ACTIONS.DESACTIVAR_USUARIO,
     modulo: 'USUARIOS',
     registro_afectado: actualizado.username,
     resultado: 'EXITO'
@@ -212,8 +220,8 @@ function eliminarDefinitivo(usuarioSesion, id) {
       modulo: 'USUARIOS',
       registro_afectado: `usuario:${idObjetivo}`,
       resultado: 'EXITO',
-      valores_anteriores: JSON.stringify(anterior),
-      valores_nuevos: JSON.stringify({ id: eliminado.id, estado: eliminado.estado, eliminado_en: eliminado.eliminado_en })
+      valores_anteriores: anterior,
+      valores_nuevos: { id: eliminado.id, estado: eliminado.estado, eliminado_en: eliminado.eliminado_en }
     });
 
     return eliminado;

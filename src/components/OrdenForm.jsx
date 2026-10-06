@@ -88,67 +88,65 @@ export default function OrdenForm({ medicamentos, onCrear, error }) {
 
   return (
     <form className="panel-form" onSubmit={handleSubmit}>
-      <div style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem', marginBottom: '1.25rem' }}>
-        <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>📋 Nueva Orden de Pedido (por Unidad)</h3>
-        <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.82rem', color: '#64748b' }}>
+      <div className="orden-formulario-cabecera">
+        <h3 className="orden-formulario-titulo"> Nueva Orden de Pedido (por Unidad)</h3>
+        <p className="orden-formulario-subtitulo">
           Configure el tipo de salida, los medicamentos a solicitar y la documentación de quien recibe
         </p>
       </div>
 
       {/* SELECCIÓN DE DESTINO / TIPO DE SALIDA */}
-      <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '10px', border: '1px solid #cbd5e1', marginBottom: '1.25rem' }}>
-        <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#1e293b', display: 'block', marginBottom: '0.45rem' }}>
-          📍 Destino y Tipo de Salida:
+      <div className="orden-bloque">
+        <label className="form-label form-label--titulo">
+           Destino y Tipo de Salida:
         </label>
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+        <div className="grupo-botones-secundarios">
           <button
             type="button"
-            className={`filter-chip ${tipoDestino === 'LOCAL' ? 'chip-activo' : ''}`}
+            className={`filter-chip filter-chip--grande ${tipoDestino === 'LOCAL' ? 'chip-activo' : ''}`}
             onClick={() => setTipoDestino('LOCAL')}
-            style={{ padding: '0.4rem 0.8rem', fontSize: '0.82rem' }}
           >
-            🏢 Despacho Local en Sede (Requiere Firma y Huella)
+             Despacho Local en Sede (Requiere Firma y Huella)
           </button>
           <button
             type="button"
-            className={`filter-chip ${tipoDestino === 'MUNICIPIO_VEREDA' ? 'chip-activo' : ''}`}
+            className={`filter-chip filter-chip--grande ${tipoDestino === 'MUNICIPIO_VEREDA' ? 'chip-activo' : ''}`}
             onClick={() => setTipoDestino('MUNICIPIO_VEREDA')}
-            style={{ padding: '0.4rem 0.8rem', fontSize: '0.82rem' }}
           >
-            🚚 Salida a Otro Municipio / Vereda (Identidad obligatoria; firma y huella pendientes)
+             Salida a Otro Municipio / Vereda (Identidad obligatoria; firma y huella pendientes)
           </button>
         </div>
 
         {tipoDestino === 'MUNICIPIO_VEREDA' && (
-          <div style={{ background: '#eff6ff', padding: '0.75rem', borderRadius: '8px', border: '1px solid #bfdbfe', marginTop: '0.5rem' }}>
-            <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#1e40af', display: 'block', marginBottom: '0.3rem' }}>
+          <div className="orden-bloque orden-bloque--informativo">
+            <label className="form-label form-label--informativa" htmlFor="destino-detalle">
               Municipio / Vereda de destino o detalle de la remesa:
             </label>
             <input
+              id="destino-detalle"
               type="text"
-              className="search-input"
-              style={{ background: '#ffffff', border: '1px solid #93c5fd' }}
+              className="search-input archivo-orden"
               placeholder="Ej: Vereda La Troja / Municipio Vigía del Fuerte / Puesto de Salud Rural..."
               value={destinoDetalle}
               onChange={(e) => setDestinoDetalle(e.target.value)}
               required
             />
-            <span style={{ fontSize: '0.74rem', color: '#1d4ed8', display: 'block', marginTop: '0.3rem' }}>
-              ℹ️ La identidad de quien recibe es obligatoria; la firma y la huella quedarán pendientes. Esta salida foránea no generará alertas por firma o huella del paciente.
+            <span className="texto-ayuda-informativo">
+               La identidad de quien recibe es obligatoria; la firma y la huella quedarán pendientes. Esta salida foránea no generará alertas por firma o huella del paciente.
             </span>
           </div>
         )}
       </div>
 
       {/* LÍNEAS DE MEDICAMENTOS */}
-      <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#1e293b', display: 'block', marginBottom: '0.5rem' }}>
-        📦 Medicamentos y Cantidades Solicitadas:
+      <label className="form-label form-label--titulo">
+         Medicamentos y Cantidades Solicitadas:
       </label>
 
       {items.map((item, idx) => (
-        <div className="orden-linea" key={idx} style={{ background: '#f8fafc', padding: '0.75rem', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '0.75rem', display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+        <div className="orden-linea" key={idx}>
           <select
-            style={{ flex: 3, padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+            className="campo-flexible--ancho"
             value={item.medicamento_id}
             onChange={(e) => setItem(idx, 'medicamento_id', e.target.value)}
             required
@@ -161,17 +159,16 @@ export default function OrdenForm({ medicamentos, onCrear, error }) {
             ))}
           </select>
 
-          <div style={{ flex: 2, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          <div className="campo-flexible--medio campo-unidades">
             <input
               type="number"
               min="1"
               placeholder="Cantidad (unidades)"
-              style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
               value={item.cantidad_unidades_solicitada}
               onChange={(e) => setItem(idx, 'cantidad_unidades_solicitada', e.target.value)}
               required
             />
-            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#64748b' }}>unidades</span>
+            <span className="texto-unidades">unidades</span>
           </div>
 
           {items.length > 1 && (
@@ -180,7 +177,7 @@ export default function OrdenForm({ medicamentos, onCrear, error }) {
         </div>
       ))}
 
-      <div style={{ margin: '0.75rem 0 0 0' }}>
+      <div className="grupo-agregar">
         <button type="button" className="btn-secundario" onClick={agregarLinea}>
           + Agregar otro medicamento a la orden
         </button>
@@ -194,12 +191,12 @@ export default function OrdenForm({ medicamentos, onCrear, error }) {
       />
 
       {(errorLocal || error) && (
-        <div className="login-error" style={{ marginBottom: '1rem', marginTop: '1rem' }}>{errorLocal || error}</div>
+        <div className="login-error alerta-formulario alerta-formulario--doble">{errorLocal || error}</div>
       )}
 
-      <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '1rem', display: 'flex', justifyContent: 'flex-end', marginTop: '1.25rem' }}>
+      <div className="modal-acciones modal-acciones--separada">
         <button type="submit" className="btn-primario" disabled={enviando}>
-          {enviando ? 'Creando orden...' : '✅ Crear Orden de Pedido'}
+          {enviando ? 'Creando orden...' : ' Crear Orden de Pedido'}
         </button>
       </div>
     </form>

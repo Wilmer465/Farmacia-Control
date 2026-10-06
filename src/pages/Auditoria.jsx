@@ -83,7 +83,7 @@ export default function Auditoria({ usuario, sedeActiva }) {
               : `Sede: ${usuario.sede_nombre}`}
           </p>
         </div>
-        <div className="header-actions" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+        <div className="header-actions">
           {esSuperadmin && (
             <select
               className="sede-selector"
@@ -100,13 +100,13 @@ export default function Auditoria({ usuario, sedeActiva }) {
               ))}
             </select>
           )}
-          <button className="btn-refrescar" onClick={cargar} title="Recargar">🔄 Actualizar</button>
+          <button className="btn-refrescar" onClick={cargar} title="Recargar">Actualizar</button>
         </div>
       </div>
 
       <div className="filtros-card">
         <div className="search-bar-wrap">
-          <span className="search-icon">🔍</span>
+          <span className="search-icon" aria-hidden="true" />
           <input
             type="text"
             className="search-input"

@@ -45,7 +45,8 @@ function crear(usuarioSesion, data) {
   const receptorDocumento = data.receptor_documento?.trim() || (esMunicipioVereda ? 'EXENTO_ENVIO' : null);
   const receptorTelefono = data.receptor_telefono?.trim() || null;
   const receptorCorreo = data.receptor_correo?.trim() || null;
-  const firma = data.firma_data || null;
+  const { esFirmaValida } = require('../validators/firmaValidator');
+  const firma = esFirmaValida(data.firma_data) ? data.firma_data : null;
   // HUELLA: sin lector real no hay verificación biométrica. Si el cliente declara
   // huella_registrada=true se acepta como "declaración manual pendiente de
   // verificación", NUNCA como evidencia biométrica. La auditoría lo registra así.
@@ -83,59 +84,77 @@ function crear(usuarioSesion, data) {
     }
   }
 
-  const entrega = entregaRepository.create({
-    despacho_id: despacho.id,
-    orden_id: despacho.orden_id,
-    sede_id: despacho.sede_id,
-    receptor_nombre: receptorNombre,
-    receptor_documento: receptorDocumento,
-    firma_data: firma,
-    huella_registrada: huella ? 1 : 0,
-    entregado_por: usuarioSesion.id,
-    documentacion_completa: documentacionCompleta ? 1 : 0,
-    elementos_faltantes: elementosFaltantes.length ? JSON.stringify(elementosFaltantes) : null,
-    tipo_destino: esMunicipioVereda ? 'MUNICIPIO_VEREDA' : 'LOCAL',
-    destino_detalle: destinoDetalle,
-    documento_adjunto_nombre: docAdjuntoNombre,
-    documento_adjunto_data: docAdjuntoData,
-    documento_adjunto_tipo: docAdjuntoTipo
-  });
+  // Crear + hasta 3 auditorías en UNA transacción: antes, si la 2ª/3ª auditoría
+  // fallaba, la entrega quedaba a medio auditar. El UNIQUE(despacho_id) de la
+  // BD convierte la carrera de doble-clic en error controlado dentro de la tx.
+  const { getDb } = require('../database/connection');
+  const dbEntrega = getDb();
+  const txEntrega = dbEntrega.transaction(() => {
+    let entrega;
+    try {
+      entrega = entregaRepository.create({
+        despacho_id: despacho.id,
+        orden_id: despacho.orden_id,
+        sede_id: despacho.sede_id,
+        receptor_nombre: receptorNombre,
+        receptor_documento: receptorDocumento,
+        firma_data: firma,
+        huella_registrada: huella ? 1 : 0,
+        entregado_por: usuarioSesion.id,
+        documentacion_completa: documentacionCompleta ? 1 : 0,
+        elementos_faltantes: elementosFaltantes.length ? JSON.stringify(elementosFaltantes) : null,
+        tipo_destino: esMunicipioVereda ? 'MUNICIPIO_VEREDA' : 'LOCAL',
+        destino_detalle: destinoDetalle,
+        documento_adjunto_nombre: docAdjuntoNombre,
+        documento_adjunto_data: docAdjuntoData,
+        documento_adjunto_tipo: docAdjuntoTipo
+      });
+    } catch (err) {
+      if (String(err.message || '').includes('UNIQUE constraint failed: entregas.despacho_id')) {
+        throw new ValidationError('Este despacho ya tiene una entrega registrada.');
+      }
+      throw err;
+    }
 
-  auditoriaRepository.registrar({
-    usuario_id: usuarioSesion.id,
-    rol: usuarioSesion.rol_nombre,
-    sede_id: despacho.sede_id,
-    accion: AUDIT_ACTIONS.CREAR_ENTREGA,
-    modulo: 'ENTREGAS',
-    registro_afectado: `entrega:${entrega.id}`,
-    resultado: documentacionCompleta ? 'EXITO' : 'DOCUMENTACION_INCOMPLETA',
-    valores_nuevos: { ...entrega, elementos_faltantes: elementosFaltantes }
-  });
-
-  if (huella) {
     auditoriaRepository.registrar({
       usuario_id: usuarioSesion.id,
       rol: usuarioSesion.rol_nombre,
       sede_id: despacho.sede_id,
-      accion: AUDIT_ACTIONS.REGISTRAR_HUELLA,
+      accion: AUDIT_ACTIONS.CREAR_ENTREGA,
       modulo: 'ENTREGAS',
       registro_afectado: `entrega:${entrega.id}`,
-      resultado: 'EXITO',
-      valores_nuevos: { origen: huellaOrigen, verificada_biometricamente: false }
+      resultado: documentacionCompleta ? 'EXITO' : 'DOCUMENTACION_INCOMPLETA',
+      valores_nuevos: { ...entrega, elementos_faltantes: elementosFaltantes }
     });
-  }
-  if (firma) {
-    auditoriaRepository.registrar({
-      usuario_id: usuarioSesion.id,
-      rol: usuarioSesion.rol_nombre,
-      sede_id: despacho.sede_id,
-      accion: AUDIT_ACTIONS.REGISTRAR_FIRMA,
-      modulo: 'ENTREGAS',
-      registro_afectado: `entrega:${entrega.id}`,
-      resultado: 'EXITO'
-    });
-  }
 
+    if (huella) {
+      auditoriaRepository.registrar({
+        usuario_id: usuarioSesion.id,
+        rol: usuarioSesion.rol_nombre,
+        sede_id: despacho.sede_id,
+        accion: AUDIT_ACTIONS.REGISTRAR_HUELLA,
+        modulo: 'ENTREGAS',
+        registro_afectado: `entrega:${entrega.id}`,
+        resultado: 'EXITO',
+        valores_nuevos: { origen: huellaOrigen, verificada_biometricamente: false }
+      });
+    }
+    if (firma) {
+      auditoriaRepository.registrar({
+        usuario_id: usuarioSesion.id,
+        rol: usuarioSesion.rol_nombre,
+        sede_id: despacho.sede_id,
+        accion: AUDIT_ACTIONS.REGISTRAR_FIRMA,
+        modulo: 'ENTREGAS',
+        registro_afectado: `entrega:${entrega.id}`,
+        resultado: 'EXITO'
+      });
+    }
+
+    return entrega;
+  });
+
+  const entrega = txEntrega();
   return { ...entrega, elementos_faltantes: elementosFaltantes };
 }
 

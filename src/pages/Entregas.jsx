@@ -109,13 +109,13 @@ export default function Entregas({ usuario, sedeActiva, params, onClearParams })
           </p>
         </div>
         <div className="header-actions">
-          <button className="btn-refrescar" onClick={cargar} title="Recargar">🔄 Actualizar</button>
+          <button className="btn-refrescar" onClick={cargar} title="Recargar"> Actualizar</button>
         </div>
       </div>
 
       <div className="filtros-card">
         <div className="search-bar-wrap">
-          <span className="search-icon">🔍</span>
+          <span className="search-icon" aria-hidden="true" />
           <input
             type="text"
             className="search-input"
@@ -185,11 +185,11 @@ export default function Entregas({ usuario, sedeActiva, params, onClearParams })
                   <td>
                     {esExenta ? (
                       <span className="pill estado-amarillo" title={destinoTexto}>
-                        🚚 {destinoTexto}
+                         {destinoTexto}
                       </span>
                     ) : (
                       <span className="pill estado-gris" title="Despacho local en sede">
-                        🏢 Local
+                         Local
                       </span>
                     )}
                   </td>
@@ -197,13 +197,12 @@ export default function Entregas({ usuario, sedeActiva, params, onClearParams })
                   <td>
                     <strong>{o.receptor_nombre || 'Sin registrar'}</strong>
                   </td>
-                  <td style={{ fontSize: '0.8rem' }}>{o.fecha_creacion}</td>
+                  <td className="celda-fecha">{o.fecha_creacion}</td>
                   <td>
                     {tieneDoc ? (
                       <button
                         type="button"
-                        className="filter-chip chip-activo"
-                        style={{ fontSize: '0.74rem', padding: '0.2rem 0.5rem', cursor: 'pointer' }}
+                        className="filter-chip chip-activo filter-chip--compacto"
                         onClick={() => setModalVisualizar({
                           titulo: `Documento de ${o.receptor_nombre}`,
                           tipo: o.documento_adjunto_tipo || (o.documento_adjunto_data?.startsWith('data:application/pdf') ? 'PDF' : 'IMAGEN'),
@@ -211,19 +210,19 @@ export default function Entregas({ usuario, sedeActiva, params, onClearParams })
                           nombre: o.documento_adjunto_nombre || 'Documento_identidad'
                         })}
                       >
-                        📄 Ver Documento
+                         Ver Documento
                       </button>
                     ) : (
-                      <span className="text-muted" style={{ fontSize: '0.75rem' }}>—</span>
+                      <span className="text-muted texto-suave-pequeno">—</span>
                     )}
                   </td>
                   <td>
                     {esExenta ? (
-                      <span className="pill estado-amarillo" style={{ fontSize: '0.72rem' }}>⏳ Pendiente</span>
+                      <span className="pill estado-amarillo pill--pequena">⏳ Pendiente</span>
                     ) : tieneFirma ? (
                       <button
                         type="button"
-                        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+                        className="btn-vista-previa"
                         onClick={() => setModalVisualizar({
                           titulo: `Firma digital de ${o.receptor_nombre}`,
                           tipo: 'IMAGEN',
@@ -232,19 +231,19 @@ export default function Entregas({ usuario, sedeActiva, params, onClearParams })
                         })}
                         title="Clic para ver firma"
                       >
-                        <span className="pill estado-verde">✓ Ver Firma</span>
+                        <span className="pill estado-verde"> Ver Firma</span>
                       </button>
                     ) : (
-                      <span className="pill estado-rojo">❌ Falta firma</span>
+                      <span className="pill estado-rojo"> Falta firma</span>
                     )}
                   </td>
                   <td>
                     {esExenta ? (
-                      <span className="pill estado-amarillo" style={{ fontSize: '0.72rem' }}>⏳ Pendiente</span>
+                      <span className="pill estado-amarillo pill--pequena">⏳ Pendiente</span>
                     ) : tieneHuella ? (
-                      <span className="pill estado-verde" title="Huella biométrica capturada">✓ Capturada</span>
+                      <span className="pill estado-verde" title="Huella biométrica capturada"> Capturada</span>
                     ) : (
-                      <span className="pill estado-rojo">❌ Falta huella</span>
+                      <span className="pill estado-rojo"> Falta huella</span>
                     )}
                   </td>
                   <td>
@@ -264,12 +263,11 @@ export default function Entregas({ usuario, sedeActiva, params, onClearParams })
                     {['SUPERADMIN', 'ADMIN'].includes(usuario.rol_nombre) && ['PENDIENTE', 'PARCIAL', 'COMPLETADA'].includes(o.estado) && (
                       <button
                         type="button"
-                        className="btn-secundario"
-                        style={{ padding: '0.3rem 0.6rem', fontSize: '0.78rem' }}
+                        className="btn-secundario btn-tabla"
                         onClick={() => abrirCompletarDoc(o)}
                         title="Completar o corregir la documentación de quien recibe"
                       >
-                        ✏️ Completar
+                         Completar
                       </button>
                     )}
                   </td>
@@ -309,38 +307,35 @@ export default function Entregas({ usuario, sedeActiva, params, onClearParams })
               title="Cerrar panel"
               aria-label="Cerrar panel"
             >
-              ✕
+              ×
             </button>
-            <h3 style={{ margin: '0 0 0.75rem 0', fontSize: '1.15rem', fontWeight: 800 }}>
+            <h3 className="modal-titulo">
               {modalVisualizar.titulo}
             </h3>
 
-            <div style={{ textAlign: 'center', padding: '1rem', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', minHeight: '200px' }}>
+            <div className="visor-documento">
               {modalVisualizar.tipo === 'PDF' || modalVisualizar.data?.startsWith('data:application/pdf') ? (
                 <div>
                   <iframe
                     src={modalVisualizar.data}
                     title="Documento PDF"
-                    style={{ width: '100%', height: '450px', border: 'none', borderRadius: '6px' }}
                   />
                 </div>
               ) : (
                 <img
                   src={modalVisualizar.data}
                   alt={modalVisualizar.titulo}
-                  style={{ maxWidth: '100%', maxHeight: '450px', objectFit: 'contain', borderRadius: '6px' }}
                 />
               )}
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', borderTop: '1px solid #e2e8f0', paddingTop: '0.75rem' }}>
+            <div className="pie-visor">
               <a
                 href={modalVisualizar.data}
                 download={modalVisualizar.nombre || 'documento_entrega'}
-                className="btn-secundario"
-                style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+                className="btn-secundario btn-descarga"
               >
-                ⬇️ Descargar archivo
+                 Descargar archivo
               </a>
               <button
                 type="button"
@@ -358,23 +353,22 @@ export default function Entregas({ usuario, sedeActiva, params, onClearParams })
       {ordenParaDoc && (
         <div className="modal-overlay" onClick={() => setOrdenParaDoc(null)}>
           <div className="modal-card modal-lg" onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem', marginBottom: '1.25rem' }}>
+            <div className="modal-cabecera">
               <div>
-                <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>
-                  ✏️ Completar documentación de {ordenParaDoc.numero}
+                <h3>
+                   Completar documentación de {ordenParaDoc.numero}
                 </h3>
-                <span style={{ fontSize: '0.82rem', color: '#64748b' }}>
+                <span className="modal-subtitulo">
                   Complete o corrija los datos, firma o huella pendientes de quien recibe.
                 </span>
               </div>
               <button
                 type="button"
-                className="btn-clear-search"
+                className="btn-cerrar"
                 onClick={() => setOrdenParaDoc(null)}
-                style={{ fontSize: '1.4rem', cursor: 'pointer', padding: '0.2rem 0.5rem', background: 'transparent', border: 'none', color: '#64748b' }}
                 title="Cerrar"
               >
-                ✕
+                ×
               </button>
             </div>
 
@@ -397,9 +391,9 @@ export default function Entregas({ usuario, sedeActiva, params, onClearParams })
               onChange={setDocActual}
             />
 
-            {errorDoc && <div className="login-error" style={{ marginTop: '1rem' }}>{errorDoc}</div>}
+            {errorDoc && <div className="login-error alerta-formulario alerta-formulario--separada">{errorDoc}</div>}
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', borderTop: '1px solid #e2e8f0', paddingTop: '1rem' }}>
+            <div className="modal-acciones">
               <button
                 type="button"
                 className="btn-secundario"
@@ -414,7 +408,7 @@ export default function Entregas({ usuario, sedeActiva, params, onClearParams })
                 onClick={handleGuardarDoc}
                 disabled={guardandoDoc}
               >
-                {guardandoDoc ? 'Guardando...' : '💾 Guardar documentación'}
+                {guardandoDoc ? 'Guardando...' : ' Guardar documentación'}
               </button>
             </div>
           </div>

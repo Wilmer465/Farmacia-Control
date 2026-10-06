@@ -113,12 +113,14 @@ describe('FASE 7 — Roles y Seguridad: Verificación Estricta en Capa Backend/S
     );
   });
 
-  test('Rol INVENTARIO puede despachar en su sede pero no gestionar el Catálogo CUM ni usuarios', () => {
+  // El controlador es async y captura el error en {ok:false} (nunca rechaza),
+  // así que assert.rejects fallaba siempre ("Missing expected rejection",
+  // flake preexistente): se aserta sobre el resultado.
+  test('Rol INVENTARIO puede despachar en su sede pero no gestionar el Catálogo CUM ni usuarios', async () => {
     // Intentar actualizar catálogo CUM
-    assert.rejects(
-      async () => catalogoCumController.actualizarCatalogo(sesionInventarioSede1),
-      /No tiene permisos para gestionar el catálogo CUM/
-    );
+    const resCatalogo = await catalogoCumController.actualizarCatalogo(sesionInventarioSede1);
+    assert.equal(resCatalogo.ok, false);
+    assert.match(resCatalogo.error, /No tiene permisos para gestionar el catálogo CUM/);
 
     // Intentar listar usuarios
     assert.throws(

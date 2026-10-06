@@ -126,10 +126,15 @@ function insertOrReplace(db, table, row) {
   db.prepare(`INSERT OR REPLACE INTO "${table}" (${quoted}) VALUES (${placeholders})`).run(row);
 }
 
-// Sincronización incremental (Delta): lee solo registros cambiados si existe last_sync_timestamp
+// Sincronización incremental (Delta): lee solo registros cambiados si existe last_sync_timestamp.
+// La lista incluye las columnas reales de este esquema (catalogo_cum usa
+// creado_en/actualizado_en, catalogo_actualizaciones fecha_importacion).
+// `>=` con cursor=inicio es at-least-once a propósito: los registros creados
+// DURANTE la subida tienen ts > inicio y se reenvían la próxima vez (los
+// duplicados los resuelve merge-duplicates en nube). Con `>` se perderían.
 function getRowsToSync(db, table, lastSyncTimestamp) {
   const cols = getTableColumns(db, table);
-  const dateCol = ['updated_at', 'fecha_actualizacion', 'fecha', 'created_at', 'fecha_solicitud', 'fecha_creacion'].find((c) => cols.includes(c));
+  const dateCol = ['updated_at', 'fecha_actualizacion', 'fecha', 'created_at', 'fecha_solicitud', 'fecha_creacion', 'creado_en', 'actualizado_en', 'fecha_importacion', 'fecha_resolucion', 'fecha_actualizacion'].find((c) => cols.includes(c));
 
   if (!lastSyncTimestamp || !dateCol) {
     return db.prepare(`SELECT * FROM "${table}"`).all();
@@ -216,13 +221,20 @@ async function bajar(lastSyncTimestamp, { permitirBajadaTotal = true } = {}) {
 
     while (true) {
       const records = await supabaseRequest(
-        `sync_records?select=table_name,record_id,data&order=table_name.asc&limit=${limit}&offset=${offset}${timeFilter}`,
+        `sync_records?select=table_name,record_id,data&order=table_name.asc,record_id.asc&limit=${limit}&offset=${offset}${timeFilter}`,
         { method: 'GET' }
       );
       if (!records?.length) break;
       tx(records);
       if (records.length < limit) break;
       offset += limit;
+    }
+
+    // Con FK apagadas durante el REPLACE, SQLite no revalida al reactivar:
+    // se verifica explícito y NO se avanza el cursor si hay huérfanos.
+    const violaciones = db.prepare('PRAGMA foreign_key_check').all();
+    if (violaciones.length > 0) {
+      throw new CloudSyncError(`La bajada dejó ${violaciones.length} violación(es) de clave foránea; no se avanza el cursor.`);
     }
   } finally {
     db.pragma('foreign_keys = ON');

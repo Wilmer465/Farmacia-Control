@@ -27,6 +27,7 @@ describe('FASE 10 — Reportes y Auditoría: Filtros Temporales y Multisede', ()
     med = medicamentoService.crear(sesionSuperadmin, {
       codigo: 'MED-REP-01',
       nombre: 'Metformina 850mg',
+      unidad_medida: 'TABLETA',
       unidades_por_caja: 30
     });
 
@@ -98,9 +99,10 @@ describe('FASE 10 — Reportes y Auditoría: Filtros Temporales y Multisede', ()
   });
 
   test('Dashboard resumen con estado consolidado y conteo de alertas', () => {
+    // Forma plana: la usa el Dashboard.jsx (estadoConciliacion/stockTotalUnidades).
     const dash = reporteService.dashboard(sesionSuperadmin, { sedeId: 1 });
     assert.ok(dash);
-    assert.equal(dash.conciliacion.estadoGeneral, 'CONCILIADO');
-    assert.ok(dash.stock.stock_total_unidades >= 300);
+    assert.equal(dash.estadoConciliacion, 'CONCILIADO');
+    assert.ok(dash.stockTotalUnidades >= 300);
   });
 });

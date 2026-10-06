@@ -1,12 +1,18 @@
 const { getDb } = require('../database/connection');
 
-function registrar({ lote_id, medicamento_id, sede_id, tipo, cantidad, referencia_orden_id, usuario_id, empaque_nivel, cantidad_unidades_base }) {
+function findById(id) {
   const db = getDb();
-  db.prepare(`
+  return db.prepare('SELECT * FROM movimientos_inventario WHERE id = ?').get(id);
+}
+
+function registrar({ lote_id, medicamento_id, sede_id, tipo, cantidad, referencia_orden_id, usuario_id, empaque_nivel, cantidad_unidades_base, fecha }) {
+  const db = getDb();
+  const info = db.prepare(`
     INSERT INTO movimientos_inventario
-      (lote_id, medicamento_id, sede_id, tipo, cantidad, referencia_orden_id, usuario_id, empaque_nivel, cantidad_unidades_base)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(lote_id, medicamento_id, sede_id, tipo, cantidad, referencia_orden_id ?? null, usuario_id ?? null, empaque_nivel ?? null, cantidad_unidades_base ?? null);
+      (lote_id, medicamento_id, sede_id, tipo, cantidad, referencia_orden_id, usuario_id, empaque_nivel, cantidad_unidades_base${fecha ? ', fecha' : ''})
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?${fecha ? ', ?' : ''})
+  `).run(lote_id, medicamento_id, sede_id, tipo, cantidad, referencia_orden_id ?? null, usuario_id ?? null, empaque_nivel ?? null, cantidad_unidades_base ?? null, ...(fecha ? [fecha] : []));
+  return findById(info.lastInsertRowid);
 }
 
 function crear(data) {
@@ -95,4 +101,4 @@ function resumenPorRango({ sedeId, fechaInicio, fechaFin } = {}) {
   `).get(params);
 }
 
-module.exports = { registrar, crear, resumenPorLote, findByRango, resumenPorRango };
+module.exports = { registrar, crear, findById, resumenPorLote, findByRango, resumenPorRango };

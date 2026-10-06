@@ -24,6 +24,19 @@ function listar() {
   `).all();
 }
 
+// Límites anti-bloat: la firma y los adjuntos son base64 que viven en la BD.
+// Sin tope, un `firma_data` gigante (IPC sin límite, a diferencia de HTTP 1mb)
+// infla la base y el WAL sin control.
+const MAX_TEXTO_CORTO = 255;
+const MAX_BLOB_BASE64 = 2 * 1024 * 1024; // 2 MB por campo
+const TIPOS_ADJUNTO_PERMITIDOS = new Set(['application/pdf', 'image/png', 'image/jpeg']);
+
+function validarTamano(campo, valor, maximo) {
+  if (valor != null && String(valor).length > maximo) {
+    throw new Error(`${campo} excede el tamaño máximo permitido.`);
+  }
+}
+
 function guardarOActualizar({
   documento,
   nombre,
@@ -39,6 +52,21 @@ function guardarOActualizar({
   notas = undefined
 }) {
   if (!documento || !documento.trim() || !nombre || !nombre.trim()) return null;
+  if (String(documento).trim().length > 50) throw new Error('El documento excede la longitud máxima.');
+  if (String(nombre).trim().length > MAX_TEXTO_CORTO) throw new Error('El nombre excede la longitud máxima.');
+  if (telefono != null && String(telefono).length > 50) throw new Error('El teléfono excede la longitud máxima.');
+  if (correo_electronico != null && String(correo_electronico).length > MAX_TEXTO_CORTO) throw new Error('El correo excede la longitud máxima.');
+  if (correo_electronico && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(correo_electronico))) {
+    throw new Error('El correo electrónico no es válido.');
+  }
+  validarTamano('firma_guardada', firma_guardada, MAX_BLOB_BASE64);
+  validarTamano('documento_adjunto_data', documento_adjunto_data, MAX_BLOB_BASE64);
+  if (documento_adjunto_tipo && !TIPOS_ADJUNTO_PERMITIDOS.has(String(documento_adjunto_tipo))) {
+    throw new Error('Tipo de documento adjunto no permitido (solo PDF/PNG/JPEG).');
+  }
+  if (documento_adjunto_nombre && String(documento_adjunto_nombre).length > MAX_TEXTO_CORTO) {
+    throw new Error('El nombre del adjunto excede la longitud máxima.');
+  }
   const db = getDb();
   const docLimpio = documento.trim();
   const nombreLimpio = nombre.trim();

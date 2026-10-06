@@ -155,14 +155,21 @@ function crearConDetalles({
   const tx = db.transaction(() => {
     const numero = siguienteNumero(db);
 
-    // Verificar stock disponible para cada medicamento en la sede (atómico, dentro de la tx)
+    // Verificar stock disponible por CANTIDAD (atómico, dentro de la tx):
+    // suma unidades operables (no dados de baja, no vencidos) y exige cubrir
+    // lo solicitado. El COUNT>0 anterior creaba PENDIENTEs imposibles de
+    // despachar (p. ej. pedir 10000 con stock 1).
     const checkStock = db.prepare(`
-      SELECT COUNT(*) AS cnt FROM lotes
-      WHERE medicamento_id = ? AND sede_id = ? AND cantidad_total_unidades > 0
+      SELECT COALESCE(SUM(cantidad_total_unidades), 0) AS total FROM lotes
+      WHERE medicamento_id = ? AND sede_id = ?
+        AND cantidad_total_unidades > 0
+        AND (estado_manual IS NULL OR estado_manual != 'DADO_DE_BAJA')
+        AND date(fecha_vencimiento) >= date('now')
     `);
     for (const item of items) {
-      const hayStock = checkStock.get(item.medicamento_id, sede_id);
-      if (!hayStock || hayStock.cnt === 0) {
+      const requerido = Number(item.cantidad_total_solicitada || 0);
+      const hay = checkStock.get(item.medicamento_id, sede_id);
+      if (!hay || Number(hay.total) < requerido) {
         throw new Error(`STOCK_INSUFICIENTE:${item.medicamento_id}`);
       }
     }

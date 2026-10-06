@@ -41,8 +41,8 @@ export default function ReceptorDetailScreen() {
                   <Text style={styles.prioridadText}>{receptor.prioridad}</Text>
                 </View>
               </View>
-              <Text style={styles.profileDocument}>📄 {receptor.documento}</Text>
-              <Text style={styles.profilePhone}>📞 {receptor.telefono}</Text>
+              <Text style={styles.profileDocument}>{receptor.documento}</Text>
+              <Text style={styles.profilePhone}>{receptor.telefono}</Text>
             </View>
           </View>
         </View>

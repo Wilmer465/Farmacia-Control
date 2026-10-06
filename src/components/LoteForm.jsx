@@ -41,7 +41,7 @@ export default function LoteForm({ medicamentos, onCrear, error }) {
 
   return (
     <form className="panel-form" onSubmit={handleSubmit}>
-      <h3>📦 Registrar Entrada de Lote (por Unidad)</h3>
+      <h3> Registrar Entrada de Lote (por Unidad)</h3>
       <div className="form-grid">
         <div>
           <label>Medicamento</label>
@@ -96,9 +96,9 @@ export default function LoteForm({ medicamentos, onCrear, error }) {
         </div>
       </div>
       {error && <div className="login-error">{error}</div>}
-      <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'flex-end' }}>
+      <div className="fila-formulario">
         <button type="submit" className="btn-verde" disabled={enviando}>
-          {enviando ? 'Guardando entrada...' : '✅ Registrar Entrada de Lote'}
+          {enviando ? 'Guardando entrada...' : ' Registrar Entrada de Lote'}
         </button>
       </div>
     </form>

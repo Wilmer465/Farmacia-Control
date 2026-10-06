@@ -87,9 +87,12 @@ export default function Pacientes({ usuario, sedeActiva }) {
 
   useEscapeCerrarModal(() => setModalAbierto(false), modalAbierto);
 
+  // Solo lotes operables: se excluye VENCIDO (antes un lote vencido con stock
+  // aparecía como dispensable y se asociaba a pacientes sin descontar stock).
   const lotesDisponibles = useMemo(() => (
     lotes.filter((l) => (
       l.estado !== 'AGOTADO' &&
+      l.estado !== 'VENCIDO' &&
       l.estado_manual !== 'DADO_DE_BAJA' &&
       Number(l.cantidad_total_unidades || 0) > 0
     ))
@@ -236,14 +239,14 @@ export default function Pacientes({ usuario, sedeActiva }) {
       </div>
 
       <div className="stats-grid pacientes-stats">
-        <div className="stat-card"><span className="stat-label">Pacientes registrados</span><strong className="stat-value">{pacientes.length}</strong></div>
+        <div className="stat-card"><span className="stat-label">Usuarios registrados</span><strong className="stat-value">{pacientes.length}</strong></div>
         <div className="stat-card"><span className="stat-label">Prioridad alta</span><strong className="stat-value">{totalAlta}</strong></div>
         <div className="stat-card"><span className="stat-label">En la vista actual</span><strong className="stat-value">{pacientesFiltrados.length}</strong></div>
       </div>
 
       <div className="filtros-card">
         <div className="search-bar-wrap">
-          <span className="search-icon">🔍</span>
+          <span className="search-icon" aria-hidden="true" />
           <input
             type="text"
             className="search-input"

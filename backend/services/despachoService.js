@@ -18,8 +18,10 @@ function listarPorOrden(usuarioSesion, ordenId) {
   const despachos = despachoRepository.findAll({ ordenId });
   if (despachos.length === 0) return [];
 
-  // Obtener todos los detalles en una sola query (evita N+1)
-  const ids = despachos.map(d => d.id).join(',');
+  // Obtener todos los detalles en una sola query (evita N+1).
+  // Se pasa el array de ids (no un string con join): el repositorio construye
+  // un placeholder por elemento y hace spread; con string partía caracteres.
+  const ids = despachos.map(d => d.id);
   const detalles = despachoRepository.findDetalleByDespachoIds(ids);
   
   // Agrupar detalles por despacho_id

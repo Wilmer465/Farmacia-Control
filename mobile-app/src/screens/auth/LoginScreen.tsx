@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity } from 'react-native';
 import { useAuth } from '../../hooks';
 import { useUIStore } from '../../store/uiStore';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 export default function LoginScreen() {
   const { login, cargando, error } = useAuth();
@@ -34,7 +35,7 @@ export default function LoginScreen() {
       <ScrollView contentContainerStyle={{ flexGrow: 1, padding: 24, justifyContent: 'center' }}>
         <View style={{ alignItems: 'center', marginBottom: 48 }}>
           <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: '#2563eb', justifyContent: 'center', alignItems: 'center', marginBottom: 16 }}>
-            <Text style={{ fontSize: 36, color: 'white' }}>💊</Text>
+            <MaterialCommunityIcons name="pill" size={36} color="white" />
           </View>
           <Text style={{ fontSize: 28, fontWeight: '700', color: '#1e293b', marginBottom: 4 }}>Farmacia Control</Text>
           <Text style={{ fontSize: 16, color: '#64748b' }}>Gestión & Trazabilidad</Text>

@@ -50,6 +50,7 @@ describe('FASE 4 — IPC Handlers & Seguridad de Invocación desde Renderer', ()
     const resCrear = medicamentoController.crear(sesionWilmer, {
       codigo: 'MED-IPC-01',
       nombre: 'Medicamento IPC',
+      unidad_medida: 'TABLETA',
       unidades_por_caja: 10
     });
     assert.equal(resCrear.ok, true);
