@@ -98,5 +98,9 @@ contextBridge.exposeInMainWorld('api', {
     escanear: (usuarioSesion, codigoBarras) => ipcRenderer.invoke('recepcion:escanear', usuarioSesion, codigoBarras),
     registrar: (usuarioSesion, data) => ipcRenderer.invoke('recepcion:registrar', usuarioSesion, data),
     historial: (usuarioSesion, filtros) => ipcRenderer.invoke('recepcion:historial', usuarioSesion, filtros)
+  },
+  firmaPad: {
+    detectar: (usuarioSesion) => ipcRenderer.invoke('firmaPad:detectar', usuarioSesion),
+    capturar: (usuarioSesion, datos) => ipcRenderer.invoke('firmaPad:capturar', usuarioSesion, datos)
   }
 });

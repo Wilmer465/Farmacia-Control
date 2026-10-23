@@ -375,7 +375,7 @@ body {
 }
 
 .sidebar {
-  width: 275px;
+  width: 270px;
   background: var(--color-text-strong);
   color: var(--color-text-inverse);
   display: flex;
@@ -386,7 +386,7 @@ body {
   border-right: 1px solid var(--color-border-inverse);
   position: sticky;
   top: 0;
-  height: 120vh;
+  height: 100vh;
   z-index: var(--z-sidebar);
   box-shadow: 4px 0 20px rgba(0, 0, 0, 0.08);
 }
@@ -3336,7 +3336,6 @@ body {
   -webkit-backdrop-filter: blur(3px);
   backdrop-filter: blur(3px);
   z-index: var(--z-overlay);
-  display: flex;
   align-items: center;
   justify-content: center;
   padding: var(--space-2xl);

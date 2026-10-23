@@ -86,49 +86,51 @@ med = medicamentoService.crear(sesionSuperadmin, {
     teardownTestDb();
   });
 
-  test('No permitir despacho sin firma registrada', () => {
-    // Crear orden exenta temporal de firma en creación (MUNICIPIO_VEREDA)
+  test('Permitir despacho sin firma y registrar faltante en entregas', () => {
     const ordenSinFirma = ordenService.crear(sesionSuperadmin, {
       sede_id: 1,
-      tipo_destino: 'MUNICIPIO_VEREDA',
-      destino_detalle: 'Vereda Las Flores',
-      receptor_nombre: 'Conductor Envio',
+      tipo_destino: 'LOCAL',
+      receptor_nombre: 'Receptor Sin Firma',
       receptor_documento: '98765432',
+      huella_registrada: 1,
       items: [{ medicamento_id: med.id, cantidad_unidades_solicitada: 20 }]
     });
 
-    // Intentar despachar sin firma
-    assert.throws(
-      () => despachoService.crear(sesionSuperadmin, {
-        orden_id: ordenSinFirma.id,
-        items: [{ orden_detalle_id: ordenSinFirma.detalles[0].id, lote_id: lote.id, cantidad_unidades_despachada: 20 }]
-      }),
-      /se requiere firma registrada/
-    );
+    const res = despachoService.crear(sesionSuperadmin, {
+      orden_id: ordenSinFirma.id,
+      items: [{ orden_detalle_id: ordenSinFirma.detalles[0].id, lote_id: lote.id, cantidad_unidades_despachada: 20 }]
+    });
+
+    assert.ok(res.despacho);
+    const entregaRepository = require('../../backend/repositories/entregaRepository');
+    const entrega = entregaRepository.findByDespachoId(res.despacho.id);
+    assert.ok(entrega);
+    assert.equal(entrega.documentacion_completa, 0);
+    assert.ok(entrega.elementos_faltantes.includes('FIRMA'));
   });
 
-  test('No permitir despacho sin huella registrada', () => {
+  test('Permitir despacho sin huella y registrar faltante en entregas', () => {
     const ordenSinHuella = ordenService.crear(sesionSuperadmin, {
       sede_id: 1,
-      tipo_destino: 'MUNICIPIO_VEREDA',
-      destino_detalle: 'Vereda El Salto',
-      receptor_nombre: 'Conductor Envio',
+      tipo_destino: 'LOCAL',
+      receptor_nombre: 'Receptor Sin Huella',
       receptor_documento: '98765432',
       firma_data: FIRMA_TEST,
       huella_registrada: 0,
       items: [{ medicamento_id: med.id, cantidad_unidades_solicitada: 20 }]
     });
 
-    // La orden MUNICIPIO_VEREDA no persiste firma: se pasa explícita para
-    // llegar al chequeo de huella (si no, falla firma antes).
-    assert.throws(
-      () => despachoService.crear(sesionSuperadmin, {
-        orden_id: ordenSinHuella.id,
-        firma_data: FIRMA_TEST,
-        items: [{ orden_detalle_id: ordenSinHuella.detalles[0].id, lote_id: lote.id, cantidad_unidades_sueltas_despachada: 20 }]
-      }),
-      /se requiere huella registrada/
-    );
+    const res = despachoService.crear(sesionSuperadmin, {
+      orden_id: ordenSinHuella.id,
+      items: [{ orden_detalle_id: ordenSinHuella.detalles[0].id, lote_id: lote.id, cantidad_unidades_sueltas_despachada: 20 }]
+    });
+
+    assert.ok(res.despacho);
+    const entregaRepository = require('../../backend/repositories/entregaRepository');
+    const entrega = entregaRepository.findByDespachoId(res.despacho.id);
+    assert.ok(entrega);
+    assert.equal(entrega.documentacion_completa, 0);
+    assert.ok(entrega.elementos_faltantes.includes('HUELLA'));
   });
 
   test('Registrar correctamente pedidos parciales y diferenciar solicitado de despachado', () => {

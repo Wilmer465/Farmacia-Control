@@ -21,4 +21,9 @@ coverage/
 data/
 *.json
 
+# Binario del puente STU-540 (se compila con npm run compilar:stu-bridge).
+native/stu-bridge/bin/
+# Binario del puente ZK9500 (se compila con npm run compilar:zk-bridge).
+native/zk-bridge/bin/
+
 .vscode/

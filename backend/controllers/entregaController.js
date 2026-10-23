@@ -25,8 +25,13 @@ function crear(usuarioSesion, data) {
 }
 
 async function capturarHuella() {
+  // [TMP-DIAG] logging temporal: handler recibido en Main.
+  console.debug('[Main] entregas:capturarHuella handler recibido');
   try {
-    return { ok: true, data: await entregaService.capturarHuella() };
+    const data = await entregaService.capturarHuella();
+    console.debug('[Main] entregas:capturarHuella resultado: capturada=' +
+      Boolean(data && data.capturada) + ' dispositivo=' + ((data && data.dispositivo) || 'null'));
+    return { ok: true, data };
   } catch (err) {
     console.error('[entregaController] error capturando huella:', err);
     return { ok: false, error: 'No se pudo capturar la huella.' };

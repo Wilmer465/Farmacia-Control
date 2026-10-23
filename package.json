@@ -11,6 +11,9 @@
     "dev": "concurrently -k \"npm:dev:react\" \"npm:dev:wait-electron\"",
     "build:react": "vite build",
     "build": "npm run build:react && electron-builder",
+    "prebuild": "node scripts/compilar-stu-bridge.js && node scripts/compilar-zk-bridge.js",
+    "compilar:stu-bridge": "node scripts/compilar-stu-bridge.js",
+    "compilar:zk-bridge": "node scripts/compilar-zk-bridge.js",
     "migrate": "node backend/database/migrate.js",
     "seed": "node backend/database/seeds/seed.js",
     "test": "node --test tests/**/*.test.js",
@@ -54,6 +57,16 @@
       "dist/**/*",
       "electron/**/*",
       "backend/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "native/stu-bridge/bin",
+        "to": "native/stu-bridge"
+      },
+      {
+        "from": "native/zk-bridge/bin",
+        "to": "native/zk-bridge"
+      }
     ],
     "asarUnpack": [
       "**/node_modules/better-sqlite3/**"

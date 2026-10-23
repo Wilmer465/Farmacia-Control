@@ -5,7 +5,7 @@ import { inventarioApi } from '../services/inventarioApi.js';
 // Captura la documentación de quien recibe: identificación, nombre, teléfono,
 // correo, documento adjunto, firma digital y huella. Si la persona ya está
 // registrada en el catálogo de receptores, autocompleta todos los campos.
-export default function DocumentacionReceptor({ exenta, onChange, valoresIniciales }) {
+export default function DocumentacionReceptor({ exenta, onChange, valoresIniciales, usuarioSesion = null }) {
   const [nombre, setNombre] = useState(valoresIniciales?.nombre || '');
   const [documento, setDocumento] = useState(valoresIniciales?.documento || '');
   const [telefono, setTelefono] = useState(valoresIniciales?.telefono || '');
@@ -13,6 +13,7 @@ export default function DocumentacionReceptor({ exenta, onChange, valoresInicial
   const [firma, setFirma] = useState(valoresIniciales?.firma || null);
   const [huella, setHuella] = useState(valoresIniciales?.huella || false);
   const [capturandoHuella, setCapturandoHuella] = useState(false);
+  const [errorHuella, setErrorHuella] = useState(null);
   const [adjunto, setAdjunto] = useState(valoresIniciales?.adjunto || null); // { nombre, data, tipo }
 
   const [receptorGuardado, setReceptorGuardado] = useState(null);
@@ -41,6 +42,7 @@ export default function DocumentacionReceptor({ exenta, onChange, valoresInicial
     if (exenta) {
       setFirma(null);
       setHuella(false);
+      setErrorHuella(null);
       setUsarFirmaGuardada(false);
     }
   }, [exenta]);
@@ -99,10 +101,26 @@ export default function DocumentacionReceptor({ exenta, onChange, valoresInicial
   }, [documento, exenta]);
 
   async function handleCapturarHuella() {
+    if (capturandoHuella) return;
     setCapturandoHuella(true);
-    const res = await inventarioApi.entregas.capturarHuella();
-    setCapturandoHuella(false);
-    if (res.ok && res.data.capturada) setHuella(true);
+    setErrorHuella(null);
+    // [TMP-DIAG] logging temporal de diagnóstico (Renderer, nivel info).
+    console.log('[Renderer] capturarHuella: sesion ' + (usuarioSesion ? 'presente' : 'AUSENTE'));
+    try {
+      const res = await inventarioApi.entregas.capturarHuella(usuarioSesion);
+      console.log('[Renderer] capturarHuella respuesta IPC: ok=' + Boolean(res && res.ok) +
+        ' capturada=' + Boolean(res && res.data && res.data.capturada));
+      if (res && res.ok && res.data && res.data.capturada) {
+        setHuella(true);
+      } else {
+        setErrorHuella((res && res.error) || 'No se pudo capturar la huella.');
+      }
+    } catch (err) {
+      console.log('[Renderer] capturarHuella excepción IPC:', err && err.message);
+      setErrorHuella('No se pudo capturar la huella.');
+    } finally {
+      setCapturandoHuella(false);
+    }
   }
 
   function handleCargarArchivo(e) {
@@ -297,7 +315,14 @@ export default function DocumentacionReceptor({ exenta, onChange, valoresInicial
             </figcaption>
           </figure>
         ) : (
-          <SignaturePad onChange={setFirma} valorInicial={valoresIniciales?.firma || null} />
+          <SignaturePad
+            onChange={setFirma}
+            valorInicial={valoresIniciales?.firma || null}
+            usuarioSesion={usuarioSesion}
+            nombreFirmante={nombre}
+            documentoFirmante={documento}
+            motivoFirma="Recepción de medicamentos"
+          />
         )}
       </div>
 
@@ -332,9 +357,12 @@ export default function DocumentacionReceptor({ exenta, onChange, valoresInicial
                Huella biométrica verificada en sistema
             </span>
           ) : (
-            <span className="page-scope">Sin lector físico conectado: captura simulada.</span>
+            <span className="page-scope">Lector ZK9500: ponga el dedo al pulsar «Capturar huella».</span>
           )}
         </div>
+        {errorHuella && (
+          <div className="form-error" role="alert">{errorHuella}</div>
+        )}
       </div>
       </>
       )}

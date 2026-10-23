@@ -6,6 +6,8 @@ import { sqliteService } from '../database/SQLiteService';
 import { SecureStorage } from '../storage/SecureStorage';
 import { generateIdempotencyKey } from '../../utils/idempotency';
 import { apiClient } from '../api/ApiClient';
+import { SUPABASE_CONFIG, supabaseHabilitado } from '../../constants/config';
+import { SB_KEYS } from '../sync/SupabaseSyncProvider';
 
 export type LoginCredentials = LoginRequest;
 
@@ -51,6 +53,10 @@ export class AuthService {
   private accessToken: string | null = null;
   private refreshToken: string | null = null;
   private tokenExpiry: number = 0;
+  // Sesión Supabase nativa (nube). Separada de la LAN: no pisa accessToken.
+  private sbAccessToken: string | null = null;
+  private sbRefreshToken: string | null = null;
+  private sbExpiry: number = 0;
 
   static getInstance(): AuthService {
     if (!AuthService.instance) {
@@ -64,6 +70,9 @@ export class AuthService {
     const savedRefresh = await SecureStorage.getItem('refresh_token');
     const savedUser = await SecureStorage.getItem('user_session');
     const expiry = await SecureStorage.getItem('token_expiry');
+    const sbAccess = await SecureStorage.getItem(SB_KEYS.ACCESS);
+    const sbRefresh = await SecureStorage.getItem(SB_KEYS.REFRESH);
+    const sbExpiry = await SecureStorage.getItem(SB_KEYS.EXPIRY);
 
     if (savedToken && savedRefresh && savedUser && expiry) {
       const expiryTime = parseInt(expiry, 10);
@@ -75,6 +84,18 @@ export class AuthService {
         apiClient.setAuthToken(savedToken);
       } else {
         await this.clearSession();
+      }
+    }
+    if (sbAccess && sbExpiry && Date.now() < parseInt(sbExpiry, 10)) {
+      this.sbAccessToken = sbAccess;
+      this.sbRefreshToken = sbRefresh;
+      this.sbExpiry = parseInt(sbExpiry, 10);
+      if (savedUser && !this.currentUser) {
+        try {
+          this.currentUser = JSON.parse(savedUser);
+        } catch {
+          // sesión corrupta: se repara en el próximo login
+        }
       }
     }
   }
@@ -203,6 +224,204 @@ export class AuthService {
     apiClient.setAuthToken(access_token);
 
     return access_token;
+  }
+
+  // ---- Supabase Auth nativo (Fase 1) ----
+  // Email sintético provisionado por scripts/provisionar-auth.js (desktop).
+  static emailSintetico(username: string): string {
+    return `${username.trim().toLowerCase()}@farmacia.local`;
+  }
+
+  esSupabaseConfigurado(): boolean {
+    return supabaseHabilitado();
+  }
+
+  isSupabaseAutenticado(): boolean {
+    return !!this.sbAccessToken && Date.now() < this.sbExpiry;
+  }
+
+  getSupabaseToken(): string | null {
+    return this.isSupabaseAutenticado() ? this.sbAccessToken : null;
+  }
+
+  // Login contra Supabase Auth. Exige fila local ACTIVO (sincronizada): la nube
+  // autentica, el dispositivo autoriza con rol/sede locales. Sin red: sesión
+  // cacheada vigente, o loginLocal bcrypt como último recurso. Instalación
+  // fresca sin red no puede entrar (no hay hash sincronizado por diseño).
+  async loginSupabase(credentials: LoginCredentials): Promise<LoginResult> {
+    if (!supabaseHabilitado()) {
+      throw new Error('Supabase no configurado en este dispositivo.');
+    }
+    const email = AuthService.emailSintetico(credentials.username);
+    let respuesta: Response;
+    try {
+      respuesta = await fetch(
+        `${SUPABASE_CONFIG.url}/auth/v1/token?grant_type=password`,
+        {
+          method: 'POST',
+          headers: {
+            apikey: SUPABASE_CONFIG.anonKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email, password: credentials.password }),
+        }
+      );
+    } catch (error) {
+      console.warn('[AuthService] Supabase inalcanzable, fallback local:', error);
+      return this.loginSupabaseOffline(credentials);
+    }
+    if (!respuesta.ok) {
+      const codigo = await this.codigoErrorSupabase(respuesta);
+      if (codigo === 'CONECTIVIDAD') {
+        return this.loginSupabaseOffline(credentials);
+      }
+      throw new Error('Credenciales incorrectas');
+    }
+    const datos = (await respuesta.json()) as {
+      access_token: string;
+      refresh_token: string;
+      expires_in: number;
+    };
+    const usuario = await this.usuarioLocalPorUsername(credentials.username);
+    if (!usuario) {
+      throw new Error('Cuenta no sincronizada en este dispositivo. Sincronice con conexión.');
+    }
+    this.currentUser = usuario;
+    this.sbAccessToken = datos.access_token;
+    this.sbRefreshToken = datos.refresh_token;
+    this.sbExpiry = Date.now() + datos.expires_in * 1000;
+    await Promise.all([
+      SecureStorage.setItem(SB_KEYS.ACCESS, datos.access_token),
+      SecureStorage.setItem(SB_KEYS.REFRESH, datos.refresh_token),
+      SecureStorage.setItem(SB_KEYS.EXPIRY, String(this.sbExpiry)),
+      SecureStorage.setItem('user_session', JSON.stringify(usuario)),
+    ]);
+    return {
+      usuario,
+      accessToken: datos.access_token,
+      refreshToken: datos.refresh_token,
+      expiresIn: datos.expires_in,
+    };
+  }
+
+  private async codigoErrorSupabase(respuesta: Response): Promise<string> {
+    try {
+      const cuerpo = (await respuesta.json()) as { error?: string; msg?: string };
+      const texto = `${cuerpo.error || ''} ${cuerpo.msg || ''}`.toLowerCase();
+      if (/invalid login|invalid_grant|email not confirmed/.test(texto)) return 'CREDENCIALES';
+    } catch {
+      return 'CONECTIVIDAD';
+    }
+    return respuesta.status >= 500 ? 'CONECTIVIDAD' : 'CREDENCIALES';
+  }
+
+  private async loginSupabaseOffline(credentials: LoginCredentials): Promise<LoginResult> {
+    if (this.currentUser && this.isSupabaseAutenticado()) {
+      return {
+        usuario: this.currentUser,
+        accessToken: this.sbAccessToken as string,
+        refreshToken: this.sbRefreshToken as string,
+        expiresIn: Math.floor((this.sbExpiry - Date.now()) / 1000),
+      };
+    }
+    // Último recurso: bcrypt contra la fila sincronizada (requiere un login
+    // online previo que la haya traído; emite tokens locales, no de nube).
+    return this.loginLocal(credentials);
+  }
+
+  private async usuarioLocalPorUsername(username: string): Promise<Usuario | null> {
+    const db = sqliteService.getDatabase();
+    const fila = await db.getFirstAsync<{
+      id: number;
+      nombre: string;
+      username: string;
+      rol_id: number;
+      rol_nombre: string;
+      sede_id: number | null;
+      sede_nombre: string | null;
+      estado: string;
+      es_superadmin_principal: number;
+      created_at: string;
+    }>(
+      `SELECT u.id, u.nombre, u.username, u.rol_id, u.estado, u.sede_id,
+              u.es_superadmin_principal, u.created_at,
+              r.nombre as rol_nombre, s.nombre as sede_nombre
+       FROM usuarios u
+       JOIN roles r ON u.rol_id = r.id
+       LEFT JOIN sedes s ON u.sede_id = s.id
+       WHERE u.username = ? AND u.estado = 'ACTIVO'`,
+      [username]
+    );
+    if (!fila) return null;
+    return {
+      id: fila.id,
+      nombre: fila.nombre,
+      username: fila.username,
+      rol_id: fila.rol_id,
+      rol_nombre: fila.rol_nombre,
+      sede_id: fila.sede_id,
+      sede_nombre: fila.sede_nombre || undefined,
+      estado: fila.estado as 'ACTIVO' | 'INACTIVO',
+      es_superadmin_principal: fila.es_superadmin_principal,
+      created_at: fila.created_at,
+    };
+  }
+
+  async refreshSupabaseToken(): Promise<string> {
+    if (!this.sbRefreshToken) throw new Error('No hay sesión Supabase.');
+    const respuesta = await fetch(
+      `${SUPABASE_CONFIG.url}/auth/v1/token?grant_type=refresh_token`,
+      {
+        method: 'POST',
+        headers: {
+          apikey: SUPABASE_CONFIG.anonKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ refresh_token: this.sbRefreshToken }),
+      }
+    );
+    if (!respuesta.ok) {
+      await this.logoutSupabase();
+      throw new Error('Sesión Supabase expirada');
+    }
+    const datos = (await respuesta.json()) as {
+      access_token: string;
+      refresh_token: string;
+      expires_in: number;
+    };
+    this.sbAccessToken = datos.access_token;
+    this.sbRefreshToken = datos.refresh_token;
+    this.sbExpiry = Date.now() + datos.expires_in * 1000;
+    await Promise.all([
+      SecureStorage.setItem(SB_KEYS.ACCESS, datos.access_token),
+      SecureStorage.setItem(SB_KEYS.REFRESH, datos.refresh_token),
+      SecureStorage.setItem(SB_KEYS.EXPIRY, String(this.sbExpiry)),
+    ]);
+    return datos.access_token;
+  }
+
+  async logoutSupabase(): Promise<void> {
+    if (this.sbAccessToken) {
+      try {
+        await fetch(`${SUPABASE_CONFIG.url}/auth/v1/logout`, {
+          method: 'POST',
+          headers: {
+            apikey: SUPABASE_CONFIG.anonKey,
+            Authorization: `Bearer ${this.sbAccessToken}`,
+          },
+        });
+      } catch (error) {
+        console.warn('Logout Supabase omitido (sin red):', error);
+      }
+    }
+    this.sbAccessToken = null;
+    this.sbRefreshToken = null;
+    this.sbExpiry = 0;
+    await Promise.all([
+      SecureStorage.deleteItem(SB_KEYS.ACCESS),
+      SecureStorage.deleteItem(SB_KEYS.REFRESH),
+      SecureStorage.deleteItem(SB_KEYS.EXPIRY),
+    ]);
   }
 
   async logout(): Promise<void> {

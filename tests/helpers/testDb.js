@@ -9,7 +9,7 @@ function createTestDb() {
   db.pragma('foreign_keys = ON');
   setTestDb(db);
   runMigrations();
-  seed();
+  seed({ isTest: true });
   return db;
 }
 

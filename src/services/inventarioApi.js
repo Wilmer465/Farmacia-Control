@@ -90,5 +90,9 @@ export const inventarioApi = {
     escanear: (usuario, codigoBarras) => window.api.recepcion.escanear(usuario, codigoBarras),
     registrar: (usuario, data) => window.api.recepcion.registrar(usuario, data),
     historial: (usuario, filtros) => window.api.recepcion.historial(usuario, filtros)
+  },
+  firmaPad: {
+    detectar: (usuario) => window.api.firmaPad.detectar(usuario),
+    capturar: (usuario, datos) => window.api.firmaPad.capturar(usuario, datos)
   }
 };

@@ -375,6 +375,7 @@ export default function Entregas({ usuario, sedeActiva, params, onClearParams })
             <DocumentacionReceptor
               key={ordenParaDoc.id}
               exenta={ordenParaDoc.tipo_destino === 'MUNICIPIO_VEREDA'}
+              usuarioSesion={usuario}
               valoresIniciales={{
                 nombre: ordenParaDoc.receptor_nombre || '',
                 documento: ordenParaDoc.receptor_documento || '',

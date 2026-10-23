@@ -184,7 +184,7 @@ export default function Recepcion({ usuario, sedeActiva, onNavigate }) {
               className="btn-secundario btn-secundario--regreso"
               onClick={() => onNavigate('inventario')}
             >
-              ← Volver a Inventario
+              Volver a Inventario
             </button>
           )}
           <div>

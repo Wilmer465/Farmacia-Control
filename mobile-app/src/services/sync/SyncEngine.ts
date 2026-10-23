@@ -16,6 +16,9 @@ import { SyncQueueRepository } from '../database/repositories/SyncQueueRepositor
 import { SyncMetadataRepository } from '../database/repositories/SyncMetadataRepository';
 import { sqliteService } from '../database/SQLiteService';
 import { apiClient } from '../api/ApiClient';
+import type { SyncQueueItem } from '../../types/domain';
+import { supabaseSyncProvider } from './SupabaseSyncProvider';
+import { extraerMarcaTemporal } from '../../utils/syncPayload';
 import { EntidadSincronizable, ORDEN_TABLAS_SINC } from '../../constants/config';
 import { generateSyncId, hashData } from '../../utils/idempotency';
 import { suggestResolution, createConflictFromSyncError, ConflictItem as UtilConflictItem } from '../../utils/conflict';
@@ -103,6 +106,21 @@ export class SyncEngine {
     const startTime = Date.now();
     this.isSyncing = true;
     this.abortController = new AbortController();
+
+    // Fase 1: con Supabase configurado, sin conexión no se intenta nada.
+    // La cola local espera; la operación sigue 100% disponible offline.
+    if (supabaseSyncProvider.habilitado()) {
+      const enLinea = await supabaseSyncProvider.hayConexion();
+      if (!enLinea) {
+        this.isSyncing = false;
+        this.abortController = null;
+        await this.updateStats();
+        return {
+          success: false, pushed: 0, pulled: 0, conflicts: 0, errors: 0,
+          duration: Date.now() - startTime, error: 'Sin conexión. Cambios guardados en local.',
+        };
+      }
+    }
     
     this.updateState({ status: 'SYNCING', error: undefined });
 
@@ -205,6 +223,19 @@ export class SyncEngine {
     const ids = filteredItems.map(item => item.id);
     await this.syncQueueRepo.markSyncing(ids);
 
+    // Fase 1: Supabase directo (RLS por sede). Sin configurar, vía API desktop.
+    if (supabaseSyncProvider.habilitado()) {
+      try {
+        const pushResult = await supabaseSyncProvider.subirLote(filteredItems);
+        return this.procesarResultadosPush(filteredItems, pushResult.results);
+      } catch (error) {
+        for (const item of filteredItems) {
+          await this.syncQueueRepo.markFailed(item.id, error instanceof Error ? error.message : 'Network error');
+        }
+        throw error;
+      }
+    }
+
     const operations = filteredItems.map(item => ({
       idempotency_key: item.idempotency_key,
       operation: item.operation_type,
@@ -226,6 +257,20 @@ export class SyncEngine {
       }
 
       const results = response.data?.results || [];
+      return this.procesarResultadosPush(filteredItems, results);
+    } catch (error) {
+      // Mark all as failed
+      for (const item of filteredItems) {
+        await this.syncQueueRepo.markFailed(item.id, error instanceof Error ? error.message : 'Network error');
+      }
+      throw error;
+    }
+  }
+
+  private async procesarResultadosPush(
+    filteredItems: SyncQueueItem[],
+    results: PushOperationResult[]
+  ): Promise<PushResult> {
       let syncedCount = 0;
       let failedCount = 0;
       let conflictCount = 0;
@@ -297,6 +342,20 @@ export class SyncEngine {
   private async pull(options: SyncOptions): Promise<PullResult> {
     const tables = options.tables || ORDEN_TABLAS_SINC;
     const lastPull = await this.syncMetadataRepo.getLastPullTimestamp();
+
+    // Fase 1: Supabase directo con cursor synced_at (RLS filtra por sede).
+    if (supabaseSyncProvider.habilitado()) {
+      const data = await supabaseSyncProvider.bajar(
+        [...tables] as string[],
+        lastPull && !options.forceFullSync ? lastPull : null,
+        this.config.pullLimit
+      );
+      await this.applyServerChanges(data.changes);
+      if (data.cursor) {
+        await this.syncMetadataRepo.setLastPullTimestamp(data.cursor);
+      }
+      return data;
+    }
     
     const params: Record<string, any> = { limit: this.config.pullLimit };
     if (lastPull && !options.forceFullSync) {
@@ -335,20 +394,92 @@ export class SyncEngine {
 
   private async applySingleChange(change: ServerChange): Promise<void> {
     const tableName = change.entity;
-    const data = change.data;
-    
+    const data = { ...(change.data as Record<string, unknown>) };
+
     try {
+      // Convergencia LWW: si hay un cambio local pendiente de la misma fila y
+      // el servidor es más nuevo, se aplica el servidor y se registra el
+      // conflicto (edición local preservada en auditoría). Si el local es más
+      // nuevo o empata, también se aplica el servidor (gana servidor) y se
+      // registra, porque el push previo ya subió lo local.
+      const pk = Number((data as Record<string, unknown>).id);
+      if (Number.isFinite(pk)) {
+        const pendiente = await this.syncQueueRepo.findByEntity(tableName, pk);
+        if (pendiente) {
+          let pendienteTs: string | null = null;
+          try {
+            const payload = JSON.parse(pendiente.payload);
+            pendienteTs = extraerMarcaTemporal(
+              payload,
+              (pendiente as unknown as { created_at?: string }).created_at || null
+            );
+          } catch {
+            pendienteTs = (pendiente as unknown as { created_at?: string }).created_at || null;
+          }
+          const servidorTs = extraerMarcaTemporal(data, change.server_timestamp);
+          const decision = supabaseSyncProvider.resolverAplicacion(servidorTs, pendienteTs);
+          if (decision === 'conflicto') {
+            await this.syncQueueRepo.markConflict(pendiente.id, {
+              servidor: data,
+              localTs: pendienteTs,
+              servidorTs,
+            });
+            await this.auditoriaLocalRepo.registrar({
+              usuario_id: pendiente.user_id,
+              rol: '',
+              sede_id: pendiente.sede_id,
+              accion: 'CONFLICTO_SINCRONIZACION',
+              modulo: 'SYNC',
+              entidad: pendiente.entity,
+              entidad_id: pendiente.entity_id,
+              valores_anteriores: pendiente.payload,
+              valores_nuevos: JSON.stringify({ servidorTs, localTs: pendienteTs }),
+              device_id: await this.getDeviceId(),
+              sync_id: generateSyncId(),
+              resultado: 'CONFLICTO',
+            });
+            if (this.config.notifyOnConflict) {
+              await notificationService.showLocalNotification({
+                title: 'Conflicto de sincronización',
+                body: `Conflicto en ${tableName}: el servidor trae un cambio más nuevo.`,
+              });
+            }
+          }
+        }
+      }
+
+      // Al bajar usuarios nunca se trae password_hash (RLS/sanitizado): se
+      // preserva el local y se marca restablecimiento si no hay credencial.
+      if (tableName === 'usuarios') {
+        const local = pk && Number.isFinite(pk)
+          ? await sqliteService.queryFirst<{ password_hash?: string }>(
+              'SELECT password_hash FROM usuarios WHERE id = ?',
+              [pk]
+            )
+          : null;
+        const fila = data as Record<string, unknown>;
+        if (local && (local as { password_hash?: string }).password_hash) {
+          fila.password_hash = (local as { password_hash: string }).password_hash;
+        } else if (!fila.password_hash) {
+          fila.password_hash = `__SIN_CREDENCIAL_${Date.now()}__`;
+          (fila as Record<string, unknown>).debe_restablecer_contrasena = 1;
+        }
+      }
+
       if (change.operation === 'DELETE') {
-        const pk = data.id;
         if (pk) {
           await sqliteService.execute(`DELETE FROM "${tableName}" WHERE id = ?`, [pk]);
         }
       } else if (change.operation === 'CREATE' || change.operation === 'UPDATE') {
+        // expo-sqlite no enlaza objetos: descriptores y JSON van como texto.
         const columns = Object.keys(data);
         const placeholders = columns.map(() => '?').join(', ');
         const columnNames = columns.map(c => `"${c}"`).join(', ');
-        const values = columns.map(c => data[c]);
-        
+        const values = columns.map(c => {
+          const v = (data as Record<string, unknown>)[c];
+          return v !== null && typeof v === 'object' ? JSON.stringify(v) : v;
+        });
+
         const sql = `INSERT OR REPLACE INTO "${tableName}" (${columnNames}) VALUES (${placeholders})`;
         await sqliteService.execute(sql, values);
       }

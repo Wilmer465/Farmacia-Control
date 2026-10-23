@@ -6,8 +6,12 @@ module.exports = {
   up(db) {
     const cols = db.prepare('PRAGMA table_info(usuarios)').all().map((c) => c.name);
     if (!cols.includes('updated_at')) {
-      db.exec(`ALTER TABLE usuarios ADD COLUMN updated_at TEXT NOT NULL DEFAULT (datetime('now'));`);
+      // SQLite no acepta defaults no constantes en ADD COLUMN
+      // (ej. DEFAULT (datetime('now'))), asi que la columna se crea anulable
+      // y se rellena con un UPDATE posterior.
+      db.exec(`ALTER TABLE usuarios ADD COLUMN updated_at TEXT;`);
     }
+    db.exec(`UPDATE usuarios SET updated_at = datetime('now') WHERE updated_at IS NULL;`);
     db.exec(`
       CREATE TRIGGER IF NOT EXISTS trg_usuarios_updated_at
       AFTER UPDATE ON usuarios
@@ -17,8 +21,21 @@ module.exports = {
         UPDATE usuarios SET updated_at = datetime('now') WHERE id = NEW.id;
       END;
     `);
+    // Los INSERT (seed, repositorio, scripts) no pasan por el trigger de
+    // UPDATE: sin este trigger, todo usuario nuevo quedaria con NULL y el
+    // delta-sync (WHERE updated_at >= ?) lo ignoraria en silencio.
+    db.exec(`
+      CREATE TRIGGER IF NOT EXISTS trg_usuarios_updated_at_insert
+      AFTER INSERT ON usuarios
+      FOR EACH ROW
+      WHEN NEW.updated_at IS NULL
+      BEGIN
+        UPDATE usuarios SET updated_at = datetime('now') WHERE id = NEW.id;
+      END;
+    `);
   },
   down(db) {
     db.exec(`DROP TRIGGER IF EXISTS trg_usuarios_updated_at;`);
+    db.exec(`DROP TRIGGER IF EXISTS trg_usuarios_updated_at_insert;`);
   }
 };

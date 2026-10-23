@@ -38,12 +38,8 @@ export default function OrdenForm({ medicamentos, onCrear, error }) {
       const faltantes = [];
       if (!doc?.nombre?.trim()) faltantes.push('nombre de quien recibe');
       if (!doc?.documento?.trim()) faltantes.push('documento de identidad');
-      if (tipoDestino === 'LOCAL') {
-        if (!doc?.firma) faltantes.push('firma digital');
-        if (!doc?.huella) faltantes.push('huella dactilar');
-      }
       if (faltantes.length > 0) {
-        setErrorLocal(`La orden requiere la documentación de quien recibe (faltan: ${faltantes.join(', ')}).`);
+        setErrorLocal(`La orden requiere al menos el nombre y documento de quien recibe (faltan: ${faltantes.join(', ')}).`);
         return;
       }
     }

@@ -88,15 +88,11 @@ function crear(usuarioSesion, {
   const pendientes = [];
   if (!receptorNombre) faltantes.push('NOMBRE_RECEPTOR');
   if (!receptorDocumento) faltantes.push('DOCUMENTO');
-  if (esMunicipioVereda) {
-    if (!firma) pendientes.push('FIRMA');
-    if (!huella) pendientes.push('HUELLA');
-  } else {
-    if (!firma) faltantes.push('FIRMA');
-    if (!huella) faltantes.push('HUELLA');
-  }
+  if (!firma) pendientes.push('FIRMA');
+  if (!huella) pendientes.push('HUELLA');
+
   if (faltantes.length > 0) {
-    throw new ValidationError(`La orden requiere la documentación de quien recibe (faltan: ${faltantes.join(', ')}).`);
+    throw new ValidationError(`La orden requiere al menos el nombre y documento de quien recibe (faltan: ${faltantes.join(', ')}).`);
   }
   const documentacionCompleta = faltantes.length === 0 && pendientes.length === 0;
   const elementosFaltantes = [...faltantes, ...pendientes];
@@ -279,15 +275,11 @@ function actualizarDocumentacion(usuarioSesion, id, {
   const pendientes = [];
   if (!nombre) faltantes.push('NOMBRE_RECEPTOR');
   if (!documento) faltantes.push('DOCUMENTO');
-  if (esMunicipioVereda) {
-    if (!firma) pendientes.push('FIRMA');
-    if (!huella) pendientes.push('HUELLA');
-  } else {
-    if (!firma) faltantes.push('FIRMA');
-    if (!huella) faltantes.push('HUELLA');
-  }
+  if (!firma) pendientes.push('FIRMA');
+  if (!huella) pendientes.push('HUELLA');
+
   if (faltantes.length > 0) {
-    throw new ValidationError(`La documentación requiere al menos el nombre y documento de quien recibe${esMunicipioVereda ? '' : ' y, para entregas locales, la firma y huella'} (faltan: ${faltantes.join(', ')}).`);
+    throw new ValidationError(`La documentación requiere al menos el nombre y documento de quien recibe (faltan: ${faltantes.join(', ')}).`);
   }
   const documentacionCompleta = faltantes.length === 0 && pendientes.length === 0;
   const elementosFaltantes = [...faltantes, ...pendientes];

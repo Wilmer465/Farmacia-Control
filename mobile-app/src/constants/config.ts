@@ -34,6 +34,18 @@ export const API_CONFIG = {
   retryDelay: 1000,
 } as const;
 
+// Supabase como hub offline-first (Fase 1). La app NUNCA usa service_role:
+// solo anon + authenticated con RLS por sede. Sin estas variables el sync
+// remoto queda deshabilitado y todo sigue operando en local.
+export const SUPABASE_CONFIG = {
+  url: (process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/,+$/, ''),
+  anonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '',
+} as const;
+
+export function supabaseHabilitado(): boolean {
+  return Boolean(SUPABASE_CONFIG.url && SUPABASE_CONFIG.anonKey);
+}
+
 export const AUTH_CONFIG = {
   accessTokenExpiry: 15 * 60 * 1000,
   refreshTokenExpiry: 30 * 24 * 60 * 60 * 1000,

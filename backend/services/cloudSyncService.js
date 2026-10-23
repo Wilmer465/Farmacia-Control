@@ -1,30 +1,27 @@
 const fs = require('fs');
 const path = require('path');
+const nodeCrypto = require('crypto');
 const { getDb, resolveDbPath } = require('../database/connection');
 const permisoService = require('./permisoService');
 const { SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, syncHabilitado } = require('../config/supabaseConfig');
 const { ROLES } = require('../../shared/constants');
+// Convención del sobre offline-first (Fase 1-3): record_id namespaced, sanitizado,
+// marcas temporales, blobs por referencia y LWW. Espejo móvil en utils/syncPayload.ts.
+const {
+  CAMPOS_BLOB,
+  sanitizarFila,
+  extraerMarcaTemporal,
+  debeExternalizar,
+  rutaBlob,
+  descriptorBlob,
+  normalizarValoresFila,
+  ambitoPara
+} = require('../../shared/syncPayload');
 
 class CloudSyncError extends Error {}
 let syncInterval = null;
 let syncEnCurso = false;
 let syncDebounceTimer = null;
-
-// SEGURIDAD: columnas que NUNCA salen a la nube. password_hash no se sincroniza:
-// cada sede gestiona credenciales en local. Agregar aquí futuros secretos.
-const COLUMNAS_SENSIBLES = new Set(['password_hash', 'password', 'token', 'secret']);
-
-function sanitizarFila(row) {
-  if (!row || typeof row !== 'object') return row;
-  let limpia = null;
-  for (const key of Object.keys(row)) {
-    if (COLUMNAS_SENSIBLES.has(key.toLowerCase())) {
-      if (!limpia) limpia = { ...row };
-      delete limpia[key];
-    }
-  }
-  return limpia || row;
-}
 
 const RECENT_UPLOAD_WINDOW_MS = 30 * 60 * 1000;
 
@@ -147,23 +144,90 @@ function recentTimestamp() {
   return new Date(Date.now() - RECENT_UPLOAD_WINDOW_MS).toISOString();
 }
 
+// Blobs grandes a storage.blobs con service_role (SOLO main, nunca renderer
+// ni móvil). Se guardan como texto base64 con x-upsert: el mismo formato que
+// escribe y lee el móvil, con hash para verificar integridad al descargar.
+async function subirBlob(referencia, textoBase64) {
+  const res = await fetch(`${SUPABASE_URL}/storage/v1/object/blobs/${referencia}`, {
+    method: 'POST',
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      'Content-Type': 'application/octet-stream',
+      'x-upsert': 'true'
+    },
+    body: Buffer.from(textoBase64, 'utf8')
+  });
+  if (!res.ok) {
+    const detalle = await res.text().catch(() => '');
+    throw new CloudSyncError(`Storage respondió ${res.status}: ${detalle || res.statusText}`);
+  }
+}
+
+// Descarga bajo demanda un blob por descriptor (verifica hash). Para vistas de
+// detalle/documento, no para el pull automático.
+async function descargarBlob(descriptor) {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    throw new CloudSyncError('Falta configurar SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY.');
+  }
+  const res = await fetch(`${SUPABASE_URL}/storage/v1/object/blobs/${descriptor.__blob_ref}`, {
+    method: 'GET',
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`
+    }
+  });
+  if (!res.ok) throw new CloudSyncError(`Adjunto no disponible (${res.status}).`);
+  const texto = await res.text();
+  const sha = nodeCrypto.createHash('sha256').update(texto, 'utf8').digest('hex');
+  if (sha !== descriptor.__sha256) throw new CloudSyncError('Adjunto corrupto (hash).');
+  return texto;
+}
+
+function sha256Hex(texto) {
+  return nodeCrypto.createHash('sha256').update(texto, 'utf8').digest('hex');
+}
+
 async function subir(lastSyncTimestamp, { permitirSubidaTotal = true } = {}) {
   const db = getDb();
   const payload = [];
   const since = lastSyncTimestamp || (permitirSubidaTotal ? null : recentTimestamp());
+  const adjuntosFallidos = [];
 
   for (const table of SYNC_TABLES) {
     const pk = primaryKeyFor(db, table);
     const rows = getRowsToSync(db, table, since);
 
     for (const row of rows) {
-      const recordId = String(row[pk]);
-      if (!recordId) continue;
+      if (row[pk] === null || row[pk] === undefined) continue;
+      const fila = { ...row };
+      // Externaliza blobs grandes antes de sanitizar: el descriptor (ruta,
+      // hash, tamaño) es lo que viaja en `data`, nunca el binario.
+      const ambito = ambitoPara(table, fila);
+      const recordId = `${ambito}:${table}:${row[pk]}`;
+      let filaCompleta = true;
+      for (const campo of CAMPOS_BLOB) {
+        if (!debeExternalizar(campo, fila[campo])) continue;
+        const texto = fila[campo];
+        const referencia = rutaBlob(ambito, table, recordId, campo);
+        try {
+          await subirBlob(referencia, texto);
+          fila[campo] = descriptorBlob(referencia, sha256Hex(texto), texto.length);
+        } catch (err) {
+          // La fila se omite este ciclo (el servidor conserva el descriptor
+          // anterior) y el cursor no avanza: nada se pierde, se reintenta.
+          adjuntosFallidos.push(`${table}:${row[pk]}.${campo} (${err.message})`);
+          filaCompleta = false;
+          console.warn(`[cloudSync] Adjunto pendiente ${referencia}: ${err.message}`);
+          break;
+        }
+      }
+      if (!filaCompleta) continue;
       payload.push({
         table_name: table,
         record_id: recordId,
-        data: sanitizarFila(row),
-        local_updated_at: row.updated_at || row.fecha_actualizacion || row.fecha || row.created_at || new Date().toISOString()
+        data: sanitizarFila(fila),
+        local_updated_at: extraerMarcaTemporal(row, new Date().toISOString())
       });
     }
   }
@@ -177,6 +241,11 @@ async function subir(lastSyncTimestamp, { permitirSubidaTotal = true } = {}) {
       headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
       body: JSON.stringify(payload.slice(i, i + chunkSize))
     });
+  }
+  if (adjuntosFallidos.length > 0) {
+    throw new CloudSyncError(
+      `Subidos ${payload.length} registros pero ${adjuntosFallidos.length} adjuntos quedaron pendientes: ${adjuntosFallidos.join('; ')}`
+    );
   }
   return payload.length;
 }
@@ -208,7 +277,8 @@ async function bajar(lastSyncTimestamp, { permitirBajadaTotal = true } = {}) {
                 }
               } catch (_) { /* si falla, se inserta sanitizado */ }
             }
-            insertOrReplace(db, table, fila);
+            // Descriptores de blob y JSON viajan como objetos: a SQLite como texto.
+            insertOrReplace(db, table, normalizarValoresFila(fila));
             recibidos += 1;
           }
         }
@@ -221,7 +291,7 @@ async function bajar(lastSyncTimestamp, { permitirBajadaTotal = true } = {}) {
 
     while (true) {
       const records = await supabaseRequest(
-        `sync_records?select=table_name,record_id,data&order=table_name.asc,record_id.asc&limit=${limit}&offset=${offset}${timeFilter}`,
+        `sync_records?select=table_name,record_id,data,local_updated_at,synced_at&order=synced_at.asc&limit=${limit}&offset=${offset}${timeFilter}`,
         { method: 'GET' }
       );
       if (!records?.length) break;
@@ -353,6 +423,7 @@ module.exports = {
   sincronizarEnSegundoPlano,
   iniciarPlanificadorCloudSync,
   detenerPlanificadorCloudSync,
+  descargarBlob,
   CloudSyncError,
   SYNC_TABLES
 };

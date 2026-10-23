@@ -17,6 +17,7 @@ const cloudSyncController = require('./controllers/cloudSyncController');
 const usuarioController = require('./controllers/usuarioController');
 const catalogoCumController = require('./controllers/catalogoCumController');
 const recepcionController = require('./controllers/recepcionController');
+const firmaPadController = require('./controllers/firmaPadController');
 const { sincronizarEnSegundoPlano } = require('./services/cloudSyncService');
 const sedeService = require('./services/sedeService');
 const sessionService = require('./services/sessionService');
@@ -354,6 +355,17 @@ ipcMain.handle('backups:restaurar', conSyncDespuesDeCambio('backups:restaurar', 
 
   ipcMain.handle('recepcion:historial', conValidacionSesion((usuarioSesion, filtros) => {
     return recepcionController.obtenerHistorialRecepciones(usuarioSesion, filtros);
+  }));
+
+  // Firma en pad Wacom STU-540 (STU SDK directo vía helper nativo).
+  // capturar es async: se retorna la promesa para que ipcMain la resuelva
+  // (no envolver en { ok, data } sincrónico).
+  ipcMain.handle('firmaPad:detectar', conValidacionSesion(() => {
+    return firmaPadController.detectar();
+  }));
+
+  ipcMain.handle('firmaPad:capturar', conValidacionSesion((usuarioSesion, datos) => {
+    return firmaPadController.capturar(usuarioSesion, datos);
   }));
 }
 

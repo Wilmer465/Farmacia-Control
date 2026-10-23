@@ -1,4 +1,4 @@
-const { app, BrowserWindow, session } = require('electron');
+const { app, BrowserWindow, dialog, session } = require('electron');
 const path = require('path');
 const { registerIpcHandlers } = require('../backend/ipcHandlers');
 const { iniciarServidorHttp } = require('../backend/server');
@@ -36,7 +36,24 @@ function createWindow() {
 
   // Mostrar la ventana de forma fluida una vez lista para renderizar
   win.once('ready-to-show', () => {
+    clearTimeout(forzarVisible);
     win.show();
+  });
+
+  // Red de seguridad: si la pagina nunca emite 'ready-to-show' (Vite caido,
+  // error de carga), la ventana se muestra igual con el error visible en vez
+  // de dejar un proceso fantasma sin ventana.
+  const forzarVisible = setTimeout(() => {
+    if (!win.isDestroyed() && !win.isVisible()) {
+      console.warn('[main] ready-to-show no disparo: forzando ventana visible.');
+      win.show();
+    }
+  }, 8000);
+
+  win.webContents.on('did-fail-load', (_event, codigo, descripcion, url) => {
+    console.error(`[main] Fallo cargando ${url}: [${codigo}] ${descripcion}`);
+    clearTimeout(forzarVisible);
+    if (!win.isDestroyed()) win.show();
   });
 
   // CSP estricta en producción; en desarrollo permite 'unsafe-inline' y 'unsafe-eval' para HMR de Vite
@@ -66,9 +83,23 @@ app.whenReady().then(async () => {
   // nativo (better-sqlite3) que ya está compilado para este proceso. Nunca deben
   // correrse por fuera con `node` normal: ese binario usa otra versión de ABI
   // y el .node compilado para Electron no carga ahí (y viceversa).
-  runMigrations();
-  seed(); // idempotente: si ya existen roles/sede/superadmin, no hace nada
-  registerIpcHandlers();
+  //
+  // Van en try/catch para que un fallo de BD muestre un error visible en vez
+  // de dejar un proceso fantasma sin ventana (la ventana se crea siempre).
+  let errorArranque = null;
+  try {
+    runMigrations();
+    seed(); // idempotente: si ya existen roles/sede/superadmin, no hace nada
+  } catch (err) {
+    console.error('[main] Fallo en migraciones/seed:', err);
+    errorArranque = err;
+  }
+  try {
+    registerIpcHandlers();
+  } catch (err) {
+    console.error('[main] Fallo registrando handlers IPC:', err);
+    errorArranque = errorArranque || err;
+  }
 
   // API HTTP de autenticacion para la app movil (Expo Go, emulador, dispositivo
   // fisico y web). Comparte el mismo better-sqlite3 y el mismo sessionService que
@@ -82,6 +113,13 @@ app.whenReady().then(async () => {
   iniciarPlanificadorAutoBackup();
   iniciarPlanificadorCloudSync();
   createWindow();
+
+  if (errorArranque) {
+    dialog.showErrorBox(
+      'Error al iniciar Farmacia Control',
+      `La base de datos no pudo prepararse y algunas funciones pueden fallar.\n\nDetalle: ${errorArranque.message || errorArranque}\n\nRevise la consola o contacte soporte. Sus datos no fueron modificados.`
+    );
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

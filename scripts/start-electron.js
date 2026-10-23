@@ -3,6 +3,9 @@ const path = require('path');
 const fs = require('fs');
 const rootDir = path.join(__dirname, '..');
 
+// Cargar variables de entorno desde .env (no versionado) para Supabase
+require('dotenv').config({ path: path.join(rootDir, '.env') });
+
 const env = { ...process.env };
 delete env.ELECTRON_RUN_AS_NODE;
 

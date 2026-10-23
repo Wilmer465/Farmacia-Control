@@ -195,13 +195,19 @@ export default function AppShell({ usuario, onLogout }) {
     let cancelado = false;
     (async () => {
       const res = await inventarioApi.sedes.listar(usuario);
-      if (!res.ok || cancelado || res.data.length === 0) return;
-      setSedes(res.data);
+      if (!res.ok || cancelado) return;
+      const data = Array.isArray(res.data) ? res.data : [];
+      setSedes(data);
+      if (data.length === 0) {
+        setSedeActiva(null);
+        localStorage.removeItem('farmacia_sede_activa');
+        return;
+      }
       setSedeActiva((actual) => {
         const raw = localStorage.getItem('farmacia_sede_activa');
         if (raw === 'TODAS') return null;
-        if (actual && res.data.some((s) => s.id === actual)) return actual;
-        const inicial = res.data[0].id;
+        if (actual && data.some((s) => s.id === actual)) return actual;
+        const inicial = data[0].id;
         localStorage.setItem('farmacia_sede_activa', String(inicial));
         return inicial;
       });
@@ -223,8 +229,8 @@ export default function AppShell({ usuario, onLogout }) {
 
   const sedeActivaObj = sedes.find((s) => s.id === sedeActiva);
   const nombreSedeContexto = esSuperadmin
-    ? (sedeActiva == null ? 'Todas las sedes' : (sedeActivaObj ? sedeActivaObj.nombre : 'Seleccionando...'))
-    : usuario.sede_nombre;
+    ? (sedes.length === 0 ? 'Sin sedes' : (sedeActiva == null ? 'Todas las sedes' : (sedeActivaObj ? sedeActivaObj.nombre : 'Seleccionando...')))
+    : (usuario.sede_nombre || 'Sin sede');
 
   const puedeVerAuditoriaYRespaldos = ['SUPERADMIN', 'ADMIN'].includes(usuario.rol_nombre);
   const esWilmer = esSuperadmin && String(usuario.username || '').toLowerCase().trim() === 'wilmer';
@@ -306,21 +312,27 @@ export default function AppShell({ usuario, onLogout }) {
             <div className="user-meta">
               <span className="user-badge">{usuario.rol_nombre}</span>
               {esSuperadmin ? (
-                <select
-                  className="sede-selector sede-selector--compacto"
-                  value={sedeActiva == null ? 'TODAS' : sedeActiva}
-                  onChange={handleCambiarSede}
-                  title="Sede activa para sus gestiones"
-                  aria-label="Seleccionar sede activa"
-                >
-                  <option value="TODAS">Todas las sedes</option>
-                  {sedes.map((s) => (
-                    <option key={s.id} value={s.id}>{s.nombre}</option>
-                  ))}
-                </select>
+                sedes.length > 0 ? (
+                  <select
+                    className="sede-selector sede-selector--compacto"
+                    value={sedeActiva == null ? 'TODAS' : sedeActiva}
+                    onChange={handleCambiarSede}
+                    title="Sede activa para sus gestiones"
+                    aria-label="Seleccionar sede activa"
+                  >
+                    <option value="TODAS">Todas las sedes</option>
+                    {sedes.map((s) => (
+                      <option key={s.id} value={s.id}>{s.nombre}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="user-badge user-badge--muted" style={{ fontSize: '0.75rem', opacity: 0.7 }} title="No hay sedes registradas en el sistema">
+                    Sin sedes
+                  </span>
+                )
               ) : (
                 <span className="user-sede" title={usuario.sede_nombre}>
-                  {usuario.sede_nombre}
+                  {usuario.sede_nombre || 'Sin sede'}
                 </span>
               )}
             </div>

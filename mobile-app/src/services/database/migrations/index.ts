@@ -26,4 +26,5 @@ export * from './025_mobile_auditoria_local';
 export * from './026_mobile_dispositivos';
 export * from './027_admin_bcrypt';
 export * from './028_debe_restablecer_contrasena';
+export * from './029_usuarios_auth_user_id';
 
