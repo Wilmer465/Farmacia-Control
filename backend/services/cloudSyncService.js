@@ -5,6 +5,12 @@ const { getDb, resolveDbPath } = require('../database/connection');
 const permisoService = require('./permisoService');
 const { SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, syncHabilitado } = require('../config/supabaseConfig');
 const { ROLES } = require('../../shared/constants');
+const {
+  crearContadorSincronizacion,
+  agregarMetricasDiarias,
+  agregarTransferenciaDiaria
+} = require('./syncMetrics');
+const { solicitarConReintentos } = require('./supabaseHttpClient');
 // Convención del sobre offline-first (Fase 1-3): record_id namespaced, sanitizado,
 // marcas temporales, blobs por referencia y LWW. Espejo móvil en utils/syncPayload.ts.
 const {
@@ -51,9 +57,8 @@ function rutaSyncState() {
   return path.join(path.dirname(dbPath), 'cloud_sync_state.json');
 }
 
-function leerSyncState() {
+function leerSyncState(ruta = rutaSyncState()) {
   try {
-    const ruta = rutaSyncState();
     if (fs.existsSync(ruta)) {
       return JSON.parse(fs.readFileSync(ruta, 'utf8'));
     }
@@ -63,13 +68,16 @@ function leerSyncState() {
   return { last_sync_timestamp: null, last_sync_direction: null };
 }
 
-function guardarSyncState(state) {
+function guardarSyncState(state, ruta = rutaSyncState()) {
   try {
-    const ruta = rutaSyncState();
     fs.writeFileSync(ruta, JSON.stringify(state, null, 2), 'utf8');
   } catch (err) {
     console.warn('[cloudSync] Error guardando sync_state:', err.message);
   }
+}
+
+function rutaMetricasSync() {
+  return path.join(path.dirname(resolveDbPath()), 'cloud_sync_metrics.json');
 }
 
 function verificarPermiso(usuarioSesion) {
@@ -80,28 +88,33 @@ function verificarPermiso(usuarioSesion) {
 
 function headers(extra = {}) {
   return {
-    apikey: SUPABASE_ANON_KEY,
-    Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY}`,
+    apikey: SUPABASE_ANON_KEY || SUPABASE_SERVICE_ROLE_KEY,
+    Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
     'Content-Type': 'application/json',
     ...extra
   };
 }
 
-async function supabaseRequest(pathRequest, options = {}) {
+async function supabaseRequest(pathRequest, options = {}, metricas = null) {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     throw new CloudSyncError('Falta configurar SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY.');
   }
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${pathRequest}`, {
+  const res = await solicitarConReintentos(`${SUPABASE_URL}/rest/v1/${pathRequest}`, {
     ...options,
     headers: headers(options.headers || {})
+  }, {
+    alIntento: (intento) => metricas?.registrarSolicitud({
+      ...intento,
+      categoria: 'rest',
+      operacion: String(options.method || 'GET').toUpperCase() === 'POST' ? 'push' : 'pull'
+    })
   });
   if (!res.ok) {
     const detalle = await res.text().catch(() => '');
     throw new CloudSyncError(`Supabase respondió ${res.status}: ${detalle || res.statusText}`);
   }
   if (res.status === 204) return null;
-  const text = await res.text();
-  return text ? JSON.parse(text) : null;
+  return res.texto ? JSON.parse(res.texto) : null;
 }
 
 function getTableColumns(db, table) {
@@ -147,8 +160,8 @@ function recentTimestamp() {
 // Blobs grandes a storage.blobs con service_role (SOLO main, nunca renderer
 // ni móvil). Se guardan como texto base64 con x-upsert: el mismo formato que
 // escribe y lee el móvil, con hash para verificar integridad al descargar.
-async function subirBlob(referencia, textoBase64) {
-  const res = await fetch(`${SUPABASE_URL}/storage/v1/object/blobs/${referencia}`, {
+async function subirBlob(referencia, textoBase64, metricas = null) {
+  const res = await solicitarConReintentos(`${SUPABASE_URL}/storage/v1/object/blobs/${referencia}`, {
     method: 'POST',
     headers: {
       apikey: SUPABASE_SERVICE_ROLE_KEY,
@@ -157,9 +170,15 @@ async function subirBlob(referencia, textoBase64) {
       'x-upsert': 'true'
     },
     body: Buffer.from(textoBase64, 'utf8')
+  }, {
+    alIntento: (intento) => metricas?.registrarSolicitud({
+      ...intento,
+      categoria: 'storage',
+      operacion: 'storageSubida'
+    })
   });
   if (!res.ok) {
-    const detalle = await res.text().catch(() => '');
+    const detalle = res.texto || '';
     throw new CloudSyncError(`Storage respondió ${res.status}: ${detalle || res.statusText}`);
   }
 }
@@ -170,25 +189,42 @@ async function descargarBlob(descriptor) {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     throw new CloudSyncError('Falta configurar SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY.');
   }
-  const res = await fetch(`${SUPABASE_URL}/storage/v1/object/blobs/${descriptor.__blob_ref}`, {
-    method: 'GET',
-    headers: {
-      apikey: SUPABASE_SERVICE_ROLE_KEY,
-      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`
+  const metricas = crearContadorSincronizacion();
+  try {
+    const res = await solicitarConReintentos(`${SUPABASE_URL}/storage/v1/object/blobs/${descriptor.__blob_ref}`, {
+      method: 'GET',
+      headers: {
+        apikey: SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`
+      }
+    }, {
+      alIntento: (intento) => metricas.registrarSolicitud({
+        ...intento,
+        categoria: 'storage',
+        operacion: 'storageBajada'
+      })
+    });
+    if (!res.ok) throw new CloudSyncError(`Adjunto no disponible (${res.status}).`);
+    const sha = nodeCrypto.createHash('sha256').update(res.texto, 'utf8').digest('hex');
+    if (sha !== descriptor.__sha256) throw new CloudSyncError('Adjunto corrupto (hash).');
+    return res.texto;
+  } catch (err) {
+    metricas.marcarFallo();
+    throw err;
+  } finally {
+    try {
+      agregarTransferenciaDiaria(metricas.finalizar(), { ruta: rutaMetricasSync() });
+    } catch (err) {
+      console.warn('[cloudSync] No se pudieron guardar métricas de Storage:', err.message);
     }
-  });
-  if (!res.ok) throw new CloudSyncError(`Adjunto no disponible (${res.status}).`);
-  const texto = await res.text();
-  const sha = nodeCrypto.createHash('sha256').update(texto, 'utf8').digest('hex');
-  if (sha !== descriptor.__sha256) throw new CloudSyncError('Adjunto corrupto (hash).');
-  return texto;
+  }
 }
 
 function sha256Hex(texto) {
   return nodeCrypto.createHash('sha256').update(texto, 'utf8').digest('hex');
 }
 
-async function subir(lastSyncTimestamp, { permitirSubidaTotal = true } = {}) {
+async function subir(lastSyncTimestamp, { permitirSubidaTotal = true } = {}, metricas = null) {
   const db = getDb();
   const payload = [];
   const since = lastSyncTimestamp || (permitirSubidaTotal ? null : recentTimestamp());
@@ -211,7 +247,7 @@ async function subir(lastSyncTimestamp, { permitirSubidaTotal = true } = {}) {
         const texto = fila[campo];
         const referencia = rutaBlob(ambito, table, recordId, campo);
         try {
-          await subirBlob(referencia, texto);
+          await subirBlob(referencia, texto, metricas);
           fila[campo] = descriptorBlob(referencia, sha256Hex(texto), texto.length);
         } catch (err) {
           // La fila se omite este ciclo (el servidor conserva el descriptor
@@ -236,11 +272,13 @@ async function subir(lastSyncTimestamp, { permitirSubidaTotal = true } = {}) {
 
   const chunkSize = 300;
   for (let i = 0; i < payload.length; i += chunkSize) {
+    const lote = payload.slice(i, i + chunkSize);
     await supabaseRequest('sync_records', {
       method: 'POST',
       headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
-      body: JSON.stringify(payload.slice(i, i + chunkSize))
-    });
+      body: JSON.stringify(lote)
+    }, metricas);
+    metricas?.registrarFilasSubidas(lote.length);
   }
   if (adjuntosFallidos.length > 0) {
     throw new CloudSyncError(
@@ -250,7 +288,7 @@ async function subir(lastSyncTimestamp, { permitirSubidaTotal = true } = {}) {
   return payload.length;
 }
 
-async function bajar(lastSyncTimestamp, { permitirBajadaTotal = true } = {}) {
+async function bajar(lastSyncTimestamp, { permitirBajadaTotal = true } = {}, metricas = null) {
   if (!lastSyncTimestamp && !permitirBajadaTotal) return 0;
 
   const db = getDb();
@@ -292,10 +330,12 @@ async function bajar(lastSyncTimestamp, { permitirBajadaTotal = true } = {}) {
     while (true) {
       const records = await supabaseRequest(
         `sync_records?select=table_name,record_id,data,local_updated_at,synced_at&order=synced_at.asc&limit=${limit}&offset=${offset}${timeFilter}`,
-        { method: 'GET' }
+        { method: 'GET' },
+        metricas
       );
       if (!records?.length) break;
       tx(records);
+      metricas?.registrarFilasBajadas(records.length);
       if (records.length < limit) break;
       offset += limit;
     }
@@ -320,7 +360,9 @@ async function sincronizar(usuarioSesion, { direccion = 'AMBAS' } = {}) {
 async function sincronizarInterno({
   direccion = 'AMBAS',
   permitirSubidaTotal = false,
-  permitirBajadaTotal = false
+  permitirBajadaTotal = false,
+  rutaEstado = rutaSyncState(),
+  rutaMetricas = rutaMetricasSync()
 } = {}) {
   if (syncEnCurso) {
     return {
@@ -335,14 +377,15 @@ async function sincronizarInterno({
 
   syncEnCurso = true;
   const inicio = new Date().toISOString();
-  const state = leerSyncState();
+  const state = leerSyncState(rutaEstado);
   const lastSync = state.last_sync_timestamp;
+  const metricas = crearContadorSincronizacion();
   let subidos = 0;
   let bajados = 0;
 
   try {
-    if (direccion === 'SUBIR' || direccion === 'AMBAS') subidos = await subir(lastSync, { permitirSubidaTotal });
-    if (direccion === 'BAJAR' || direccion === 'AMBAS') bajados = await bajar(lastSync, { permitirBajadaTotal });
+    if (direccion === 'SUBIR' || direccion === 'AMBAS') subidos = await subir(lastSync, { permitirSubidaTotal }, metricas);
+    if (direccion === 'BAJAR' || direccion === 'AMBAS') bajados = await bajar(lastSync, { permitirBajadaTotal }, metricas);
 
     const fin = new Date().toISOString();
     guardarSyncState({
@@ -351,7 +394,7 @@ async function sincronizarInterno({
       last_run_fin: fin,
       subidos,
       bajados
-    });
+    }, rutaEstado);
 
     return {
       inicio,
@@ -361,7 +404,15 @@ async function sincronizarInterno({
       direccion,
       esDelta: Boolean(lastSync)
     };
+  } catch (err) {
+    metricas.marcarFallo();
+    throw err;
   } finally {
+    try {
+      agregarMetricasDiarias(metricas.finalizar(), { ruta: rutaMetricas });
+    } catch (err) {
+      console.warn('[cloudSync] No se pudieron guardar las métricas locales agregadas:', err.message);
+    }
     syncEnCurso = false;
   }
 }
@@ -383,6 +434,10 @@ async function sincronizarAutomaticamente() {
 
 function iniciarPlanificadorCloudSync({ intervaloMs = 5 * 60 * 1000, ejecutarAlInicio = true } = {}) {
   if (syncInterval) return;
+  if (!syncHabilitado) {
+    console.info('[cloudSync] Sincronización deshabilitada: falta SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY.');
+    return;
+  }
   if (ejecutarAlInicio) {
     setTimeout(sincronizarAutomaticamente, 90 * 1000);
   }
@@ -425,5 +480,6 @@ module.exports = {
   detenerPlanificadorCloudSync,
   descargarBlob,
   CloudSyncError,
-  SYNC_TABLES
+  SYNC_TABLES,
+  sincronizarInterno
 };

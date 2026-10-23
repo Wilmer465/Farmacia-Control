@@ -4,6 +4,6 @@
   "hora": "02:00",
   "dia_semana": 1,
   "dia_mes": 1,
-  "maximo_respaldos_por_sede": 20,
-  "ultimo_backup_auto": "2026-10-23T04:15:47.656Z"
+  "ultimo_backup_auto": "2026-10-23T08:21:14.469Z",
+  "maximo_respaldos_por_sede": 20
 }

@@ -47,7 +47,6 @@ export default function Respaldos({ usuario, sedeActiva }) {
     hora: '02:00',
     dia_semana: 1,
     dia_mes: 1,
-    maximo_respaldos_por_sede: 20,
     ultimo_backup_auto: null
   });
   const [guardandoConfig, setGuardandoConfig] = useState(false);
@@ -133,11 +132,7 @@ export default function Respaldos({ usuario, sedeActiva }) {
     try {
       const res = await inventarioApi.backups.crear(usuario, { sedeId: sedeIdConsulta });
       if (!res?.ok) { setError(res?.error || 'No se pudo crear el respaldo.'); return; }
-      const purgados = res.data?.purga?.eliminados?.length || 0;
-      setAviso(
-        `Copia de seguridad manual generada con éxito: ${res.data.nombre}`
-        + (purgados > 0 ? ` (se purgaron ${purgados} respaldos automáticos antiguos)` : '')
-      );
+      setAviso(`Copia de seguridad manual generada con éxito: ${res.data.nombre}`);
       await cargar();
     } catch (err) {
       console.error('[Respaldos] Error al crear el respaldo:', err);
@@ -326,30 +321,6 @@ export default function Respaldos({ usuario, sedeActiva }) {
                   Última ejecución automática: <strong>{new Date(configAuto.ultimo_backup_auto).toLocaleString()}</strong>
                 </div>
               )}
-            </div>
-
-            {/* RETENCIÓN */}
-            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '1rem' }}>
-              <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#92400e', display: 'block', marginBottom: '0.35rem' }}>
-                Retención: respaldos automáticos a conservar
-              </label>
-              <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                <input
-                  type="number"
-                  min="1"
-                  max="500"
-                  value={configAuto.maximo_respaldos_por_sede ?? 20}
-                  onChange={(e) => setConfigAuto((prev) => ({ ...prev, maximo_respaldos_por_sede: Number(e.target.value) }))}
-                  style={{ width: '90px', padding: '0.4rem 0.6rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
-                />
-                <span style={{ fontSize: '0.78rem', color: '#78350f' }}>
-                  archivos por alcance de sede. Solo se purgan los <strong>automáticos</strong>; los manuales nunca se borran.
-                  Con frecuencia horaria, 20 equivalen a unas 20 horas de historial.
-                </span>
-              </div>
-              <div style={{ marginTop: '0.6rem', fontSize: '0.78rem', color: '#78350f' }}>
-                Consumo actual en disco: <strong>{formatearTamano(consumo.bytes)}</strong> en <strong>{consumo.cantidad}</strong> archivo{consumo.cantidad === 1 ? '' : 's'} de respaldo (todos los alcances).
-              </div>
             </div>
 
             {mensajeConfig && <div className="aviso-ok" style={{ marginBottom: '0.75rem' }}>{mensajeConfig}</div>}

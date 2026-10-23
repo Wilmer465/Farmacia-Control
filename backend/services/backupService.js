@@ -9,12 +9,6 @@ const { AUDIT_ACTIONS, ROLES } = require('../../shared/constants');
 
 class ValidationError extends Error {}
 
-// Sin retención, cada respaldo automático horario son ~81 MB: ~2 GB diarios que
-// acaban llenando el disco, y entonces fallan a la vez el automático y el manual.
-// 20 automáticos equivalen a ~20 h de historia con frecuencia horaria, o ~20 días
-// con frecuencia diaria.
-const MAXIMO_RESPALDOS_POR_DEFECTO = 20;
-
 function verificarAccesoRespaldos(usuarioSesion) {
   if (!usuarioSesion || ![ROLES.SUPERADMIN, ROLES.ADMIN].includes(usuarioSesion.rol_nombre)) {
     throw new permisoService.PermisoError('Solo el Superadmin y el Administrador de sede pueden gestionar respaldos.');
@@ -162,78 +156,6 @@ function formatearBytes(bytes) {
   return `${mb.toFixed(1)} MB`;
 }
 
-// RETENCIÓN.
-//
-// Reglas deliberadas, cada una con un motivo:
-//  - Solo toca archivos `farmacia_backup_auto*`. Un respaldo manual es una decisión
-//    explícita de una persona; borrarlo porque el planificador lo decidió sería
-//    inaceptable.
-//  - Cuenta por ALCANCE DE SEDE, no globalmente: los respaldos de una sede no
-//    pueden empujar los de otra. El alcance va en el nombre (`_sede_12` o
-//    `_global`), que es la única información de sede que tiene un archivo suelto.
-//  - Orden por fecha de modificación, no por nombre: el timestamp del nombre tiene
-//    resolución de segundos y dos respaldos del mismo segundo se ordenarían mal.
-//  - Nunca borra el archivo recién creado: se llama con `protegerNombre` para que
-//    una retención mal calculada no destruya el respaldo que acaba de validarse.
-function purgarRespaldosAntiguos({ alcanceTag, maximo, protegerNombre, dir }) {
-  const limite = Number.isInteger(maximo) && maximo > 0 ? maximo : MAXIMO_RESPALDOS_POR_DEFECTO;
-  const patron = new RegExp(`^farmacia_backup_auto${alcanceTag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}_.+\\.db$`);
-
-  let archivos;
-  try {
-    archivos = fs.readdirSync(dir);
-  } catch (err) {
-    console.warn('[backupService] No se pudo leer la carpeta para purgar:', err.message);
-    return { eliminados: [], bytesLiberados: 0, limite };
-  }
-
-  const candidatos = [];
-  for (const nombre of archivos) {
-    if (!patron.test(nombre)) continue;
-    if (nombre === protegerNombre) continue;
-    let stats;
-    try {
-      stats = fs.statSync(path.join(dir, nombre));
-    } catch (err) {
-      continue;
-    }
-    candidatos.push({ nombre, mtime: stats.mtimeMs, bytes: stats.size });
-  }
-
-  // Más ANTIGUO primero, y se purga desde el principio de la lista. Ordenar al
-  // revés y hacer `slice(0, aPurgar)` parece igual, pero borra justo los más
-  // recientes y deja los viejos: el test de retención lo detecta.
-  // El desempate por nombre mantiene un orden estable entre ejecuciones cuando dos
-  // respaldos comparten mtime.
-  candidatos.sort((a, b) => (a.mtime - b.mtime) || a.nombre.localeCompare(b.nombre));
-
-  // Tras purgar deben quedar `limite` archivos del alcance. Si se pasa
-  // `protegerNombre` —el respaldo recién creado y validado— ese archivo ya cuenta
-  // para el límite y se excluye de `candidatos`, así que de ellos solo se
-  // conservan `limite - 1`. Sin él, se conservan `limite`.
-  const aConservar = Math.max(protegerNombre ? limite - 1 : limite, 0);
-  const aPurgar = candidatos.length - aConservar;
-  if (aPurgar <= 0) return { eliminados: [], bytesLiberados: 0, limite };
-
-  const eliminados = [];
-  let bytesLiberados = 0;
-  for (const cand of candidatos.slice(0, aPurgar)) {
-    try {
-      fs.unlinkSync(path.join(dir, cand.nombre));
-      eliminados.push(cand.nombre);
-      bytesLiberados += cand.bytes;
-    } catch (err) {
-      console.warn(`[backupService] No se pudo purgar ${cand.nombre}:`, err.message);
-    }
-  }
-
-  if (eliminados.length > 0) {
-    console.log(`[backupService] 🧹 Retención ${alcanceTag}: purgados ${eliminados.length} automáticos, liberados ${formatearBytes(bytesLiberados)}`);
-  }
-
-  return { eliminados, bytesLiberados, limite };
-}
-
 // `crear` es asincrona porque db.backup() devuelve una Promise: es la API online
 // de SQLite y produce un archivo consistente aunque haya escrituras concurrentes,
 // cosa que copyFileSync no garantiza entre el checkpoint y la copia.
@@ -287,9 +209,17 @@ async function crear(usuarioSesion, opciones = {}) {
     ? null
     : permisoService.resolverSedeEfectiva(usuarioSesion, sedeIdSolicitada);
 
+  const sedeNombre = sedeEfectiva
+    ? (usuarioSesion?.sede_nombre && Number(usuarioSesion?.sede_id) === Number(sedeEfectiva)
+        ? usuarioSesion.sede_nombre
+        : `sede_${sedeEfectiva}`)
+    : null;
+  const alcanceTag = sedeEfectiva
+    ? `_sede_${String(sedeNombre).replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_áéíóúñÁÉÍÓÚÑ]/g, '')}`
+    : '_global';
+
   const dir = carpetaRespaldos();
   const prefijo = esAutomatico ? 'farmacia_backup_auto' : 'farmacia_backup';
-  const alcanceTag = sedeEfectiva ? `_sede_${sedeEfectiva}` : '_global';
   const nombre = `${prefijo}${alcanceTag}_${timestampArchivo()}.db`;
   const destino = path.join(dir, nombre);
 
@@ -325,24 +255,13 @@ async function crear(usuarioSesion, opciones = {}) {
     throw new ValidationError('El respaldo se creó pero falló la validación de integridad.');
   }
 
-  // Retención DESPUÉS de validar. Si el respaldo nuevo no hubiera pasado
-  // validarIntegridad, la purga se salta y no se borra nada: preferimos un disco
-  // lleno diagnosticable a perder historia con un respaldo roto.
-  const purga = purgarRespaldosAntiguos({
-    alcanceTag,
-    maximo: maximoRespaldosPorSede(),
-    protegerNombre: nombre,
-    dir
-  });
-
   return {
     nombre,
     fecha: stats.mtime.toISOString(),
     tamanoBytes: stats.size,
     integridad: integridad.ok,
     esAutomatico,
-    sedeId: sedeEfectiva,
-    purga: { eliminados: purga.eliminados, bytesLiberados: purga.bytesLiberados, limite: purga.limite }
+    sedeId: sedeEfectiva
   };
 }
 
@@ -447,20 +366,8 @@ const CONFIG_POR_DEFECTO = {
   hora: '02:00',         // Para diario/semanal/mensual
   dia_semana: 1,         // 1 = Lunes
   dia_mes: 1,            // Día 1 del mes
-  maximo_respaldos_por_sede: MAXIMO_RESPALDOS_POR_DEFECTO,
   ultimo_backup_auto: null
 };
-
-// Límite de retención vigente. Se relee de la configuración en cada creación —y no
-// como constante de módulo— para que cambiarlo desde la vista de Respaldos tenga
-// efecto en el siguiente respaldo sin reiniciar la app. Un valor no numérico o no
-// positivo cae al defecto en lugar de dejar la retención desactivada sin avisar.
-function maximoRespaldosPorSede() {
-  const config = obtenerConfigAutoBackup();
-  const valor = Number(config.maximo_respaldos_por_sede);
-  if (!Number.isInteger(valor) || valor <= 0) return MAXIMO_RESPALDOS_POR_DEFECTO;
-  return valor;
-}
 
 // Tamaño total ocupado por los respaldos, para que el operador vea el consumo en
 // la pantalla en vez de discoverlo cuando el disco se llena.
@@ -502,13 +409,6 @@ function guardarConfigAutoBackup(usuarioSesion, nuevaConfig) {
   verificarAccesoRespaldos(usuarioSesion);
   const configActual = obtenerConfigAutoBackup();
   const fusion = { ...configActual, ...nuevaConfig };
-
-  // El límite de retención no puede quedar sin valor: si el formulario lo manda
-  // vacío o en cero, `purgarRespaldosAntiguos` lo leería como "sin retención".
-  const limite = Number(fusion.maximo_respaldos_por_sede);
-  fusion.maximo_respaldos_por_sede = Number.isInteger(limite) && limite > 0
-    ? limite
-    : MAXIMO_RESPALDOS_POR_DEFECTO;
 
   const ruta = rutaConfigAutoBackup();
   fs.writeFileSync(ruta, JSON.stringify(fusion, null, 2), 'utf8');
@@ -620,7 +520,5 @@ module.exports = {
   verificarYEjecutarAutoBackup,
   setDirectorioRespaldos,
   tamanoTotalEnDisco,
-  purgarRespaldosAntiguos,
-  MAXIMO_RESPALDOS_POR_DEFECTO,
   ValidationError
 };
