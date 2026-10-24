@@ -1,6 +1,5 @@
 const ordenRepository = require('../repositories/ordenRepository');
 const medicamentoRepository = require('../repositories/medicamentoRepository');
-const loteRepository = require('../repositories/loteRepository');
 const auditoriaRepository = require('../repositories/auditoriaRepository');
 const permisoService = require('./permisoService');
 const receptorService = require('./receptorService');
@@ -16,7 +15,7 @@ function medicamentosDesdeDb(valor) {
   try {
     const parsed = JSON.parse(valor);
     return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
-  } catch (_) {
+  } catch {
     return [];
   }
 }
@@ -54,7 +53,6 @@ function crear(usuarioSesion, {
   receptor_nombre, receptor_documento, receptor_telefono, receptor_correo,
   firma_data, huella_registrada,
   documento_adjunto_nombre, documento_adjunto_data, documento_adjunto_tipo,
-  numero_factura, factura_electronica
 } = {}) {
   permisoService.verificarGestionOrdenes(usuarioSesion);
 
@@ -78,9 +76,6 @@ function crear(usuarioSesion, {
   const { esFirmaValida } = require('../validators/firmaValidator');
   const firma = esFirmaValida(firma_data) ? firma_data : null;
   const huella = Boolean(huella_registrada);
-  const numeroFactura = numero_factura || null;
-  const facturaElectronica = factura_electronica || null;
-
   // Documentación de quien recibe: la identidad (nombre y documento) siempre es
   // obligatoria. La firma y la huella son obligatorias para entregas locales y
   // quedan "pendientes" en los envíos a municipio/vereda.
@@ -135,7 +130,7 @@ function crear(usuarioSesion, {
     const receptorExistente = (() => {
       try {
         return receptorService.buscarPorDocumento(receptorDocumento);
-      } catch (_) {
+      } catch {
         return null;
       }
     })();

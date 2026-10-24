@@ -137,10 +137,10 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => {
   detenerPlanificadorCloudSync();
-  try { mantenimientoAlCerrar(); } catch (_) {}
+  try { mantenimientoAlCerrar(); } catch {}
   if (process.platform !== 'darwin') app.quit();
 });
 
 app.on('before-quit', () => {
-  try { mantenimientoAlCerrar(); } catch (_) {}
+  try { mantenimientoAlCerrar(); } catch {}
 });

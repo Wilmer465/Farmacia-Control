@@ -17,6 +17,7 @@ const cloudSyncController = require('./controllers/cloudSyncController');
 const usuarioController = require('./controllers/usuarioController');
 const catalogoCumController = require('./controllers/catalogoCumController');
 const recepcionController = require('./controllers/recepcionController');
+const facturacionController = require('./controllers/facturacionController');
 const firmaPadController = require('./controllers/firmaPadController');
 const { sincronizarEnSegundoPlano } = require('./services/cloudSyncService');
 const sedeService = require('./services/sedeService');
@@ -152,6 +153,23 @@ ipcMain.handle('auth:logout', conSyncDespuesDeCambio('auth:logout', conValidacio
   ipcMain.handle('receptores:actualizar', conSyncDespuesDeCambio('receptores:actualizar', conValidacionSesion((usuarioSesion, id, data) => {
     return receptorController.actualizar(usuarioSesion, id, data);
   })));
+
+  ipcMain.handle('facturacion:clientes', conValidacionSesion((usuarioSesion, filtros) => facturacionController.clientes(usuarioSesion, filtros)));
+  ipcMain.handle('facturacion:guardarCliente', conSyncDespuesDeCambio('facturacion:guardarCliente', conValidacionSesion((usuarioSesion, data) => facturacionController.guardarCliente(usuarioSesion, data))));
+  ipcMain.handle('facturacion:catalogos', conValidacionSesion((usuarioSesion, filtros) => facturacionController.catalogos(usuarioSesion, filtros)));
+  ipcMain.handle('facturacion:configuracion', conValidacionSesion((usuarioSesion, filtros) => facturacionController.configuracion(usuarioSesion, filtros)));
+  ipcMain.handle('facturacion:guardarConfiguracion', conSyncDespuesDeCambio('facturacion:guardarConfiguracion', conValidacionSesion((usuarioSesion, data) => facturacionController.guardarConfiguracion(usuarioSesion, data))));
+  ipcMain.handle('facturacion:listar', conValidacionSesion((usuarioSesion, filtros) => facturacionController.listar(usuarioSesion, filtros)));
+  ipcMain.handle('facturacion:cartera', conValidacionSesion((usuarioSesion, filtros) => facturacionController.cartera(usuarioSesion, filtros)));
+  ipcMain.handle('facturacion:reportes', conValidacionSesion((usuarioSesion, filtros) => facturacionController.reportes(usuarioSesion, filtros)));
+  ipcMain.handle('facturacion:colaDian', conValidacionSesion((usuarioSesion, filtros) => facturacionController.colaDian(usuarioSesion, filtros)));
+  ipcMain.handle('facturacion:prepararDian', conSyncDespuesDeCambio('facturacion:prepararDian', conValidacionSesion((usuarioSesion, id) => facturacionController.prepararDocumentoDian(usuarioSesion, id))));
+  ipcMain.handle('facturacion:transmitirDian', conSyncDespuesDeCambio('facturacion:transmitirDian', conValidacionSesion((usuarioSesion, id) => facturacionController.transmitirDocumentoDian(usuarioSesion, id))));
+  ipcMain.handle('facturacion:consultarEstadoDian', conSyncDespuesDeCambio('facturacion:consultarEstadoDian', conValidacionSesion((usuarioSesion, id) => facturacionController.consultarEstadoDian(usuarioSesion, id))));
+  ipcMain.handle('facturacion:crearFactura', conSyncDespuesDeCambio('facturacion:crearFactura', conValidacionSesion((usuarioSesion, data) => facturacionController.crearFactura(usuarioSesion, data))));
+  ipcMain.handle('facturacion:crearNotaCredito', conSyncDespuesDeCambio('facturacion:crearNotaCredito', conValidacionSesion((usuarioSesion, data) => facturacionController.crearNotaCredito(usuarioSesion, data))));
+  ipcMain.handle('facturacion:crearNotaDebito', conSyncDespuesDeCambio('facturacion:crearNotaDebito', conValidacionSesion((usuarioSesion, data) => facturacionController.crearNotaDebito(usuarioSesion, data))));
+  ipcMain.handle('facturacion:pago', conSyncDespuesDeCambio('facturacion:pago', conValidacionSesion((usuarioSesion, id, data) => facturacionController.pago(usuarioSesion, id, data))));
 
   ipcMain.handle('solicitudesEliminacion:listar', conValidacionSesion((usuarioSesion, filtros) => {
     return solicitudEliminacionController.listar(usuarioSesion, filtros);

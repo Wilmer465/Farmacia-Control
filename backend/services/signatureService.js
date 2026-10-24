@@ -72,7 +72,7 @@ const MENSAJES = {
   ERROR_SDK: 'Error del SDK del pad.',
   ERROR_INESPERADO: 'Fallo interno del puente del pad.',
   HELPER_NO_ENCONTRADO:
-    'Puente del pad no compilado. Ejecute: npm run compilar:stu-bridge',
+    'Puente del pad no compilado. Ejecute: pnpm run compilar:stu-bridge',
   PAD_OCUPADO_LOCAL:
     'Ya hay una captura en curso en el pad. Espere a que termine.',
   TIMEOUT_LOCAL: 'El puente del pad no respondió a tiempo.',

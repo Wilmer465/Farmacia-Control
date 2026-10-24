@@ -34,12 +34,12 @@ echo.
 echo Iniciando Vite + Electron...
 echo Cierre la ventana de la aplicacion para detener todo.
 echo.
-call npm run dev
+call pnpm run dev
 echo.
 echo === La aplicacion se cerro. ===
 echo.
 echo Reconstruyendo modulo nativo para Node.js del sistema...
-call npm run rebuild:node 2>nul
+call pnpm run rebuild:node 2>nul
 pause
 goto MENU
 
@@ -49,7 +49,7 @@ echo.
 echo === Farmacia Control - Generando instaladores ===
 echo.
 echo Recompilando modulo nativo (better-sqlite3) para Electron...
-call npm run rebuild:electron
+call pnpm run rebuild:electron
 if errorlevel 1 (
     echo.
     echo [ERROR] No se pudo recompilar better-sqlite3 para Electron.
@@ -59,7 +59,7 @@ if errorlevel 1 (
 echo.
 echo Compilando frontend y empaquetando (Setup NSIS + Portable)...
 set WIN_CODESIGN_DISABLE=true
-call npm run build
+call pnpm run build
 echo.
 echo === Instaladores generados en la carpeta dist ===
 pause

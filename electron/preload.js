@@ -42,6 +42,24 @@ contextBridge.exposeInMainWorld('api', {
     guardar: (usuarioSesion, data) => ipcRenderer.invoke('receptores:guardar', usuarioSesion, data),
     actualizar: (usuarioSesion, id, data) => ipcRenderer.invoke('receptores:actualizar', usuarioSesion, id, data)
   },
+  facturacion: {
+    clientes: (usuarioSesion, filtros) => ipcRenderer.invoke('facturacion:clientes', usuarioSesion, filtros),
+    guardarCliente: (usuarioSesion, data) => ipcRenderer.invoke('facturacion:guardarCliente', usuarioSesion, data),
+    catalogos: (usuarioSesion, filtros) => ipcRenderer.invoke('facturacion:catalogos', usuarioSesion, filtros),
+    configuracion: (usuarioSesion, filtros) => ipcRenderer.invoke('facturacion:configuracion', usuarioSesion, filtros),
+    guardarConfiguracion: (usuarioSesion, data) => ipcRenderer.invoke('facturacion:guardarConfiguracion', usuarioSesion, data),
+    listar: (usuarioSesion, filtros) => ipcRenderer.invoke('facturacion:listar', usuarioSesion, filtros),
+    cartera: (usuarioSesion, filtros) => ipcRenderer.invoke('facturacion:cartera', usuarioSesion, filtros),
+    reportes: (usuarioSesion, filtros) => ipcRenderer.invoke('facturacion:reportes', usuarioSesion, filtros),
+    colaDian: (usuarioSesion, filtros) => ipcRenderer.invoke('facturacion:colaDian', usuarioSesion, filtros),
+    prepararDian: (usuarioSesion, id) => ipcRenderer.invoke('facturacion:prepararDian', usuarioSesion, id),
+    transmitirDian: (usuarioSesion, id) => ipcRenderer.invoke('facturacion:transmitirDian', usuarioSesion, id),
+    consultarEstadoDian: (usuarioSesion, id) => ipcRenderer.invoke('facturacion:consultarEstadoDian', usuarioSesion, id),
+    crearFactura: (usuarioSesion, data) => ipcRenderer.invoke('facturacion:crearFactura', usuarioSesion, data),
+    crearNotaCredito: (usuarioSesion, data) => ipcRenderer.invoke('facturacion:crearNotaCredito', usuarioSesion, data),
+    crearNotaDebito: (usuarioSesion, data) => ipcRenderer.invoke('facturacion:crearNotaDebito', usuarioSesion, data),
+    registrarPago: (usuarioSesion, id, data) => ipcRenderer.invoke('facturacion:pago', usuarioSesion, id, data)
+  },
   solicitudesEliminacion: {
     listar: (usuarioSesion, filtros) => ipcRenderer.invoke('solicitudesEliminacion:listar', usuarioSesion, filtros),
     crear: (usuarioSesion, data) => ipcRenderer.invoke('solicitudesEliminacion:crear', usuarioSesion, data),

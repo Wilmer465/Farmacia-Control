@@ -114,7 +114,7 @@ function login(username, password) {
     // "clave errónea" (~100ms de bcrypt): el oráculo de enumeración queda ciego.
     try {
       bcrypt.compareSync(String(password || ''), DUMMY_HASH);
-    } catch (_) { /* ignorar: solo consume tiempo constante */ }
+    } catch { /* ignorar: solo consume tiempo constante */ }
     registrarFallo(nombreLimpio);
     auditoriaRepository.registrar({
       usuario_id: usuario ? usuario.id : null,
@@ -160,7 +160,8 @@ function login(username, password) {
     resultado: 'EXITO'
   });
 
-  const { password_hash, ...usuarioSeguro } = usuario;
+  const usuarioSeguro = { ...usuario };
+  delete usuarioSeguro.password_hash;
   const session_token = sessionService.crearSesion(usuario.id);
   return { ...usuarioSeguro, session_token };
 }

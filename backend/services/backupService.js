@@ -111,7 +111,7 @@ function espacioLibreBytes(dir) {
   try {
     const stat = fs.statfsSync(dir);
     return Number(stat.bavail) * Number(stat.bsize);
-  } catch (err) {
+  } catch {
     return null;
   }
 }
@@ -134,9 +134,9 @@ function comprobarEspacioDisponible(dir) {
     for (const sufijo of ['-wal', '-shm']) {
       try {
         tamanoBase += fs.statSync(rutaBase + sufijo).size;
-      } catch (_) { /* companion inexistente: no suma */ }
+      } catch { /* companion inexistente: no suma */ }
     }
-  } catch (err) {
+  } catch {
     return null;
   }
   if (tamanoBase === 0) return null;
@@ -381,11 +381,11 @@ function tamanoTotalEnDisco(dir = null) {
       try {
         bytes += fs.statSync(path.join(carpeta, nombre)).size;
         cantidad += 1;
-      } catch (err) {
+      } catch {
         continue;
       }
     }
-  } catch (err) {
+  } catch {
     return { bytes: 0, cantidad: 0, carpeta };
   }
   return { bytes, cantidad, carpeta };

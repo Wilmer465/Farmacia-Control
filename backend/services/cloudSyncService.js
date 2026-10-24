@@ -313,7 +313,7 @@ async function bajar(lastSyncTimestamp, { permitirBajadaTotal = true } = {}, met
                   // Usuario nuevo sin hash en nube: no se puede crear sin credencial.
                   continue;
                 }
-              } catch (_) { /* si falla, se inserta sanitizado */ }
+              } catch { /* si falla, se inserta sanitizado */ }
             }
             // Descriptores de blob y JSON viajan como objetos: a SQLite como texto.
             insertOrReplace(db, table, normalizarValoresFila(fila));

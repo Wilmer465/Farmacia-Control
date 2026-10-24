@@ -21,7 +21,7 @@ const sqliteDir = path.join(rootDir, 'node_modules', 'better-sqlite3');
   });
   if (!fs.existsSync(path.join(sqliteDir, 'build', 'Release', 'better_sqlite3.node'))) {
     console.error('[start-electron] prebuild-install failed, falling back to electron-builder...');
-    spawnSync('npm', ['run', 'rebuild:electron'], {
+    spawnSync('pnpm', ['run', 'rebuild:electron'], {
       env,
       stdio: 'inherit',
       cwd: rootDir,

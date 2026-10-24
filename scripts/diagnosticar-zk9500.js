@@ -1,7 +1,7 @@
 // Diagnóstico manual del ZK9500 con hardware real.
 //
 // Uso: node scripts/diagnosticar-zk9500.js [--timeout 30]
-// Requiere el helper compilado (npm run compilar:zk-bridge) y el lector
+// Requiere el helper compilado (pnpm run compilar:zk-bridge) y el lector
 // conectado. Para `diagnostico` ponga el MISMO dedo dos veces cuando se pida.
 //
 // Demuestra: SDK disponible, lector detectado, apertura, captura, tamaño de
@@ -27,7 +27,7 @@ function correr(args) {
 
 function principal() {
   if (!fs.existsSync(exe)) {
-    console.error('Falta el helper. Ejecute: npm run compilar:zk-bridge');
+    console.error('Falta el helper. Ejecute: pnpm run compilar:zk-bridge');
     process.exit(1);
   }
   const idx = process.argv.indexOf('--timeout');

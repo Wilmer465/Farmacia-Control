@@ -17,7 +17,7 @@ function resolveDbPath() {
       const dir = app.getPath('userData');
       return path.join(dir, 'farmacia.db');
     }
-  } catch (_) {
+  } catch {
     // no estamos en el proceso principal de electron (ej: scripts de migrate/seed)
   }
   const dir = path.join(__dirname, '..', '..', 'data');
@@ -41,21 +41,21 @@ function getDb() {
   dbInstance.pragma('busy_timeout = 5000');
   // Mantenimiento: auto_vacuum incremental para que el archivo no crezca sin
   // control con los blobs; el vacuum real se hace al cerrar (ver main.js).
-  try { dbInstance.pragma('auto_vacuum = INCREMENTAL'); } catch (_) {}
-  try { dbInstance.pragma('optimize'); } catch (_) {}
+  try { dbInstance.pragma('auto_vacuum = INCREMENTAL'); } catch {}
+  try { dbInstance.pragma('optimize'); } catch {}
   return dbInstance;
 }
 
 function mantenimientoAlCerrar() {
   if (!dbInstance) return;
-  try { dbInstance.pragma('optimize'); } catch (_) {}
-  try { dbInstance.pragma('incremental_vacuum(100)'); } catch (_) {}
-  try { dbInstance.exec('ANALYZE'); } catch (_) {}
+  try { dbInstance.pragma('optimize'); } catch {}
+  try { dbInstance.pragma('incremental_vacuum(100)'); } catch {}
+  try { dbInstance.exec('ANALYZE'); } catch {}
 }
 
 function setTestDb(instance) {
   if (dbInstance && dbInstance !== instance) {
-    try { dbInstance.close(); } catch (_) {}
+    try { dbInstance.close(); } catch {}
   }
   dbInstance = instance;
   if (dbInstance) {
@@ -65,7 +65,7 @@ function setTestDb(instance) {
 
 function closeDb() {
   if (dbInstance) {
-    try { dbInstance.close(); } catch (_) {}
+    try { dbInstance.close(); } catch {}
     dbInstance = null;
   }
 }
