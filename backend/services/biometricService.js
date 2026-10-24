@@ -54,7 +54,7 @@ const MENSAJES = {
   TIMEOUT_DEDO: 'Sin dedo en el lector dentro del plazo. Intente de nuevo.',
   LECTOR_OCUPADO: 'Ya hay una captura de huella en curso. Espere a que termine.',
   HELPER_NO_ENCONTRADO:
-    'Puente del lector no compilado. Ejecute: npm run compilar:zk-bridge',
+    'Puente del lector no compilado. Ejecute: pnpm run compilar:zk-bridge',
   TIMEOUT_LOCAL: 'El puente del lector no respondió a tiempo.',
   RESPUESTA_INVALIDA: 'Respuesta inválida del puente del lector.',
   ERROR_SDK: 'Error del lector biométrico.'

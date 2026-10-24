@@ -30,7 +30,7 @@ function leerEstadoSincronizacion(nombreSede, operacionesRegistradas) {
         direccion: state.last_sync_direction || null
       };
     }
-  } catch (_) { /* cae al valor por defecto */ }
+  } catch { /* cae al valor por defecto */ }
   return {
     sede_nombre: nombreSede,
     operaciones_registradas: operacionesRegistradas,

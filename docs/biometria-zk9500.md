@@ -13,7 +13,7 @@ registran imágenes ni plantillas (Ley 1581 de 2012, dato sensible).
 | Mecanismo de carga | P/Invoke directo (`DllImport`, Winapi) con ruta absoluta instalada |
 | Firmas | Extraídas del wrapper oficial `libzkfpcsharp.dll` (sin referenciarlo ni copiarlo) |
 | Helper | `native/zk-bridge/zk-bridge.cs` → `native/zk-bridge/bin/zk-bridge.exe` (x64) |
-| Compilador | `csc.exe` de .NET Framework 64 bits (`npm run compilar:zk-bridge`, también en `prebuild`). Sin descargas ni NuGet |
+| Compilador | `csc.exe` de .NET Framework 64 bits (`pnpm run compilar:zk-bridge`, también en `prebuild`). Sin descargas ni NuGet |
 | Prohibido y no usado | `zkfinger10-32.dll`, `biokey.ocx`, ActiveX, bridge x86, DLL de terceros, copias de DLL |
 
 ## 2. Arquitectura (igual que STU-540, sin duplicar)
@@ -59,13 +59,13 @@ documentado contra el SDK, no de este documento.
 | `APERTURA_FALLIDA` | Ocupado por otra app | Cerrar la otra app |
 | `TIMEOUT_DEDO` | Sin dedo en el plazo | Reintentar (30 s) |
 | `LECTOR_OCUPADO` | Captura concurrente | Esperar |
-| `HELPER_NO_ENCONTRADO` | Sin compilar | `npm run compilar:zk-bridge` |
+| `HELPER_NO_ENCONTRADO` | Sin compilar | `pnpm run compilar:zk-bridge` |
 | `TIMEOUT_LOCAL` / `RESPUESTA_INVALIDA` | Puente colgado/respuesta rota | Reintentar, revisar stderr |
 
 ## 6. Instalación / desinstalación / empaquetado
 
 - Requisito: driver ZK9500 + `libzkfp.dll` x64 en `System32` (ya instalados).
-- Compilar: `npm run compilar:zk-bridge` (salida ignorada por git).
+- Compilar: `pnpm run compilar:zk-bridge` (salida ignorada por git).
 - Empaquetado: `extraResources` lleva `native/zk-bridge/bin`; el servicio
   resuelve `resourcesPath` cuando `app.isPackaged`.
 - Desinstalar: borrar `native/zk-bridge/`, revertir `extraResources`/`prebuild`

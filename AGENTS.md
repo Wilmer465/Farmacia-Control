@@ -12,10 +12,11 @@ nativo y solo puede compilarse para un runtime a la vez:
 | Electron 32 (la app) | 128 |
 | Node CLI 22 | 127 |
 
-El repo está en modo **Electron**: `npm install` dispara
-`electron-builder install-app-deps` (`postinstall`), que reconstruye el binario
-para Electron. Con esa compilación, cualquier comando que corra bajo Node CLI
-falla:
+El gestor oficial es **pnpm 11.25.0**, fijado mediante `packageManager` en
+`package.json`. Use `pnpm install` para instalar; no mantenga otro lockfile.
+El `postinstall` ejecuta `electron-builder install-app-deps` y reconstruye
+better-sqlite3 para Electron. Con esa compilación, cualquier comando que corra
+bajo Node CLI falla:
 
 ```
 Error: The module '...\better_sqlite3.node' was compiled against a different
@@ -23,7 +24,7 @@ Node.js version using NODE_MODULE_VERSION 128. This version of Node.js requires
 NODE_MODULE_VERSION 127.
 ```
 
-Afecta a `npm test`, `npm run migrate` y `npm run seed`.
+Afecta a `pnpm test`, `pnpm run migrate` y `pnpm run seed`.
 
 ### Ejecutar tests con el runtime de Electron
 
@@ -45,8 +46,8 @@ $env:ELECTRON_RUN_AS_NODE = "1"
 ### Alternar entre compilaciones
 
 ```powershell
-npm run rebuild:electron   # para la app (estado por defecto del repo)
-npm run rebuild:node       # para correr tests/migraciones con Node CLI
+pnpm run rebuild:electron   # para la app (estado por defecto del repo)
+pnpm run rebuild:node       # para correr tests/migraciones con Node CLI
 ```
 
 **Devuelve el repo al estado Electron antes de dar por terminada una tarea.**
@@ -61,7 +62,7 @@ $env:ELECTRON_RUN_AS_NODE = "1"
 ```
 
 `backend/database/migrate.js` SÍ tiene bloque `require.main` (`migrate.js:51-53`):
-invocarlo como script ejecuta `runMigrations()`. Por eso `npm run migrate`, que
+invocarlo como script ejecuta `runMigrations()`. Por eso `pnpm run migrate`, que
 lanza Node CLI, falla con `ERR_DLOPEN_FAILED` y no "no hace nada".
 
 Dos comportamientos del runner que conviene conocer:
@@ -77,7 +78,7 @@ Dos comportamientos del runner que conviene conocer:
 
 El proceso main de Electron **cachea el código de `backend/services`**. Tras
 cambiar un servicio hay que cerrar la ventana, matar `electron.exe` y relanzar
-`npm run dev`. Recargar el renderer no basta.
+`pnpm run dev`. Recargar el renderer no basta.
 
 ## Reglas de datos
 
@@ -124,7 +125,7 @@ cambiar un servicio hay que cerrar la ventana, matar `electron.exe` y relanzar
 ## Verificación antes de dar por terminado
 
 ```powershell
-npm run lint       # 0 errores (hay warnings preexistentes)
+pnpm run lint       # 0 errores (hay warnings preexistentes)
 $env:ELECTRON_RUN_AS_NODE = "1"   # better-sqlite3: ver arriba
 ```
 

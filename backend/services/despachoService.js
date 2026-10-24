@@ -2,10 +2,8 @@ const despachoRepository = require('../repositories/despachoRepository');
 const entregaRepository = require('../repositories/entregaRepository');
 const ordenRepository = require('../repositories/ordenRepository');
 const loteRepository = require('../repositories/loteRepository');
-const auditoriaRepository = require('../repositories/auditoriaRepository');
 const permisoService = require('./permisoService');
 const { validarItemsDespacho } = require('../validators/despachoValidator');
-const { AUDIT_ACTIONS } = require('../../shared/constants');
 
 class ValidationError extends Error {}
 

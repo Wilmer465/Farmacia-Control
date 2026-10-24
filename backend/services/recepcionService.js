@@ -130,8 +130,7 @@ async function registrarRecepcion(usuarioSesion, datos) {
     lote,
     fecha_vencimiento,
     cantidad,              // Cantidad en el nivel escaneado (ej: 3 cajas logísticas)
-    sede_id,
-    observaciones
+    sede_id
   } = datos;
 
   permisoService.verificarEscrituraInventario(usuarioSesion);

@@ -222,7 +222,7 @@ function prepararMedicamentos(valor) {
   try {
     const parsed = JSON.parse(limpio);
     if (Array.isArray(parsed)) return JSON.stringify(parsed.map((m) => String(m || '').trim()).filter(Boolean));
-  } catch (_) {
+  } catch {
     // Si llega texto libre, se conserva como linea simple dentro del JSON.
   }
   return JSON.stringify(limpio.split(/\r?\n|,/).map((m) => m.trim()).filter(Boolean));

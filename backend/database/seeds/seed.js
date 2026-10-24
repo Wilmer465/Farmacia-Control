@@ -91,7 +91,7 @@ function seed(options = {}) {
       if (tieneFlag) {
         db.prepare(`UPDATE usuarios SET es_superadmin_principal = 1 WHERE id = ?`).run(existeWilmer.id);
       }
-    } catch (_) { /* columna aún no existe: la migración 020 la crea */ }
+    } catch { /* columna aún no existe: la migración 020 la crea */ }
   }
 
   // 4. Fixtures adicionales de tests

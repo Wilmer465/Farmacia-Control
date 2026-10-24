@@ -39,7 +39,7 @@ function resumenPorLote({ sedeId, hasta } = {}) {
     SELECT
       m.lote_id,
       SUM(CASE WHEN m.tipo IN ('ENTRADA', 'TRASLADO_ENTRADA') THEN m.cantidad ELSE 0 END) AS total_entradas,
-      SUM(CASE WHEN m.tipo IN ('SALIDA_ORDEN', 'TRASLADO_SALIDA') THEN m.cantidad ELSE 0 END) AS total_salidas,
+      SUM(CASE WHEN m.tipo IN ('SALIDA_ORDEN', 'SALIDA_FACTURA', 'TRASLADO_SALIDA') THEN m.cantidad ELSE 0 END) AS total_salidas,
       SUM(CASE WHEN m.tipo = 'AJUSTE' THEN m.cantidad ELSE 0 END) AS total_ajustes,
       SUM(CASE WHEN m.tipo = 'AJUSTE' AND m.cantidad < 0 THEN 1 ELSE 0 END) AS ajustes_a_la_baja,
       SUM(m.cantidad) AS stock_esperado
@@ -93,7 +93,7 @@ function resumenPorRango({ sedeId, fechaInicio, fechaFin } = {}) {
   return db.prepare(`
     SELECT
       COALESCE(SUM(CASE WHEN tipo = 'ENTRADA' THEN cantidad ELSE 0 END), 0) AS total_entradas,
-      COALESCE(SUM(CASE WHEN tipo = 'SALIDA_ORDEN' THEN cantidad ELSE 0 END), 0) AS total_salidas_orden,
+      COALESCE(SUM(CASE WHEN tipo IN ('SALIDA_ORDEN','SALIDA_FACTURA') THEN cantidad ELSE 0 END), 0) AS total_salidas_orden,
       COALESCE(SUM(CASE WHEN tipo = 'AJUSTE' AND cantidad < 0 THEN cantidad ELSE 0 END), 0) AS total_ajustes_negativos,
       COUNT(CASE WHEN tipo = 'AJUSTE' AND cantidad < 0 THEN 1 END) AS conteo_salidas_sin_orden
     FROM movimientos_inventario

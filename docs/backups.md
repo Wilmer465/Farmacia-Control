@@ -206,7 +206,7 @@ $env:ELECTRON_RUN_AS_NODE = "1"
 & ".\node_modules\electron\dist\electron.exe" --test ".\tests\ipc\ipc_handlers.test.js"
 ```
 
-Aplica igual a `npm run migrate`.
+Aplica igual a `pnpm run migrate`.
 
 ## Nota sobre `restaurar`
 

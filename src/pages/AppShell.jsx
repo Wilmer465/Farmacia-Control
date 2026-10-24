@@ -16,6 +16,7 @@ const Respaldos     = lazy(() => import('./Respaldos.jsx'));
 const Usuarios      = lazy(() => import('./Usuarios.jsx'));
 const CatalogoCUM   = lazy(() => import('./CatalogoCUM.jsx'));
 const Recepcion     = lazy(() => import('./Recepcion.jsx'));
+const Facturacion   = lazy(() => import('./Facturacion.jsx'));
 
 // ─── Spinner de carga mientras el módulo se descarga ──────────────────────
 const CargandoModulo = memo(function CargandoModulo() {
@@ -43,6 +44,12 @@ const ICONS = {
       <line x1="16" y1="13" x2="8" y2="13" />
       <line x1="16" y1="17" x2="8" y2="17" />
       <polyline points="10 9 9 9 8 9" />
+    </svg>
+  ),
+  facturacion: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M7 3h10l3 3v15H4V3z" />
+      <path d="M14 3v5h6M8 12h8M8 16h8" />
     </svg>
   ),
   inventario: (
@@ -148,6 +155,7 @@ const TABS_BASE = [
   { id: 'catalogoCum',   label: 'Catálogo CUM',   desc: 'Catálogo oficial INVIMA' },
   { id: 'ordenes',       label: 'Órdenes',        desc: 'Gestión y despachos' },
   { id: 'entregas',      label: 'Entregas',       desc: 'Firmas y recepción' },
+  { id: 'facturacion',   label: 'Facturación',    desc: 'Ventas, cartera y documentos' },
   { id: 'pacientes',     label: 'Documento de Usuarios', desc: 'Prioridad y medicamentos' },
   { id: 'solicitudes',   label: 'Solicitudes',    desc: 'Bajas e intercambios' },
   { id: 'reportes',      label: 'Reportes',       desc: 'Trazabilidad diaria' }
@@ -402,6 +410,7 @@ export default function AppShell({ usuario, onLogout }) {
             {tab === 'inventario'    && <Inventario    usuario={usuario} sedeActiva={sedeActiva} onNavigate={handleNavigate} params={tabParams.inventario} onClearParams={() => limpiarParams('inventario')} />}
             {tab === 'ordenes'       && <Ordenes       usuario={usuario} sedeActiva={sedeActiva} params={tabParams.ordenes} onClearParams={() => limpiarParams('ordenes')} />}
             {tab === 'entregas'      && <Entregas      usuario={usuario} sedeActiva={sedeActiva} params={tabParams.entregas} onClearParams={() => limpiarParams('entregas')} />}
+            {tab === 'facturacion'   && <Facturacion   usuario={usuario} sedeActiva={sedeActiva} />}
             {tab === 'pacientes'     && <Pacientes     usuario={usuario} sedeActiva={sedeActiva} />}
             {(tab === 'solicitudes' || tab === 'eliminaciones') && <Eliminaciones usuario={usuario} sedeActiva={sedeActiva} onNavigate={handleNavigate} />}
             {tab === 'auditoria'     && puedeVerAuditoriaYRespaldos && <Auditoria  usuario={usuario} sedeActiva={sedeActiva} />}

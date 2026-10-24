@@ -122,7 +122,6 @@ async function descargarCatalogoCompleto() {
   let allData = [];
   let offset = 0;
   let hasMore = true;
-  let chunkNum = 0;
 
   while (hasMore) {
     const url = `${INVIMA_CUM_URL}?$limit=${CHUNK_SIZE}&$offset=${offset}`;
@@ -146,7 +145,6 @@ async function descargarCatalogoCompleto() {
       allData = allData.concat(chunk);
       offset += CHUNK_SIZE;
       hasMore = chunk.length === CHUNK_SIZE;
-      chunkNum++;
       progresoActualizacion.descargados = offset;
       if (cancelarActualizacionFlag) {
         throw new CatalogoCumError('Actualización cancelada por el usuario');
@@ -163,7 +161,7 @@ async function descargarCatalogoCompleto() {
   return allData;
 }
 
-function importarATemporal(db, registros, versionCatalogo) {
+function importarATemporal(db, registros) {
   db.exec(`DROP TABLE IF EXISTS catalogo_cum_temp`);
   db.exec(`
     CREATE TABLE catalogo_cum_temp (
@@ -235,7 +233,7 @@ function importarATemporal(db, registros, versionCatalogo) {
   insertTx(registros);
 }
 
-function compararYMerge(db, versionCatalogo) {
+function compararYMerge(db) {
   const resultado = {
     nuevos: 0,
     actualizados: 0,
@@ -313,7 +311,7 @@ function compararYMerge(db, versionCatalogo) {
     resultado.actualizados = actualizados.changes;
 
     // 3. Marcar como HISTORICO los que están en INVIMA como INACTIVO pero tenemos como ACTIVO
-    const historicos = db.prepare(`
+    db.prepare(`
       UPDATE catalogo_cum SET
         estado_cum = 'HISTORICO',
         actualizado_en = datetime('now')
@@ -456,12 +454,12 @@ async function actualizarCatalogo(usuarioSesion, opciones = {}) {
     // 3. Importar a temporal
     progresoActualizacion.paso = 'importando';
     console.log('[catalogoCum] Importando a tabla temporal...');
-    importarATemporal(db, registrosValidos, versionCatalogo);
+      importarATemporal(db, registrosValidos);
 
     // 4. Merge (UPSERT)
     progresoActualizacion.paso = 'fusionando';
     console.log('[catalogoCum] Fusionando con catálogo principal...');
-    const stats = compararYMerge(db, versionCatalogo);
+      const stats = compararYMerge(db);
     stats.descargados = datosDescargados.length;
 
     // 5. Registrar actualización
@@ -499,7 +497,7 @@ async function actualizarCatalogo(usuarioSesion, opciones = {}) {
       registrarActualizacion(db, usuarioId, versionCatalogo, hashArchivo, 
         { descargados: datosDescargados.length, nuevos: 0, actualizados: 0, sinCambios: 0 },
         [{ error: err.message }]);
-    } catch (_) {}
+    } catch {}
 
     progresoActualizacion.activo = false;
     progresoActualizacion.paso = 'error';

@@ -1,6 +1,6 @@
 /**
  * Script: crear_usuarios_sede.js
- * Ejecutar con: npx electron scripts/crear_usuarios_sede.js
+ * Ejecutar con: pnpm exec electron scripts/crear_usuarios_sede.js
  */
 const path = require("path");
 const bcrypt = require("bcryptjs");
