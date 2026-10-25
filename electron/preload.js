@@ -120,5 +120,8 @@ contextBridge.exposeInMainWorld('api', {
   firmaPad: {
     detectar: (usuarioSesion) => ipcRenderer.invoke('firmaPad:detectar', usuarioSesion),
     capturar: (usuarioSesion, datos) => ipcRenderer.invoke('firmaPad:capturar', usuarioSesion, datos)
+  },
+  puentes: {
+    verificarPrerrequisitos: () => ipcRenderer.invoke('puentes:verificarPrerrequisitos')
   }
 });

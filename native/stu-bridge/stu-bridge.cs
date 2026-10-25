@@ -25,6 +25,8 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
+using System.Linq;
+using Microsoft.Win32;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
@@ -32,9 +34,20 @@ using System.Text;
 
 internal static class StuBridge
 {
-    // Ruta instalada del SDK (se valida versión 2.18.0.82 antes de usar).
-    private const string DllSdk =
-        @"C:\Program Files (x86)\Wacom STU SDK\C\bin\x64\wgssSTU.dll";
+    // Se importa por nombre. Antes del primer P/Invoke se localiza una copia
+    // oficial instalada o una copia junto al helper (si la licencia lo permite)
+    // y se precarga desde su ruta real para que Windows resuelva dependencias
+    // relativas al directorio de la DLL.
+    private const string DllSdk = "wgssSTU.dll";
+    private const string VersionSdkRequerida = "2.18.0.82";
+    private static string rutaDllSdk;
+    private static IntPtr moduloDllSdk = IntPtr.Zero;
+
+    private const uint LoadWithAlteredSearchPath = 0x00000008;
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true,
+        EntryPoint = "LoadLibraryExW", ExactSpelling = true)]
+    private static extern IntPtr LoadLibraryEx(string fileName, IntPtr file, uint flags);
 
     private const ushort VidWacom = 0x056A;
     private const ushort PidStu540 = 0x00A8;
@@ -128,9 +141,13 @@ internal static class StuBridge
     private static extern int WacomGSS_Tablet_getDHbase(
         IntPtr tablet, UIntPtr sizeofValue, out IntPtr value);
 
-    [DllImport(DllSdk, CallingConvention = CallingConvention.StdCall)]
-    private static extern int WacomGSS_Tablet_setHostPublicKey(
-        IntPtr tablet, UIntPtr sizeofKey, byte[] key);
+    [DllImport(
+        DllSdk,
+        EntryPoint = "WacomGSS_Protocol_setHostPublicKey",
+        CallingConvention = CallingConvention.StdCall,
+        ExactSpelling = true)]
+    private static extern int WacomGSS_Protocol_setHostPublicKey(
+        IntPtr intf, UIntPtr sizeofKey, ref StuPublicKey key);
 
     [DllImport(DllSdk, CallingConvention = CallingConvention.StdCall)]
     private static extern int WacomGSS_Tablet_getDevicePublicKey(
@@ -172,6 +189,15 @@ internal static class StuBridge
         public byte secureIc;
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)]
         public byte[] secureIcVersion;
+    }
+
+    // wgssSTU.h: WacomGSS_PublicKey is a 16-byte struct containing
+    // uint8_t publicKey[16]. Keep the inline array layout explicit for P/Invoke.
+    [StructLayout(LayoutKind.Sequential)]
+    private struct StuPublicKey
+    {
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16, ArraySubType = UnmanagedType.U1)]
+        public byte[] publicKey;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -297,17 +323,89 @@ internal static class StuBridge
         SalirJson(false, codigo, "\"error\":" + JsonEscape(mensaje));
     }
 
+    private static List<string> RutasCandidatasDllSdk()
+    {
+        var candidatas = new List<string>();
+        string juntoAlPuente = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, DllSdk);
+        if (File.Exists(juntoAlPuente)) candidatas.Add(juntoAlPuente);
+
+        string programFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+        string programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+        string[] raices = { programFilesX86, programFiles };
+        foreach (string raiz in raices)
+        {
+            if (string.IsNullOrWhiteSpace(raiz)) continue;
+            string sdk = Path.Combine(raiz, "Wacom STU SDK", "C", "bin", "x64", DllSdk);
+            if (File.Exists(sdk) && !candidatas.Contains(sdk, StringComparer.OrdinalIgnoreCase)) candidatas.Add(sdk);
+            string sigCaptX = Path.Combine(raiz, "Wacom SigCaptX STU", DllSdk);
+            if (File.Exists(sigCaptX) && !candidatas.Contains(sigCaptX, StringComparer.OrdinalIgnoreCase)) candidatas.Add(sigCaptX);
+        }
+
+        try
+        {
+            foreach (RegistryView vista in new[] { RegistryView.Registry64, RegistryView.Registry32 })
+            {
+                using (RegistryKey lm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, vista))
+                using (RegistryKey uninstall = lm.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"))
+                {
+                    if (uninstall == null) continue;
+                    foreach (string subkeyName in uninstall.GetSubKeyNames())
+                    {
+                        using (RegistryKey producto = uninstall.OpenSubKey(subkeyName))
+                        {
+                            if (producto == null) continue;
+                            string displayName = producto.GetValue("DisplayName") as string;
+                            string installLocation = producto.GetValue("InstallLocation") as string;
+                            if (string.IsNullOrWhiteSpace(displayName) ||
+                                displayName.IndexOf("Wacom STU SDK", StringComparison.OrdinalIgnoreCase) < 0 ||
+                                string.IsNullOrWhiteSpace(installLocation)) continue;
+                            string dll = Path.Combine(installLocation, "C", "bin", "x64", DllSdk);
+                            if (File.Exists(dll) && !candidatas.Contains(dll, StringComparer.OrdinalIgnoreCase)) candidatas.Add(dll);
+                        }
+                    }
+                }
+            }
+        }
+        catch (System.Security.SecurityException) { }
+        catch (UnauthorizedAccessException) { }
+        return candidatas;
+    }
+
     private static void VerificarVersionDll()
     {
         try
         {
-            var info = System.Diagnostics.FileVersionInfo.GetVersionInfo(DllSdk);
-            string version = info.FileVersion ?? string.Empty;
-            if (!version.StartsWith("2.18.0.82"))
-                throw new StuException("ERROR_SDK",
-                    "Versión inesperada de wgssSTU.dll: " + version + " (se requiere 2.18.0.82).");
+            List<string> candidatas = RutasCandidatasDllSdk();
+            if (candidatas.Count == 0)
+                throw new StuException("ERROR_SDK", "No se encontró wgssSTU.dll. Instale el SDK oficial Wacom STU 2.18.0.82 o posterior compatible.");
+
+            string detalleVersiones = string.Empty;
+            foreach (string candidata in candidatas)
+            {
+                string version = System.Diagnostics.FileVersionInfo.GetVersionInfo(candidata).FileVersion ?? string.Empty;
+                if (!version.StartsWith(VersionSdkRequerida, StringComparison.Ordinal))
+                {
+                    detalleVersiones += Path.GetFileName(Path.GetDirectoryName(candidata)) + "=" + version + "; ";
+                    continue;
+                }
+
+                IntPtr modulo = LoadLibraryEx(candidata, IntPtr.Zero, LoadWithAlteredSearchPath);
+                if (modulo == IntPtr.Zero)
+                {
+                    int errorWin32 = Marshal.GetLastWin32Error();
+                    throw new StuException("ERROR_SDK", "No se pudo cargar wgssSTU.dll desde la instalación detectada (Win32 " + errorWin32 + "). Revise las dependencias del SDK.");
+                }
+                rutaDllSdk = candidata;
+                moduloDllSdk = modulo; // mantener cargada mientras vivan los P/Invoke
+                return;
+            }
+            throw new StuException("ERROR_SDK", "No se encontró una wgssSTU.dll compatible. Versión requerida: " + VersionSdkRequerida + ". Versiones detectadas: " + detalleVersiones);
         }
         catch (StuException) { throw; }
+        catch (System.Security.SecurityException)
+        {
+            throw new StuException("ERROR_SDK", "No hay permisos para consultar la instalación registrada del SDK Wacom.");
+        }
         catch (Exception ex)
         {
             throw new StuException("ERROR_SDK", "No se pudo verificar wgssSTU.dll: " + ex.Message);
@@ -596,7 +694,13 @@ internal static class StuBridge
                 publicaBytes = HaciaBigEndian(BigInteger.ModPow(g, privada, p), 16);
             }
 
-            rc = WacomGSS_Tablet_setHostPublicKey(dev.Tableta, (UIntPtr)16, publicaBytes);
+            int tamanoClavePublica = Marshal.SizeOf(typeof(StuPublicKey));
+            if (publicaBytes == null || publicaBytes.Length != 16 || tamanoClavePublica != 16)
+                throw new StuException("CIFRADO_NO_NEGOCIADO", "La clave pública no tiene el layout esperado de 16 bytes.");
+
+            var clavePublica = new StuPublicKey { publicKey = publicaBytes };
+            rc = WacomGSS_Protocol_setHostPublicKey(
+                dev.Intf, (UIntPtr)tamanoClavePublica, ref clavePublica);
             Comprobar(rc, "Negociar cifrado del pad");
 
             byte[] publicaPad = null;

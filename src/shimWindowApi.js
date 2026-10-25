@@ -209,6 +209,14 @@
       detectar: () => ok(false),
       capturar: () => fail('Servicio no disponible fuera de Electron'),
     },
+    puentes: {
+      verificarPrerrequisitos: () => ok({
+        alcance: 'Inspección estática disponible únicamente en la aplicación de escritorio.',
+        dispositivo: 'no probado',
+        wacom: { nombre: 'Wacom STU-540', estado: 'diagnostico_incompleto', dispositivo: 'no probado' },
+        zkteco: { nombre: 'ZKTeco ZK-9500', estado: 'diagnostico_incompleto', dispositivo: 'no probado' }
+      }),
+    },
   };
 
   Object.defineProperty(window, 'api', {

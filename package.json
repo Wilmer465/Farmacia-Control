@@ -8,10 +8,10 @@
   "scripts": {
     "dev:react": "vite",
     "dev:electron": "node scripts/start-electron.js",
-    "dev:wait-electron": "wait-on tcp:5173 && pnpm run dev:electron",
-    "dev": "concurrently -k \"pnpm run dev:react\" \"pnpm run dev:wait-electron\"",
+    "dev:wait-electron": "wait-on tcp:5173 && node scripts/start-electron.js",
+    "dev": "concurrently -k --names vite,electron --success command-electron \"vite\" \"wait-on tcp:5173 && node scripts/start-electron.js\"",
     "build:react": "vite build",
-    "build": "pnpm run build:react && electron-builder",
+    "build": "vite build && electron-builder",
     "prebuild": "node scripts/compilar-stu-bridge.js && node scripts/compilar-zk-bridge.js",
     "compilar:stu-bridge": "node scripts/compilar-stu-bridge.js",
     "compilar:zk-bridge": "node scripts/compilar-zk-bridge.js",
@@ -32,7 +32,7 @@
     "typecheck": "tsc -p jsconfig.json --noEmit",
     "rebuild:node": "pnpm rebuild better-sqlite3",
     "rebuild:electron": "electron-rebuild --force --which-module better-sqlite3 --version 32.3.3",
-    "postinstall": "pnpm run rebuild:electron"
+    "postinstall": "electron-rebuild --force --which-module better-sqlite3 --version 32.3.3"
   },
   "dependencies": {
     "@xmldom/xmldom": "^0.9.10",
@@ -66,9 +66,15 @@
     "appId": "com.farmacia.control",
     "productName": "Farmacia Control",
     "files": [
-      "dist/**/*",
+      "dist/renderer/**/*",
+      "!dist/win-unpacked/**",
+      "!dist/*.exe",
+      "!dist/*.blockmap",
+      "!dist/latest.yml",
+      "!dist/builder-debug.yml",
       "electron/**/*",
-      "backend/**/*"
+      "backend/**/*",
+      "shared/**/*"
     ],
     "extraResources": [
       {
@@ -93,6 +99,7 @@
       "signDlls": false
     },
     "nsis": {
+      "include": "build/installer-bridge-prerequisites.nsh",
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,

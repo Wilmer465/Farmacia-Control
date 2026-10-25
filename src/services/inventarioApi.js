@@ -112,5 +112,8 @@ export const inventarioApi = {
   firmaPad: {
     detectar: (usuario) => window.api.firmaPad.detectar(usuario),
     capturar: (usuario, datos) => window.api.firmaPad.capturar(usuario, datos)
+  },
+  puentes: {
+    verificarPrerrequisitos: () => window.api.puentes.verificarPrerrequisitos()
   }
 };

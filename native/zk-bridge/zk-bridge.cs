@@ -1,10 +1,11 @@
 // Puente ZKTeco ZK9500 (libzkfp x64) para Farmacia-Control.
 //
-// Proceso helper x64, sin ventanas: P/Invoke directo contra
-// C:\Windows\System32\libzkfp.dll instalada con el driver (resuelve por
-// ruta de búsqueda del sistema: sin copias, sin registro, sin ActiveX).
-// Firmas exactas tomadas del wrapper oficial libzkfpcsharp.dll
-// (CallingConvention Winapi). Entrada por argumentos, salida por stdout
+// Proceso helper x64, sin ventanas: P/Invoke por nombre contra la DLL oficial
+// instalada por el driver o colocada junto al helper si su licencia lo permite.
+// Firmas contrastadas estructuralmente con metadatos locales de
+// libzkfpcsharp.dll (CallingConvention Winapi); la versión de ese wrapper no
+// está vinculada aún a una versión oficial verificable de libzkfp.dll.
+// Entrada por argumentos, salida por stdout
 // como UNA línea JSON. stderr solo diagnóstico operativo.
 //
 // Alcance: CONSTANCIA de captura (huella presente + plantilla válida en
@@ -27,12 +28,19 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 
 internal static class ZkBridge
 {
-    private const string DllZkfp = @"C:\Windows\System32\libzkfp.dll";
+    private const string DllZkfp = "libzkfp.dll";
+    private static IntPtr moduloDllZkfp = IntPtr.Zero;
+    private const uint LoadWithAlteredSearchPath = 0x00000008;
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true,
+        EntryPoint = "LoadLibraryExW", ExactSpelling = true)]
+    private static extern IntPtr LoadLibraryEx(string fileName, IntPtr file, uint flags);
     private const int ParBufferImagen = 106;
     private const int TamMaxPlantilla = 2048;
     private const int ErrSinDedo = -8;
@@ -340,10 +348,34 @@ internal static class ZkBridge
         return TimeoutCapturaSegDefecto;
     }
 
+    private static void CargarSdk()
+    {
+        var candidatas = new List<string>();
+        string juntoAlPuente = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, DllZkfp);
+        if (File.Exists(juntoAlPuente)) candidatas.Add(juntoAlPuente);
+
+        // SystemDirectory devuelve System32 para este helper x64. Farmacia-Control
+        // no escribe allí: esta ruta solo admite archivos instalados por ZKTeco.
+        string system32 = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), DllZkfp);
+        if (File.Exists(system32)) candidatas.Add(system32);
+        if (candidatas.Count == 0)
+            throw new DllNotFoundException("No se encontró libzkfp.dll junto al puente ni en el directorio del sistema. Instale el paquete oficial ZKFinger x64.");
+
+        string seleccionada = candidatas[0];
+        IntPtr modulo = LoadLibraryEx(seleccionada, IntPtr.Zero, LoadWithAlteredSearchPath);
+        if (modulo == IntPtr.Zero)
+        {
+            int errorWin32 = Marshal.GetLastWin32Error();
+            throw new DllNotFoundException("No se pudo inicializar libzkfp.dll desde " + seleccionada + " ni sus dependencias (Win32 " + errorWin32 + "). Revise arquitectura x64 y reinstale el paquete oficial ZKFinger.");
+        }
+        moduloDllZkfp = modulo; // mantiene el módulo cargado para P/Invoke
+    }
+
     public static int Main(string[] args)
     {
         try
         {
+            CargarSdk();
             if (args.Length == 0)
             {
                 SalirError("ERROR_SDK", "Sin comando. Uso: detectar | capturar | diagnostico ...");

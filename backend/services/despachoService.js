@@ -33,21 +33,35 @@ function listarPorOrden(usuarioSesion, ordenId) {
   return despachos.map(d => ({ ...d, detalle: detallesPorDespacho[d.id] || [] }));
 }
 
-function crear(usuarioSesion, { orden_id, items, firma_data, huella_registrada }) {
+function crear(usuarioSesion, { orden_id, items }) {
   permisoService.verificarDespacho(usuarioSesion);
 
   const orden = ordenRepository.findById(orden_id);
   if (!orden) throw new ValidationError('La orden no existe.');
   permisoService.verificarPerteneceASede(usuarioSesion, orden.sede_id);
 
+  // Fail closed: los campos huella_registrada/firma_data procedentes de
+  // formularios no acreditan una captura física ni una coincidencia biométrica.
+  // Solo un flujo confiable de enrolamiento/verificación puede marcar estas
+  // columnas; hoy el ZK9500 no verifica identidad contra un enrolamiento.
+  if (orden.tipo_destino !== 'MUNICIPIO_VEREDA') {
+    if (!orden.firma_data || Number(orden.firma_wacom_verificada) !== 1) {
+      throw new ValidationError('Despacho bloqueado: se requiere una firma física Wacom guardada y verificada.');
+    }
+    if (Number(orden.huella_identidad_verificada) !== 1) {
+      throw new ValidationError('Despacho bloqueado: se requiere verificación biométrica contra la identidad registrada.');
+    }
+  }
+
   if (!ESTADOS_DESPACHABLES.includes(orden.estado)) {
     throw new ValidationError(`Solo se pueden despachar órdenes PENDIENTE o PARCIAL (actual: ${orden.estado}).`);
   }
 
-  // Permite despachar sin firma y sin huella: se calculan los faltantes y se asocian a la entrega
+  // Los destinos exentos conservan su política específica; para destinos locales
+  // las evidencias ya superaron la barrera fail-closed de arriba.
   const esMunicipioVereda = orden.tipo_destino === 'MUNICIPIO_VEREDA';
-  const firmaEfectiva = esMunicipioVereda ? null : (firma_data || orden.firma_data || null);
-  const huellaEfectiva = esMunicipioVereda ? false : Boolean(huella_registrada ?? orden.huella_registrada);
+  const firmaEfectiva = esMunicipioVereda ? null : (orden.firma_data || null);
+  const huellaEfectiva = esMunicipioVereda ? false : Number(orden.huella_identidad_verificada) === 1;
 
   const faltantes = [];
   if (!orden.receptor_nombre) faltantes.push('RECEPTOR');
@@ -126,22 +140,6 @@ function crear(usuarioSesion, { orden_id, items, firma_data, huella_registrada }
       });
     }
 
-    // Si se enviaron datos de firma o huella al momento del despacho, sincronizarlos en la orden
-    if (firma_data || huella_registrada !== undefined) {
-      ordenRepository.actualizarDocumentacion(orden.id, {
-        receptor_nombre: orden.receptor_nombre,
-        receptor_documento: orden.receptor_documento,
-        receptor_telefono: orden.receptor_telefono,
-        receptor_correo: orden.receptor_correo,
-        firma_data: firmaEfectiva,
-        huella_registrada: huellaEfectiva ? 1 : 0,
-        documento_adjunto_nombre: orden.documento_adjunto_nombre,
-        documento_adjunto_data: orden.documento_adjunto_data,
-        documento_adjunto_tipo: orden.documento_adjunto_tipo,
-        documentacion_completa: documentacionCompleta ? 1 : 0,
-        elementos_faltantes: elementosFaltantes.length ? JSON.stringify(elementosFaltantes) : null
-      });
-    }
   } catch (errEntrega) {
     console.warn('[despachoService] Advertencia al registrar entrega asociada:', errEntrega.message);
   }
