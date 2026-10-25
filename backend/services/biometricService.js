@@ -107,7 +107,9 @@ class BiometricService {
         tamanoPlantilla: respuesta.tamanoPlantilla ?? null,
         duracionSeg: respuesta.duracionSeg ?? null,
         timestamp: new Date().toISOString(),
-        mensaje: 'Huella capturada en lector ZK9500.'
+        verificada: false,
+        estado: 'CAPTURA_SIN_VERIFICAR',
+        mensaje: 'Captura recibida; la identidad no fue verificada contra un enrolamiento.'
       };
     } catch (err) {
       const codigo = (err && err.codigo) || 'ERROR_SDK';

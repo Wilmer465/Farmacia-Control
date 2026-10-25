@@ -19,6 +19,8 @@ const catalogoCumController = require('./controllers/catalogoCumController');
 const recepcionController = require('./controllers/recepcionController');
 const facturacionController = require('./controllers/facturacionController');
 const firmaPadController = require('./controllers/firmaPadController');
+const bridgePrerequisitesController = require('./controllers/bridgePrerequisitesController');
+const IPC_CHANNELS = require('../electron/bridgePrerequisitesChannel');
 const { sincronizarEnSegundoPlano } = require('./services/cloudSyncService');
 const sedeService = require('./services/sedeService');
 const sessionService = require('./services/sessionService');
@@ -385,6 +387,12 @@ ipcMain.handle('backups:restaurar', conSyncDespuesDeCambio('backups:restaurar', 
   ipcMain.handle('firmaPad:capturar', conValidacionSesion((usuarioSesion, datos) => {
     return firmaPadController.capturar(usuarioSesion, datos);
   }));
+
+  // Consulta estática sin argumentos: todas las rutas se resuelven en main.
+  ipcMain.handle(
+    IPC_CHANNELS.VERIFICAR_PRERREQUISITOS_PUENTES,
+    bridgePrerequisitesController.crearHandler()
+  );
 }
 
 module.exports = { registerIpcHandlers };

@@ -2,6 +2,19 @@
 setlocal
 cd /d "C:\Users\USER-D\OneDrive\Desktop\farmacia-control-completo\farmacia-control"
 
+set "PNPM=pnpm"
+where pnpm >nul 2>nul
+if errorlevel 1 (
+    where corepack >nul 2>nul
+    if errorlevel 1 (
+        echo [ERROR] No se encontro pnpm ni Corepack.
+        echo Instale Node.js y active pnpm 11.25.0 con: corepack prepare pnpm@11.25.0 --activate
+        pause
+        exit /b 1
+    )
+    set "PNPM=corepack pnpm"
+)
+
 :MENU
 cls
 echo.
@@ -34,12 +47,16 @@ echo.
 echo Iniciando Vite + Electron...
 echo Cierre la ventana de la aplicacion para detener todo.
 echo.
-call pnpm run dev
+call %PNPM% run dev
+if errorlevel 1 (
+    echo.
+    echo [ERROR] No se pudo iniciar o la aplicacion termino con un error.
+    pause
+    goto MENU
+)
 echo.
 echo === La aplicacion se cerro. ===
 echo.
-echo Reconstruyendo modulo nativo para Node.js del sistema...
-call pnpm run rebuild:node 2>nul
 pause
 goto MENU
 
@@ -49,7 +66,7 @@ echo.
 echo === Farmacia Control - Generando instaladores ===
 echo.
 echo Recompilando modulo nativo (better-sqlite3) para Electron...
-call pnpm run rebuild:electron
+call %PNPM% run rebuild:electron
 if errorlevel 1 (
     echo.
     echo [ERROR] No se pudo recompilar better-sqlite3 para Electron.
@@ -59,7 +76,13 @@ if errorlevel 1 (
 echo.
 echo Compilando frontend y empaquetando (Setup NSIS + Portable)...
 set WIN_CODESIGN_DISABLE=true
-call pnpm run build
+call %PNPM% run build
+if errorlevel 1 (
+    echo.
+    echo [ERROR] La compilacion fallo. Revise el mensaje anterior para ver la causa.
+    pause
+    goto MENU
+)
 echo.
 echo === Instaladores generados en la carpeta dist ===
 pause

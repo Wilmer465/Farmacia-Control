@@ -38,7 +38,16 @@ function crear(usuarioSesion, data) {
   if (yaExiste) throw new ValidationError('Este despacho ya tiene una entrega registrada.');
 
   const orden = ordenRepository.findById(despacho.orden_id);
-  const esMunicipioVereda = data.tipo_destino === 'MUNICIPIO_VEREDA' || orden?.tipo_destino === 'MUNICIPIO_VEREDA';
+  if (!orden) throw new ValidationError('No se puede registrar la entrega: la orden asociada no existe.');
+  // El destino enviado por renderer no puede convertir una orden local en una
+  // salida exenta; la clasificación se obtiene de la orden persistida.
+  const esMunicipioVereda = orden.tipo_destino === 'MUNICIPIO_VEREDA';
+  if (!esMunicipioVereda && (!orden.firma_data || Number(orden.firma_wacom_verificada) !== 1)) {
+    throw new ValidationError('No se puede registrar la entrega: falta una firma física Wacom guardada y verificada.');
+  }
+  if (!esMunicipioVereda && Number(orden.huella_identidad_verificada) !== 1) {
+    throw new ValidationError('No se puede registrar la entrega: falta la verificación biométrica contra la identidad registrada.');
+  }
   const destinoDetalle = data.destino_detalle || orden?.destino_detalle || null;
 
   const receptorNombre = data.receptor_nombre?.trim() || (esMunicipioVereda ? `Salida a: ${destinoDetalle || 'Municipio / Vereda'}` : null);
@@ -46,12 +55,11 @@ function crear(usuarioSesion, data) {
   const receptorTelefono = data.receptor_telefono?.trim() || null;
   const receptorCorreo = data.receptor_correo?.trim() || null;
   const { esFirmaValida } = require('../validators/firmaValidator');
-  const firma = esFirmaValida(data.firma_data) ? data.firma_data : null;
-  // HUELLA: sin lector real no hay verificación biométrica. Si el cliente declara
-  // huella_registrada=true se acepta como "declaración manual pendiente de
-  // verificación", NUNCA como evidencia biométrica. La auditoría lo registra así.
-  const huella = Boolean(data.huella_registrada);
-  const huellaOrigen = huella ? 'DECLARACION_MANUAL_SIN_LECTOR' : null;
+  const firma = esFirmaValida(orden.firma_data) ? orden.firma_data : null;
+  // No aceptar el booleano del renderer como prueba; leer solo la marca confiable
+  // persistida por el proceso principal tras una verificación de identidad.
+  const huella = !esMunicipioVereda && Number(orden.huella_identidad_verificada) === 1;
+  const huellaOrigen = huella ? 'VERIFICACION_BIOMETRICA' : null;
   const docAdjuntoNombre = data.documento_adjunto_nombre || null;
   const docAdjuntoData = data.documento_adjunto_data || null;
   const docAdjuntoTipo = data.documento_adjunto_tipo || null;
@@ -136,7 +144,7 @@ function crear(usuarioSesion, data) {
         modulo: 'ENTREGAS',
         registro_afectado: `entrega:${entrega.id}`,
         resultado: 'EXITO',
-        valores_nuevos: { origen: huellaOrigen, verificada_biometricamente: false }
+        valores_nuevos: { origen: huellaOrigen, verificada_biometricamente: huella }
       });
     }
     if (firma) {

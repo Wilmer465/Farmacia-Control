@@ -8,6 +8,7 @@ const medicamentoService = require('../../backend/services/medicamentoService');
 const despachoRepository = require('../../backend/repositories/despachoRepository');
 const auditoriaRepository = require('../../backend/repositories/auditoriaRepository');
 const { getDb } = require('../../backend/database/connection');
+const { marcarEvidenciasInternas } = require('../helpers/dispatchEvidenceFixture');
 
 // Firma mock realista (ver backend/validators/firmaValidator.js).
 const FIRMA_TEST = 'data:image/png;base64,' + 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='.repeat(4);
@@ -67,6 +68,8 @@ describe('FASE 5 — SQLite & Transaccionalidad Atómica: Despacho e Integridad'
   });
 
   test('PRUEBA CRÍTICA: Despacho completo exitoso con los 8 pasos atómicos', () => {
+    // Fixture de precondiciones en SQLite :memory:; no ejecuta ni simula hardware.
+    marcarEvidenciasInternas(db, orden.id);
     const stockAntes = loteService.listar(sesionSuperadmin, { sedeId: 1 }).find(l => l.id === lote.id);
     assert.equal(stockAntes.cantidad_total_unidades, 100);
 
@@ -110,6 +113,7 @@ describe('FASE 5 — SQLite & Transaccionalidad Atómica: Despacho e Integridad'
   });
 
   test('PRUEBA CRÍTICA DE ROLLBACK: Fallo en validación de stock no deja datos parciales', () => {
+    marcarEvidenciasInternas(db, orden.id);
     const stockOriginal = 100;
 
     // Intentar despachar 150 unidades cuando solo hay 100 en el lote (o más de lo solicitado en la orden)
@@ -153,6 +157,7 @@ describe('FASE 5 — SQLite & Transaccionalidad Atómica: Despacho e Integridad'
   });
 
   test('PRUEBA CRÍTICA: Rechazo de despacho de lote vencido y preservación de integridad', () => {
+    marcarEvidenciasInternas(db, orden.id);
     // Crear lote vencido
     const loteVencido = loteService.crear(sesionSuperadmin, {
       medicamento_id: medicamento.id,

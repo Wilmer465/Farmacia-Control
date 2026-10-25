@@ -76,7 +76,8 @@ const MENSAJES = {
   PAD_OCUPADO_LOCAL:
     'Ya hay una captura en curso en el pad. Espere a que termine.',
   TIMEOUT_LOCAL: 'El puente del pad no respondió a tiempo.',
-  RESPUESTA_INVALIDA: 'Respuesta inválida del puente del pad.'
+  RESPUESTA_INVALIDA: 'Respuesta inválida del puente del pad.',
+  HELPER_TERMINO_CON_ERROR: 'El puente del dispositivo terminó con error.'
 };
 
 function mensajePara(codigo, detalle) {
@@ -102,9 +103,16 @@ function ejecutarHelper(argumentos, timeoutMs, exeForzado) {
     }
     let salida = '';
     let errores = '';
+    let finalizado = false;
+    const finalizarConError = (error) => {
+      if (finalizado) return;
+      finalizado = true;
+      clearTimeout(temporizador);
+      reject(error);
+    };
     const temporizador = setTimeout(() => {
       try { child.kill(); } catch {}
-      reject(new SignatureError('TIMEOUT_LOCAL', MENSAJES.TIMEOUT_LOCAL));
+      finalizarConError(new SignatureError('TIMEOUT_LOCAL', MENSAJES.TIMEOUT_LOCAL));
     }, timeoutMs);
     child.stdout.on('data', (d) => {
       salida += d.toString('utf8');
@@ -113,11 +121,12 @@ function ejecutarHelper(argumentos, timeoutMs, exeForzado) {
       errores += d.toString('utf8');
     });
     child.on('error', (err) => {
-      clearTimeout(temporizador);
-      reject(new SignatureError('ERROR_SDK', `Fallo lanzando el puente: ${err.message}`));
+      finalizarConError(new SignatureError('ERROR_SDK', `Fallo lanzando el puente: ${err.message}`));
     });
-    child.on('close', () => {
+    child.on('close', (codigo, senal) => {
+      if (finalizado) return;
       clearTimeout(temporizador);
+      finalizado = true;
       if (errores.trim()) {
         // Solo diagnóstico operativo del helper (sin biométricos por diseño).
         console.error('[signatureService] puente stderr:', errores.trim().slice(0, 500));
@@ -145,6 +154,13 @@ function ejecutarHelper(argumentos, timeoutMs, exeForzado) {
         .map((l) => l.slice(0, 120));
       console.debug('[Main] helper stdout: ' + lineas.length + ' líneas, JSON detectado: ' +
         (respuesta ? 'sí' : 'no') + (chatter.length ? ', chatter: ' + JSON.stringify(chatter) : ''));
+      if (codigo !== 0) {
+        reject(new SignatureError(
+          'HELPER_TERMINO_CON_ERROR',
+          `${MENSAJES.HELPER_TERMINO_CON_ERROR} Código: ${codigo === null ? 'null' : codigo}${senal ? `; señal: ${senal}` : ''}.`
+        ));
+        return;
+      }
       if (!respuesta) {
         reject(new SignatureError('RESPUESTA_INVALIDA', MENSAJES.RESPUESTA_INVALIDA));
         return;

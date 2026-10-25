@@ -2,6 +2,62 @@ import React, { useState, useEffect, useRef } from 'react';
 import SignaturePad from './SignaturePad.jsx';
 import { inventarioApi } from '../services/inventarioApi.js';
 
+const ETIQUETAS_DIAGNOSTICO = Object.freeze({
+  prerrequisitos_verificados: 'Prerrequisitos de archivo verificados',
+  incompatibilidad_confirmada: 'Incompatibilidad confirmada',
+  archivo_faltante: 'Faltan archivos',
+  error_inspeccion: 'Error al inspeccionar archivos',
+  diagnostico_incompleto: 'Diagnóstico incompleto',
+  prerrequisito_verificado: 'Verificado',
+  incompatible: 'Incompatible'
+});
+
+function BloqueEstadoPuente({ titulo, datos }) {
+  if (!datos) return null;
+  const checks = datos.prerrequisitos?.checks || [];
+  const estados = [...new Set(checks.map((item) => item.estado))];
+  const estado = datos.prerrequisitos?.estado || datos.estado || 'diagnostico_incompleto';
+  return (
+    <section className="bloque-biometrico" aria-label={`Diagnóstico ${titulo}`}>
+      <strong>{titulo}: {ETIQUETAS_DIAGNOSTICO[estado] || estado}</strong>
+      <ul>
+        {checks.map((item, index) => (
+          <li key={`${item.codigo || item.estado}-${index}`}>
+            {item.mensaje}
+            {item.ruta ? ` Ruta comprobada: ${item.ruta}.` : ''}
+            {item.faltantes?.length ? ` Símbolos ausentes: ${item.faltantes.join(', ')}.` : ''}
+          </li>
+        ))}
+      </ul>
+      {datos.binding && (
+        <p role="alert"><strong>Bloqueo independiente del puente:</strong> {datos.binding.mensaje}</p>
+      )}
+      {datos.exports?.mensaje && <p>{datos.exports.mensaje}{datos.exports.ruta ? ` Ruta comprobada: ${datos.exports.ruta}.` : ''}</p>}
+      {datos.exports?.faltantes?.length > 0 && (
+        <p>Exports requeridos ausentes: {datos.exports.faltantes.join(', ')}.</p>
+      )}
+      {datos.exports?.invalidos?.length > 0 && (
+        <p>Exports inválidos: {datos.exports.invalidos.map((item) => `${item.nombre} (${item.motivo})`).join(', ')}.</p>
+      )}
+      {datos.exports?.reenviados?.length > 0 && (
+        <p>Exports reenviados cuyo destino no fue validado: {datos.exports.reenviados.map((item) => `${item.nombre} → ${item.destino}`).join(', ')}.</p>
+      )}
+      {datos.version?.fileVersion && <p>FileVersion observada: {datos.version.fileVersion}</p>}
+      {datos.version?.motivo && <p>{datos.version.motivo}</p>}
+      {datos.imports?.limitaciones?.map((limitacion) => (
+        <p key={limitacion.codigo}>{limitacion.mensaje}</p>
+      ))}
+      {datos.instrucciones?.map((instruccion) => (
+        <p key={instruccion.url}>
+          <a href={instruccion.url} target="_blank" rel="noreferrer">{instruccion.texto}</a>
+        </p>
+      ))}
+      <p className="page-scope">Estado del dispositivo: no probado.</p>
+      <span className="sr-only">Estados revisados: {estados.join(', ') || 'ninguno'}.</span>
+    </section>
+  );
+}
+
 // Captura la documentación de quien recibe: identificación, nombre, teléfono,
 // correo, documento adjunto, firma digital y huella. Si la persona ya está
 // registrada en el catálogo de receptores, autocompleta todos los campos.
@@ -11,9 +67,12 @@ export default function DocumentacionReceptor({ exenta, onChange, valoresInicial
   const [telefono, setTelefono] = useState(valoresIniciales?.telefono || '');
   const [correo, setCorreo] = useState(valoresIniciales?.correo || '');
   const [firma, setFirma] = useState(valoresIniciales?.firma || null);
-  const [huella, setHuella] = useState(valoresIniciales?.huella || false);
+  const [huella, setHuella] = useState(false);
   const [capturandoHuella, setCapturandoHuella] = useState(false);
   const [errorHuella, setErrorHuella] = useState(null);
+  const [diagnosticoPuentes, setDiagnosticoPuentes] = useState(null);
+  const [errorDiagnosticoPuentes, setErrorDiagnosticoPuentes] = useState(null);
+  const [consultandoDiagnosticoPuentes, setConsultandoDiagnosticoPuentes] = useState(false);
   const [adjunto, setAdjunto] = useState(valoresIniciales?.adjunto || null); // { nombre, data, tipo }
 
   const [receptorGuardado, setReceptorGuardado] = useState(null);
@@ -22,6 +81,58 @@ export default function DocumentacionReceptor({ exenta, onChange, valoresInicial
 
   const onChangeRef = useRef(onChange);
   useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
+
+  useEffect(() => {
+    let vigente = true;
+    if (exenta) {
+      setDiagnosticoPuentes(null);
+      setErrorDiagnosticoPuentes(null);
+      return undefined;
+    }
+    setConsultandoDiagnosticoPuentes(true);
+    setDiagnosticoPuentes(null);
+    setErrorDiagnosticoPuentes(null);
+    inventarioApi.puentes.verificarPrerrequisitos()
+      .then((res) => {
+        if (!vigente) return;
+        if (res?.ok && res.data) {
+          setDiagnosticoPuentes(res.data);
+          setErrorDiagnosticoPuentes(null);
+        } else {
+          setDiagnosticoPuentes(null);
+          setErrorDiagnosticoPuentes(res?.error || 'No se pudo consultar el diagnóstico estático.');
+        }
+      })
+      .catch(() => {
+        if (vigente) {
+          setDiagnosticoPuentes(null);
+          setErrorDiagnosticoPuentes('No se pudo consultar el diagnóstico estático.');
+        }
+      })
+      .finally(() => {
+        if (vigente) setConsultandoDiagnosticoPuentes(false);
+      });
+    return () => { vigente = false; };
+  }, [exenta]);
+
+  async function handleRevisarPrerrequisitosPuentes() {
+    setConsultandoDiagnosticoPuentes(true);
+    setErrorDiagnosticoPuentes(null);
+    setDiagnosticoPuentes(null);
+    try {
+      const res = await inventarioApi.puentes.verificarPrerrequisitos();
+      if (res?.ok && res.data) setDiagnosticoPuentes(res.data);
+      else {
+        setDiagnosticoPuentes(null);
+        setErrorDiagnosticoPuentes(res?.error || 'No se pudo consultar el diagnóstico estático.');
+      }
+    } catch {
+      setDiagnosticoPuentes(null);
+      setErrorDiagnosticoPuentes('No se pudo consultar el diagnóstico estático.');
+    } finally {
+      setConsultandoDiagnosticoPuentes(false);
+    }
+  }
 
   // Notificar cambios al formulario padre
   useEffect(() => {
@@ -73,7 +184,8 @@ export default function DocumentacionReceptor({ exenta, onChange, valoresInicial
               setUsarFirmaGuardada(false);
               setFirma(null);
             }
-            setHuella(Boolean(res.data.huella_guardada));
+            // El dato legado del receptor no es una coincidencia biométrica.
+            setHuella(false);
           }
           if (res.data.documento_adjunto_data) {
             setAdjunto((prev) => prev || {
@@ -110,10 +222,11 @@ export default function DocumentacionReceptor({ exenta, onChange, valoresInicial
       const res = await inventarioApi.entregas.capturarHuella(usuarioSesion);
       console.log('[Renderer] capturarHuella respuesta IPC: ok=' + Boolean(res && res.ok) +
         ' capturada=' + Boolean(res && res.data && res.data.capturada));
-      if (res && res.ok && res.data && res.data.capturada) {
+      if (res && res.ok && res.data && res.data.capturada && res.data.verificada === true) {
         setHuella(true);
       } else {
-        setErrorHuella((res && res.error) || 'No se pudo capturar la huella.');
+        setHuella(false);
+        setErrorHuella((res && res.data && res.data.mensaje) || (res && res.error) || 'Captura recibida, pero la identidad no fue verificada.');
       }
     } catch (err) {
       console.log('[Renderer] capturarHuella excepción IPC:', err && err.message);
@@ -165,6 +278,24 @@ export default function DocumentacionReceptor({ exenta, onChange, valoresInicial
         <p className="aviso-receptor">
           Si la persona ya está registrada, al escribir su identificación se llenarán automáticamente sus datos, firma y huella.
         </p>
+      )}
+
+      {!exenta && (
+        <section className="aviso-receptor aviso-receptor--informativo" aria-label="Prerrequisitos de dispositivos">
+          <strong>Diagnóstico estático de prerrequisitos</strong>
+          <p>Revisa archivos, versiones, arquitectura y exports. No carga DLL, no ejecuta puentes y no prueba los dispositivos.</p>
+          <button type="button" className="filter-chip filter-chip--compacto" onClick={handleRevisarPrerrequisitosPuentes} disabled={consultandoDiagnosticoPuentes}>
+            {consultandoDiagnosticoPuentes ? 'Revisando archivos...' : 'Volver a revisar'}
+          </button>
+          {errorDiagnosticoPuentes && <p role="alert">{errorDiagnosticoPuentes}</p>}
+          {diagnosticoPuentes && (
+            <>
+              <BloqueEstadoPuente titulo="Wacom STU-540" datos={diagnosticoPuentes.wacom} />
+              <BloqueEstadoPuente titulo="ZKTeco ZK-9500" datos={diagnosticoPuentes.zkteco} />
+              <p><strong>Dispositivo: no probado.</strong> La presencia de prerrequisitos no demuestra detección ni captura funcional.</p>
+            </>
+          )}
+        </section>
       )}
 
       <div className="form-grid">
@@ -353,8 +484,8 @@ export default function DocumentacionReceptor({ exenta, onChange, valoresInicial
             {huella ? ' Huella registrada (Clic para recapturar)' : capturandoHuella ? 'Capturando biométrico...' : 'Capturar huella'}
           </button>
           {receptorGuardado?.huella_guardada ? (
-            <span className="huella-verificada">
-               Huella biométrica verificada en sistema
+          <span className="page-scope">
+               Existe un registro histórico de huella; no acredita verificación biométrica actual
             </span>
           ) : (
             <span className="page-scope">Lector ZK9500: ponga el dedo al pulsar «Capturar huella».</span>

@@ -15,6 +15,7 @@ const auditoriaRepository = require('../../backend/repositories/auditoriaReposit
 const solicitudEliminacionRepository = require('../../backend/repositories/solicitudEliminacionRepository');
 const usuarioRepository = require('../../backend/repositories/usuarioRepository');
 const { getDb } = require('../../backend/database/connection');
+const { marcarEvidenciasInternas } = require('../helpers/dispatchEvidenceFixture');
 
 // Firma mock realista: el backend exige data-URL PNG/JPEG con contenido real
 // (backend/validators/firmaValidator.js); el antiguo 'FIRMA_MOCK' de 10 chars
@@ -86,7 +87,7 @@ med = medicamentoService.crear(sesionSuperadmin, {
     teardownTestDb();
   });
 
-  test('Permitir despacho sin firma y registrar faltante en entregas', () => {
+  test('Bloquear despacho sin firma física Wacom verificada', () => {
     const ordenSinFirma = ordenService.crear(sesionSuperadmin, {
       sede_id: 1,
       tipo_destino: 'LOCAL',
@@ -96,20 +97,13 @@ med = medicamentoService.crear(sesionSuperadmin, {
       items: [{ medicamento_id: med.id, cantidad_unidades_solicitada: 20 }]
     });
 
-    const res = despachoService.crear(sesionSuperadmin, {
+    assert.throws(() => despachoService.crear(sesionSuperadmin, {
       orden_id: ordenSinFirma.id,
       items: [{ orden_detalle_id: ordenSinFirma.detalles[0].id, lote_id: lote.id, cantidad_unidades_despachada: 20 }]
-    });
-
-    assert.ok(res.despacho);
-    const entregaRepository = require('../../backend/repositories/entregaRepository');
-    const entrega = entregaRepository.findByDespachoId(res.despacho.id);
-    assert.ok(entrega);
-    assert.equal(entrega.documentacion_completa, 0);
-    assert.ok(entrega.elementos_faltantes.includes('FIRMA'));
+    }), /firma física Wacom/);
   });
 
-  test('Permitir despacho sin huella y registrar faltante en entregas', () => {
+  test('Bloquear despacho cuando solo se aportó una firma sin verificación biométrica', () => {
     const ordenSinHuella = ordenService.crear(sesionSuperadmin, {
       sede_id: 1,
       tipo_destino: 'LOCAL',
@@ -120,17 +114,11 @@ med = medicamentoService.crear(sesionSuperadmin, {
       items: [{ medicamento_id: med.id, cantidad_unidades_solicitada: 20 }]
     });
 
-    const res = despachoService.crear(sesionSuperadmin, {
+    db.prepare('UPDATE ordenes SET firma_wacom_verificada = 1 WHERE id = ?').run(ordenSinHuella.id);
+    assert.throws(() => despachoService.crear(sesionSuperadmin, {
       orden_id: ordenSinHuella.id,
       items: [{ orden_detalle_id: ordenSinHuella.detalles[0].id, lote_id: lote.id, cantidad_unidades_sueltas_despachada: 20 }]
-    });
-
-    assert.ok(res.despacho);
-    const entregaRepository = require('../../backend/repositories/entregaRepository');
-    const entrega = entregaRepository.findByDespachoId(res.despacho.id);
-    assert.ok(entrega);
-    assert.equal(entrega.documentacion_completa, 0);
-    assert.ok(entrega.elementos_faltantes.includes('HUELLA'));
+    }), /verificación biométrica/);
   });
 
   test('Registrar correctamente pedidos parciales y diferenciar solicitado de despachado', () => {
@@ -143,6 +131,9 @@ med = medicamentoService.crear(sesionSuperadmin, {
       huella_registrada: 1,
       items: [{ medicamento_id: med.id, cantidad_unidades_solicitada: 50 }]
     });
+    // Fixture SQLite en memoria para conservar la cobertura de inventario.
+    // No representa una captura ni prueba física de los dispositivos.
+    marcarEvidenciasInternas(db, orden.id);
 
     // Despacho parcial de 20 de 50
     const resParcial = despachoService.crear(sesionSuperadmin, {
