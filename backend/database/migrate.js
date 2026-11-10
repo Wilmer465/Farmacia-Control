@@ -33,27 +33,57 @@ function ejecutarMigracion(db, migration, insertRecord) {
   })();
 }
 
-function runMigrations() {
-  const db = getDb();
-  ensureMigrationsTable(db);
-
+function cargarMigraciones() {
   const dir = path.join(__dirname, 'migrations');
   const files = fs.readdirSync(dir)
     .filter(f => f.endsWith('.js'))
-    .sort(); // 001_, 002_, ... garantiza orden
+    .sort();
+  const migrations = files.map((file) => ({ file, migration: require(path.join(dir, file)) }));
+  const names = migrations.map(({ migration }) => migration.name);
+  if (names.some((name) => typeof name !== 'string' || !name.trim()) || new Set(names).size !== names.length) {
+    throw new Error('El registro de migraciones contiene nombres vacíos o duplicados.');
+  }
+  return migrations;
+}
 
-  const already = new Set(
-    db.prepare('SELECT nombre FROM migrations').all().map(r => r.nombre)
-  );
+function obtenerEstadoMigraciones(db, migrations = cargarMigraciones()) {
+  const existingTable = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'migrations'").get();
+  if (!existingTable) return { applied: [], pending: migrations.map(({ migration }) => migration.name) };
+  const applied = db.prepare('SELECT nombre FROM migrations ORDER BY id').all().map((row) => row.nombre);
+  const knownNames = new Set(migrations.map(({ migration }) => migration.name));
+  const unknown = applied.filter((name) => !knownNames.has(name));
+  if (unknown.length) throw new Error(`La base contiene migraciones no reconocidas por esta versión (${unknown.length}).`);
+  const appliedSet = new Set(applied);
+  let foundPending = false;
+  for (const { migration } of migrations) {
+    if (!appliedSet.has(migration.name)) foundPending = true;
+    else if (foundPending) throw new Error('El registro de migraciones no forma una secuencia compatible.');
+  }
+  return { applied, pending: migrations.filter(({ migration }) => !appliedSet.has(migration.name)).map(({ migration }) => migration.name) };
+}
+
+function runMigrations(database = null, options = {}) {
+  const db = database || getDb();
+  ensureMigrationsTable(db);
+  const migrations = cargarMigraciones();
+  const { applied } = obtenerEstadoMigraciones(db, migrations);
+  const already = new Set(applied);
 
   const insertRecord = db.prepare('INSERT INTO migrations (nombre) VALUES (?)');
 
-  for (const file of files) {
-    const migration = require(path.join(dir, file));
+  for (const { migration } of migrations) {
     if (already.has(migration.name)) continue;
 
     try {
+      if (typeof options.beforeEach === 'function') {
+        const remaining = migrations
+          .map(({ migration: candidate }) => candidate)
+          .filter((candidate) => !already.has(candidate.name))
+          .map((candidate) => candidate.name);
+        options.beforeEach({ db, migration, remaining });
+      }
       ejecutarMigracion(db, migration, insertRecord);
+      already.add(migration.name);
       const sufijo = migration.atomic === false ? ' (no atómica)' : '';
       console.log(`[migrate] OK  -> ${migration.name}${sufijo}`);
     } catch (err) {
@@ -69,4 +99,4 @@ if (require.main === module) {
   runMigrations();
 }
 
-module.exports = { runMigrations };
+module.exports = { runMigrations, cargarMigraciones, obtenerEstadoMigraciones };

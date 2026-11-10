@@ -16,7 +16,8 @@ const Respaldos     = lazy(() => import('./Respaldos.jsx'));
 const Usuarios      = lazy(() => import('./Usuarios.jsx'));
 const CatalogoCUM   = lazy(() => import('./CatalogoCUM.jsx'));
 const Recepcion     = lazy(() => import('./Recepcion.jsx'));
-const Facturacion   = lazy(() => import('./Facturacion.jsx'));
+// Facturación desactivada: no se expone en navegación ni se cargan sus registros.
+// const Facturacion   = lazy(() => import('./Facturacion.jsx'));
 
 // ─── Spinner de carga mientras el módulo se descarga ──────────────────────
 const CargandoModulo = memo(function CargandoModulo() {
@@ -46,12 +47,13 @@ const ICONS = {
       <polyline points="10 9 9 9 8 9" />
     </svg>
   ),
-  facturacion: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M7 3h10l3 3v15H4V3z" />
-      <path d="M14 3v5h6M8 12h8M8 16h8" />
-    </svg>
-  ),
+  // facturacion desactivada (oculta, sin registros)
+  // facturacion: (
+  //   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  //     <path d="M7 3h10l3 3v15H4V3z" />
+  //     <path d="M14 3v5h6M8 12h8M8 16h8" />
+  //   </svg>
+  // ),
   inventario: (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
@@ -155,7 +157,8 @@ const TABS_BASE = [
   { id: 'catalogoCum',   label: 'Catálogo CUM',   desc: 'Catálogo oficial INVIMA' },
   { id: 'ordenes',       label: 'Órdenes',        desc: 'Gestión y despachos' },
   { id: 'entregas',      label: 'Entregas',       desc: 'Firmas y recepción' },
-  { id: 'facturacion',   label: 'Facturación',    desc: 'Ventas, cartera y documentos' },
+  // Facturación desactivada: oculta y sin registros.
+  // { id: 'facturacion',   label: 'Facturación',    desc: 'Ventas, cartera y documentos' },
   { id: 'pacientes',     label: 'Documento de Usuarios', desc: 'Prioridad y medicamentos' },
   { id: 'solicitudes',   label: 'Solicitudes',    desc: 'Bajas e intercambios' },
   { id: 'reportes',      label: 'Reportes',       desc: 'Trazabilidad diaria' }
@@ -201,7 +204,7 @@ export default function AppShell({ usuario, onLogout }) {
   useEffect(() => {
     if (!esSuperadmin) return;
     let cancelado = false;
-    (async () => {
+    async function refrescarSedes() {
       const res = await inventarioApi.sedes.listar(usuario);
       if (!res.ok || cancelado) return;
       const data = Array.isArray(res.data) ? res.data : [];
@@ -219,8 +222,10 @@ export default function AppShell({ usuario, onLogout }) {
         localStorage.setItem('farmacia_sede_activa', String(inicial));
         return inicial;
       });
-    })();
-    return () => { cancelado = true; };
+    }
+    refrescarSedes();
+    window.addEventListener('farmacia:sedes-actualizadas', refrescarSedes);
+    return () => { cancelado = true; window.removeEventListener('farmacia:sedes-actualizadas', refrescarSedes); };
   }, [esSuperadmin, usuario]);
 
   function handleCambiarSede(e) {
@@ -410,7 +415,7 @@ export default function AppShell({ usuario, onLogout }) {
             {tab === 'inventario'    && <Inventario    usuario={usuario} sedeActiva={sedeActiva} onNavigate={handleNavigate} params={tabParams.inventario} onClearParams={() => limpiarParams('inventario')} />}
             {tab === 'ordenes'       && <Ordenes       usuario={usuario} sedeActiva={sedeActiva} params={tabParams.ordenes} onClearParams={() => limpiarParams('ordenes')} />}
             {tab === 'entregas'      && <Entregas      usuario={usuario} sedeActiva={sedeActiva} params={tabParams.entregas} onClearParams={() => limpiarParams('entregas')} />}
-            {tab === 'facturacion'   && <Facturacion   usuario={usuario} sedeActiva={sedeActiva} />}
+            {/* Facturación desactivada: oculta y sin registros. */}
             {tab === 'pacientes'     && <Pacientes     usuario={usuario} sedeActiva={sedeActiva} />}
             {(tab === 'solicitudes' || tab === 'eliminaciones') && <Eliminaciones usuario={usuario} sedeActiva={sedeActiva} onNavigate={handleNavigate} />}
             {tab === 'auditoria'     && puedeVerAuditoriaYRespaldos && <Auditoria  usuario={usuario} sedeActiva={sedeActiva} />}

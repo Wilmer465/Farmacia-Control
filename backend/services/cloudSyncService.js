@@ -26,8 +26,12 @@ const {
 
 class CloudSyncError extends Error {}
 let syncInterval = null;
+let syncInicioTimer = null;
 let syncEnCurso = false;
 let syncDebounceTimer = null;
+let syncPausadaParaMantenimiento = false;
+let syncIntervaloMs = 5 * 60 * 1000;
+let syncMotivoPendiente = null;
 
 const RECENT_UPLOAD_WINDOW_MS = 30 * 60 * 1000;
 
@@ -47,10 +51,11 @@ const SYNC_TABLES = [
   'solicitudes_intercambio',
   'movimientos_inventario',
   'auditoria',
-  'catalogo_cum',
-  'catalogo_empaques',
-  'catalogo_actualizaciones'
 ];
+
+function esFilaCatalogoLocal(table, row) {
+  return table === 'auditoria' && row?.modulo === 'CATALOGO_CUM';
+}
 
 function rutaSyncState() {
   const dbPath = resolveDbPath();
@@ -145,12 +150,18 @@ function insertOrReplace(db, table, row) {
 function getRowsToSync(db, table, lastSyncTimestamp) {
   const cols = getTableColumns(db, table);
   const dateCol = ['updated_at', 'fecha_actualizacion', 'fecha', 'created_at', 'fecha_solicitud', 'fecha_creacion', 'creado_en', 'actualizado_en', 'fecha_importacion', 'fecha_resolucion', 'fecha_actualizacion'].find((c) => cols.includes(c));
+  const filtroAuditoriaCatalogo = table === 'auditoria' && cols.includes('modulo')
+    ? ` WHERE COALESCE(modulo, '') <> 'CATALOGO_CUM'`
+    : '';
 
   if (!lastSyncTimestamp || !dateCol) {
-    return db.prepare(`SELECT * FROM "${table}"`).all();
+    return db.prepare(`SELECT * FROM "${table}"${filtroAuditoriaCatalogo}`).all();
   }
 
-  return db.prepare(`SELECT * FROM "${table}" WHERE "${dateCol}" >= ?`).all(lastSyncTimestamp);
+  const conFecha = filtroAuditoriaCatalogo
+    ? ` WHERE COALESCE(modulo, '') <> 'CATALOGO_CUM' AND "${dateCol}" >= ?`
+    : ` WHERE "${dateCol}" >= ?`;
+  return db.prepare(`SELECT * FROM "${table}"${conFecha}`).all(lastSyncTimestamp);
 }
 
 function recentTimestamp() {
@@ -302,6 +313,7 @@ async function bajar(lastSyncTimestamp, { permitirBajadaTotal = true } = {}, met
         for (const item of tableRecords) {
           if (item.data && typeof item.data === 'object') {
             let fila = sanitizarFila(item.data);
+            if (esFilaCatalogoLocal(table, fila)) continue;
             // SEGURIDAD: al bajar usuarios, nunca sobrescribir el hash local con
             // dato de nube (que viene sin password_hash). Preservar el local.
             if (table === 'usuarios' && fila.id != null) {
@@ -364,6 +376,16 @@ async function sincronizarInterno({
   rutaEstado = rutaSyncState(),
   rutaMetricas = rutaMetricasSync()
 } = {}) {
+  if (syncPausadaParaMantenimiento) {
+    return {
+      inicio: new Date().toISOString(),
+      fin: new Date().toISOString(),
+      subidos: 0,
+      bajados: 0,
+      direccion,
+      omitida: true
+    };
+  }
   if (syncEnCurso) {
     return {
       inicio: new Date().toISOString(),
@@ -433,13 +455,17 @@ async function sincronizarAutomaticamente() {
 }
 
 function iniciarPlanificadorCloudSync({ intervaloMs = 5 * 60 * 1000, ejecutarAlInicio = true } = {}) {
-  if (syncInterval) return;
+  if (syncInterval || syncPausadaParaMantenimiento) return;
   if (!syncHabilitado) {
     console.info('[cloudSync] Sincronización deshabilitada: falta SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY.');
     return;
   }
+  syncIntervaloMs = intervaloMs;
   if (ejecutarAlInicio) {
-    setTimeout(sincronizarAutomaticamente, 90 * 1000);
+    syncInicioTimer = setTimeout(() => {
+      syncInicioTimer = null;
+      sincronizarAutomaticamente();
+    }, 90 * 1000);
   }
   syncInterval = setInterval(sincronizarAutomaticamente, intervaloMs);
   console.log(`[cloudSync] Planificador Supabase iniciado cada ${Math.round(intervaloMs / 1000)} segundos.`);
@@ -448,10 +474,16 @@ function iniciarPlanificadorCloudSync({ intervaloMs = 5 * 60 * 1000, ejecutarAlI
 function sincronizarEnSegundoPlano(motivo = 'cambio-local') {
   const { syncHabilitado } = require('../config/supabaseConfig');
   if (!syncHabilitado) return;
+  if (syncPausadaParaMantenimiento) {
+    syncMotivoPendiente = motivo;
+    return;
+  }
 
   if (syncDebounceTimer) clearTimeout(syncDebounceTimer);
+  syncMotivoPendiente = motivo;
   syncDebounceTimer = setTimeout(async () => {
     syncDebounceTimer = null;
+    syncMotivoPendiente = null;
     try {
       const res = await sincronizarInterno({
         direccion: 'SUBIR',
@@ -468,9 +500,50 @@ function sincronizarEnSegundoPlano(motivo = 'cambio-local') {
 }
 
 function detenerPlanificadorCloudSync() {
-  if (!syncInterval) return;
-  clearInterval(syncInterval);
-  syncInterval = null;
+  if (syncInterval) {
+    clearInterval(syncInterval);
+    syncInterval = null;
+  }
+  if (syncInicioTimer) {
+    clearTimeout(syncInicioTimer);
+    syncInicioTimer = null;
+  }
+}
+
+async function adquirirPausaSincronizacionParaMantenimiento({ timeoutMs = 30000 } = {}) {
+  if (syncPausadaParaMantenimiento) throw new Error('La sincronización ya está pausada por mantenimiento.');
+  syncPausadaParaMantenimiento = true;
+  const reanudarPlanificador = Boolean(syncInterval);
+  detenerPlanificadorCloudSync();
+  if (syncDebounceTimer) {
+    clearTimeout(syncDebounceTimer);
+    syncDebounceTimer = null;
+  }
+
+  let liberada = false;
+  const liberar = () => {
+    if (liberada) return;
+    liberada = true;
+    syncPausadaParaMantenimiento = false;
+    if (reanudarPlanificador) {
+      iniciarPlanificadorCloudSync({ intervaloMs: syncIntervaloMs, ejecutarAlInicio: false });
+    }
+    if (syncMotivoPendiente) {
+      const motivo = syncMotivoPendiente;
+      syncMotivoPendiente = null;
+      sincronizarEnSegundoPlano(motivo);
+    }
+  };
+
+  const inicio = Date.now();
+  while (syncEnCurso) {
+    if (Date.now() - inicio >= timeoutMs) {
+      liberar();
+      throw new Error('La sincronización activa no terminó a tiempo; se canceló la restauración.');
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  return liberar;
 }
 
 module.exports = {
@@ -478,8 +551,11 @@ module.exports = {
   sincronizarEnSegundoPlano,
   iniciarPlanificadorCloudSync,
   detenerPlanificadorCloudSync,
+  adquirirPausaSincronizacionParaMantenimiento,
   descargarBlob,
   CloudSyncError,
   SYNC_TABLES,
-  sincronizarInterno
+  sincronizarInterno,
+  getRowsToSync,
+  esFilaCatalogoLocal
 };

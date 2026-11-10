@@ -2644,6 +2644,8 @@ body {
 .form-textarea {
   resize: vertical;
   line-height: 1.35;
+  pointer-events: auto;
+  user-select: text;
 }
 
 .form-input:focus,
@@ -3336,6 +3338,7 @@ body {
   -webkit-backdrop-filter: blur(3px);
   backdrop-filter: blur(3px);
   z-index: var(--z-overlay);
+  display: flex;
   align-items: center;
   justify-content: center;
   padding: var(--space-2xl);

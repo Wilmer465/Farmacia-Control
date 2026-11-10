@@ -107,6 +107,27 @@
     },
     sedes: {
       listar: () => ok(sedesMock),
+      crear: (_u, data) => {
+        if (!data || !data.nombre || !data.nombre.trim()) {
+          return fail('El nombre de la sede es obligatorio.');
+        }
+        const nueva = {
+          id: sedesMock.length + 1,
+          nombre: data.nombre.trim(),
+          ciudad: data.ciudad ? data.ciudad.trim() : null,
+          estado: 'ACTIVO',
+          creado_en: ahora()
+        };
+        sedesMock.push(nueva);
+        return ok(nueva);
+      },
+      eliminar: (_u, id) => {
+        const sedeId = Number(id);
+        const idx = sedesMock.findIndex((s) => s.id === sedeId);
+        if (idx === -1) return fail('Sede no encontrada.');
+        const [eliminada] = sedesMock.splice(idx, 1);
+        return ok({ id: sedeId, nombre: eliminada.nombre });
+      },
     },
     lotes: {
       listar: () => ok(lotesMock),

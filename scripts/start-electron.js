@@ -6,7 +6,7 @@ const rootDir = path.join(__dirname, '..');
 // Cargar variables de entorno desde .env (no versionado) para Supabase
 require('dotenv').config({ path: path.join(rootDir, '.env') });
 
-const env = { ...process.env };
+const env = { ...process.env, NODE_ENV: process.env.NODE_ENV || 'development' };
 delete env.ELECTRON_RUN_AS_NODE;
 
 // Rebuild native modules (better-sqlite3) for Electron's ABI (v128)

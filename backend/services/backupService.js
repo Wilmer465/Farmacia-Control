@@ -3,6 +3,8 @@ const fsp = require('fs/promises');
 const path = require('path');
 const Database = require('better-sqlite3');
 const { getDb, resolveDbPath, closeDb } = require('../database/connection');
+const { restoreDatabase } = require('../database/startupRecovery');
+const { adquirirPausaSincronizacionParaMantenimiento } = require('./cloudSyncService');
 const auditoriaRepository = require('../repositories/auditoriaRepository');
 const permisoService = require('./permisoService');
 const { AUDIT_ACTIONS, ROLES } = require('../../shared/constants');
@@ -57,7 +59,8 @@ function validarIntegridad(rutaArchivo) {
     conexionTemporal = new Database(rutaArchivo, { readonly: true, fileMustExist: true });
     const resultado = conexionTemporal.pragma('integrity_check');
     const ok = Array.isArray(resultado) && resultado.length === 1 && resultado[0].integrity_check === 'ok';
-    return { ok, detalle: resultado };
+    const clavesForaneas = conexionTemporal.pragma('foreign_key_check');
+    return { ok: ok && clavesForaneas.length === 0, detalle: { integridad: resultado, clavesForaneas } };
   } catch (err) {
     return { ok: false, detalle: err.message };
   } finally {
@@ -283,7 +286,7 @@ function verificarPermisoRestaurar(usuarioSesion, nombreArchivo) {
   }
 }
 
-function restaurar(usuarioSesion, nombreArchivo) {
+async function restaurar(usuarioSesion, nombreArchivo) {
   verificarPermisoRestaurar(usuarioSesion, nombreArchivo);
 
   if (!nombreArchivo || typeof nombreArchivo !== 'string') {
@@ -308,47 +311,32 @@ function restaurar(usuarioSesion, nombreArchivo) {
     throw new ValidationError('El respaldo indicado no existe.');
   }
 
-  const integridad = validarIntegridad(rutaRespaldo);
-  if (!integridad.ok) {
-    throw new ValidationError('El respaldo no pasó la validación de integridad. No se restauró nada.');
-  }
-
   const dbPath = resolveDbPath();
-
-  // Vaciar el WAL vivo antes de cerrar: sin checkpoint, las transacciones
-  // confirmadas que aún están solo en el -wal se pierden al borrarlo abajo.
+  const syncState = path.join(path.dirname(dbPath), 'cloud_sync_state.json');
+  const reanudarSincronizacion = await adquirirPausaSincronizacionParaMantenimiento();
   try {
-    getDb().pragma('wal_checkpoint(TRUNCATE)');
-  } catch (err) {
-    console.warn('[backupService] No se pudo hacer checkpoint antes de restaurar:', err.message);
-  }
-  closeDb();
-  fs.copyFileSync(rutaRespaldo, dbPath);
-  // Resetear el cursor de sync: la BD restaurada es un punto antiguo y el
-  // cursor futuro filtraría (`WHERE fecha >= lastSync`) tanto la re-subida de
-  // lo restaurado como la bajada intermedia. Sin reset, hueco post-restore.
-  try {
-    const syncState = path.join(path.dirname(dbPath), 'cloud_sync_state.json');
-    if (fs.existsSync(syncState)) fs.unlinkSync(syncState);
-  } catch (err) {
-    console.warn('[backupService] No se pudo resetear cloud_sync_state.json:', err.message);
-  }
-  for (const sufijo of ['-wal', '-shm']) {
-    const rutaObsoleta = dbPath + sufijo;
-    if (fs.existsSync(rutaObsoleta)) fs.unlinkSync(rutaObsoleta);
-  }
+    await restoreDatabase({
+      databasePath: dbPath,
+      cursorPath: syncState,
+      sourceBackupPath: rutaRespaldo,
+      activeDb: getDb(),
+      closeActiveDb: closeDb
+    });
 
-  auditoriaRepository.registrar({
-    usuario_id: usuarioSesion.id,
-    rol: usuarioSesion.rol_nombre,
-    sede_id: usuarioSesion.sede_id,
-    accion: AUDIT_ACTIONS.RESTAURAR_RESPALDO,
-    modulo: 'RESPALDOS',
-    registro_afectado: nombreArchivo,
-    resultado: 'EXITO'
-  });
+    auditoriaRepository.registrar({
+      usuario_id: usuarioSesion.id,
+      rol: usuarioSesion.rol_nombre,
+      sede_id: usuarioSesion.sede_id,
+      accion: AUDIT_ACTIONS.RESTAURAR_RESPALDO,
+      modulo: 'RESPALDOS',
+      registro_afectado: nombreArchivo,
+      resultado: 'EXITO'
+    });
 
-  return { restaurado: true, nombre: nombreArchivo };
+    return { restaurado: true, nombre: nombreArchivo };
+  } finally {
+    reanudarSincronizacion();
+  }
 }
 
 async function ultimoRespaldo(usuarioSesion, filtros = {}) {

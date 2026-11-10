@@ -65,10 +65,10 @@ y los conteos por tabla coinciden con la base viva abriendo **solo** el `.db`.
 
 ## Companion files
 
-`db.backup()` deja los archivos `-wal` y `-shm` junto al destino aunque el `.db`
-ya esté completo. `limpiarCompanionFiles` los elimina, con una condición: el
-`-wal` solo se borra si está vacío. Si alguna vez quedara con contenido, borrarlo
-perdería datos, porque `restaurar` copia únicamente el `.db`.
+`db.backup()` puede dejar archivos `-wal` y `-shm` junto al destino aunque el
+`.db` ya esté completo. `limpiarCompanionFiles` elimina el `-wal` solo si está
+vacío. La restauración segura no copia directamente sobre la base activa:
+verifica el archivo seleccionado y realiza staging/promoción bajo journal.
 
 ## Planificador automático
 
@@ -213,3 +213,45 @@ Aplica igual a `pnpm run migrate`.
 Tras restaurar, `ipcHandlers.js:259-268` hace `app.relaunch()` y `app.exit(0)`.
 No hace falta reabrir la conexión: el proceso se reinicia entero para que no
 queden *prepared statements* en caché con los datos viejos.
+
+## Preparación segura de SQLite al iniciar
+
+El proceso principal prepara la base antes de registrar IPC, HTTP, sincronización
+o planificadores. En Windows, si hay migraciones pendientes, trabaja sobre un
+respaldo `db.backup()` validado y una copia de staging en el mismo directorio de
+`userData`. La base empaquetada nunca es una fuente de datos; la ruta productiva
+es `userData/farmacia.db`.
+
+El manifiesto de cada preparación contiene hashes SHA-256, tamaños, estado del
+ledger y resultados de las validaciones, sin filas de negocio. El journal se
+escribe como eventos JSONL con `fsync` por evento. Al reiniciar, la aplicación
+solo continúa automáticamente si el estado y los hashes corresponden a una
+transición reconocida. Un estado incompleto o ambiguo bloquea el arranque normal
+y requiere conservar los archivos para recuperación.
+
+Antes de una migración, la base activa se comprueba con `quick_check`,
+`foreign_key_check` y el ledger; el respaldo en línea se valida con
+`integrity_check` completo, claves foráneas y hash. En staging y después de
+promover se repiten las comprobaciones completas. En un arranque sin migración
+se usa `quick_check` y `foreign_key_check`. Los fallos de
+checkpoint, cierre, validación, hash o espacio insuficiente son bloqueantes.
+
+La promoción en Windows llama a `ReplaceFileW` mediante PowerShell y conserva el
+archivo sustituido. No se usa una secuencia de copia sobre la base activa. Esta
+operación y el journal no forman una transacción de hardware; los fallos
+ambiguos quedan bloqueados para revisión.
+
+La restauración manual usa el mismo principio de staging: valida el respaldo,
+comprueba `wal_checkpoint(TRUNCATE)` y el cierre, guarda y verifica una copia
+exacta de la base actual, prepara el destino en el mismo volumen y registra la
+promoción en el journal. Un fallo de checkpoint o cierre aborta antes de borrar
+WAL/SHM o sustituir la base. Tras una restauración confirmada se elimina el
+cursor `cloud_sync_state.json` como hasta ahora, para que la sincronización
+existente vuelva a recorrer el rango; el journal conserva una copia verificada
+del cursor para rollback. Si no puede reconciliarse la base y el cursor, el
+arranque queda bloqueado para recuperación manual. Esto no cambia el protocolo
+de sincronización.
+
+La validación automatizada debe ejecutarse solamente con bases sintéticas en
+carpetas temporales. No apuntar pruebas de recuperación a `data/farmacia.db` ni
+a perfiles de usuario reales.

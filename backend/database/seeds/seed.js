@@ -4,9 +4,7 @@ const { runMigrations } = require('../migrate');
 const { ROLES, ESTADOS_REGISTRO } = require('../../../shared/constants');
 
 function seed(options = {}) {
-  runMigrations(); // garantiza que la estructura exista antes de sembrar
-
-  const db = getDb();
+  const db = options.db || getDb();
   const isTest = Boolean(options.isTest || process.env.NODE_ENV === 'test');
 
   // 1. Roles del sistema
@@ -155,6 +153,7 @@ function seed(options = {}) {
 }
 
 if (require.main === module) {
+  runMigrations();
   seed();
 }
 

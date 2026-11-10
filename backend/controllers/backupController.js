@@ -32,9 +32,10 @@ async function crear(usuarioSesion, opciones) {
   }
 }
 
-function restaurar(usuarioSesion, nombreArchivo) {
+async function restaurar(usuarioSesion, nombreArchivo) {
   try {
-    return { ok: true, data: backupService.restaurar(usuarioSesion, nombreArchivo) };
+    const data = await backupService.restaurar(usuarioSesion, nombreArchivo);
+    return { ok: true, data };
   } catch (err) {
     return manejarError(err);
   }

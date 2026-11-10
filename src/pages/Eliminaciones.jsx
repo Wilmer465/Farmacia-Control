@@ -61,7 +61,7 @@ export default function Eliminaciones({ usuario, sedeActiva }) {
         inventarioApi.solicitudesEliminacion.listar(usuario, { sedeId: sedeActiva }),
         inventarioApi.solicitudesIntercambio.listar(usuario, { sedeId: sedeActiva }),
         inventarioApi.ordenes.listar(usuario, { sedeId: sedeActiva }),
-        inventarioApi.sedes.listar(),
+        inventarioApi.sedes.listar(usuario),
         inventarioApi.lotes.listar(usuario, { sedeId: esSuperadmin ? null : usuario.sede_id })
       ]);
 
@@ -640,16 +640,18 @@ setGuardandoIntercambio(true);
 
               <div className="form-field">
                 <label className="form-label" htmlFor="motivo-rechazo">
-                  Motivo o justificación del rechazo (obligatorio):
+                  Motivo o justificaciÃ³n del rechazo (obligatorio):
                 </label>
                 <textarea
                   id="motivo-rechazo"
                   rows="3"
                   className="form-textarea"
-                  placeholder="Explique claramente por qué se rechaza esta solicitud..."
+                  placeholder="Explique claramente por quÃ© se rechaza esta solicitud..."
                   value={motivoRechazo}
                   onChange={(e) => setMotivoRechazo(e.target.value)}
                   autoFocus
+                  disabled={accionEnCurso === 'rechazando'}
+                  style={{ pointerEvents: 'auto' }}
                 />
               </div>
 

@@ -5,7 +5,9 @@ export const inventarioApi = {
     actualizar: (usuario, id, data) => window.api.medicamentos.actualizar(usuario, id, data)
   },
   sedes: {
-    listar: (usuario) => window.api.sedes.listar(usuario)
+    listar: (usuario) => window.api.sedes.listar(usuario),
+    crear: (usuario, data) => window.api.sedes.crear(usuario, data),
+    eliminar: (usuario, id) => window.api.sedes.eliminar(usuario, id)
   },
   lotes: {
     listar: (usuario, filtros) => window.api.lotes.listar(usuario, filtros),
@@ -34,24 +36,7 @@ export const inventarioApi = {
     guardar: (usuario, data) => window.api.receptores.guardar(usuario, data),
     actualizar: (usuario, id, data) => window.api.receptores.actualizar(usuario, id, data)
   },
-  facturacion: {
-    clientes: (usuario, filtros) => window.api.facturacion.clientes(usuario, filtros),
-    guardarCliente: (usuario, data) => window.api.facturacion.guardarCliente(usuario, data),
-    catalogos: (usuario, filtros) => window.api.facturacion.catalogos(usuario, filtros),
-    configuracion: (usuario, filtros) => window.api.facturacion.configuracion(usuario, filtros),
-    guardarConfiguracion: (usuario, data) => window.api.facturacion.guardarConfiguracion(usuario, data),
-    listar: (usuario, filtros) => window.api.facturacion.listar(usuario, filtros),
-    cartera: (usuario, filtros) => window.api.facturacion.cartera(usuario, filtros),
-    reportes: (usuario, filtros) => window.api.facturacion.reportes(usuario, filtros),
-    colaDian: (usuario, filtros) => window.api.facturacion.colaDian(usuario, filtros),
-    prepararDian: (usuario, id) => window.api.facturacion.prepararDian(usuario, id),
-    transmitirDian: (usuario, id) => window.api.facturacion.transmitirDian(usuario, id),
-    consultarEstadoDian: (usuario, id) => window.api.facturacion.consultarEstadoDian(usuario, id),
-    crearFactura: (usuario, data) => window.api.facturacion.crearFactura(usuario, data),
-    crearNotaCredito: (usuario, data) => window.api.facturacion.crearNotaCredito(usuario, data),
-    crearNotaDebito: (usuario, data) => window.api.facturacion.crearNotaDebito(usuario, data),
-    registrarPago: (usuario, id, data) => window.api.facturacion.registrarPago(usuario, id, data)
-  },
+  // facturacion: desactivada (sin registros/canales)
   solicitudesEliminacion: {
     listar: (usuario, filtros) => window.api.solicitudesEliminacion.listar(usuario, filtros),
     crear: (usuario, data) => window.api.solicitudesEliminacion.crear(usuario, data),
