@@ -5,7 +5,7 @@ export default defineConfig({
   plugins: [react()],
   base: './',
   build: {
-    outDir: 'dist',
+    outDir: 'dist/renderer',
     // Minificación agresiva
     minify: 'esbuild',
     // Separar chunks grandes para carga bajo demanda

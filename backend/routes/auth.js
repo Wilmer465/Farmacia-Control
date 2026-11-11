@@ -40,7 +40,8 @@ router.post('/logout', (req, res) => {
 // Verifica el token opaco que devuelve login/refresh. Es la via para comprobar
 // que una sesion creada en el escritorio Electron tambien vale en la app movil.
 router.get('/session', conSesionHttp, (req, res) => {
-  const { session_token, ...usuario } = req.usuarioSesion;
+  const usuario = { ...req.usuarioSesion };
+  delete usuario.session_token;
   res.status(200).json({ ok: true, data: { usuario, expires_in: authController.EXPIRES_IN } });
 });
 

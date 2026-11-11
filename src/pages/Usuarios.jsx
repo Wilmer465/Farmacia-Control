@@ -36,6 +36,20 @@ export default function Usuarios({ usuario }) {
   const [guardando, setGuardando] = useState(false);
   const [errorModal, setErrorModal] = useState(null);
 
+  // Modal crear sede
+  const [modalSedeAbierto, setModalSedeAbierto] = useState(false);
+  const [formularioSede, setFormularioSede] = useState({
+    nombre: '',
+    ciudad: ''
+  });
+  const [guardandoSede, setGuardandoSede] = useState(false);
+  const [errorModalSede, setErrorModalSede] = useState(null);
+
+  // Modal gestionar sedes
+  const [modalGestionSedesAbierto, setModalGestionSedesAbierto] = useState(false);
+  const [eliminandoSedeId, setEliminandoSedeId] = useState(null);
+  const [errorGestionSedes, setErrorGestionSedes] = useState(null);
+
   const esWilmer = usuario && usuario.rol_nombre === 'SUPERADMIN' && String(usuario.username || '').toLowerCase().trim() === 'wilmer';
 
   useEffect(() => {
@@ -43,7 +57,15 @@ export default function Usuarios({ usuario }) {
     cargarDatos();
   }, [esWilmer]);
 
-  useEscapeCerrarModal(() => setModalAbierto(false), modalAbierto);
+  useEscapeCerrarModal(() => {
+    if (modalGestionSedesAbierto) {
+      setModalGestionSedesAbierto(false);
+    } else if (modalSedeAbierto) {
+      setModalSedeAbierto(false);
+    } else if (modalAbierto) {
+      setModalAbierto(false);
+    }
+  }, modalAbierto || modalSedeAbierto || modalGestionSedesAbierto);
 
   async function cargarDatos() {
     setCargando(true);
@@ -152,6 +174,52 @@ export default function Usuarios({ usuario }) {
     }
   }
 
+  function abrirModalCrearSede() {
+    setFormularioSede({
+      nombre: '',
+      ciudad: ''
+    });
+    setErrorModalSede(null);
+    setModalSedeAbierto(true);
+  }
+
+  async function handleGuardarSede(e) {
+    e.preventDefault();
+    setErrorModalSede(null);
+    setGuardandoSede(true);
+
+    try {
+      const payload = {
+        nombre: formularioSede.nombre.trim(),
+        ciudad: formularioSede.ciudad.trim() || null
+      };
+
+      if (!payload.nombre) {
+        setErrorModalSede('El nombre de la sede es obligatorio.');
+        setGuardandoSede(false);
+        return;
+      }
+
+      const res = await inventarioApi.sedes.crear(usuario, payload);
+      if (!res.ok) {
+        setErrorModalSede(res.error || 'Error al crear la sede.');
+        setGuardandoSede(false);
+        return;
+      }
+
+      setMensajeExito(`Sede '${res.data.nombre}' creada con éxito.`);
+      setModalSedeAbierto(false);
+      await cargarDatos();
+      setFormulario((prev) => ({ ...prev, sede_id: String(res.data.id) }));
+      window.dispatchEvent(new CustomEvent('farmacia:sedes-actualizadas', { detail: res.data }));
+      setTimeout(() => setMensajeExito(null), 4000);
+    } catch (err) {
+      setErrorModalSede('Error al crear la sede.');
+    } finally {
+      setGuardandoSede(false);
+    }
+  }
+
   async function handleToggleEstado(u) {
     if (u.username.toLowerCase() === 'wilmer') {
       alert('No puedes desactivar tu propia cuenta principal de Superadmin.');
@@ -173,6 +241,43 @@ export default function Usuarios({ usuario }) {
       }
     } catch (err) {
       alert('Error de conexión al cambiar estado.');
+    }
+  }
+
+  // Eliminación definitiva = anonimización, no borrado. Por eso la doble
+  // confirmación: la fila desaparece del listado y sus credenciales dejan de
+  // servir, aunque el histórico de auditoría se conserva intacto.
+  function abrirModalGestionSedes() {
+    setErrorGestionSedes(null);
+    setModalGestionSedesAbierto(true);
+  }
+
+  async function handleEliminarSede(sede) {
+    const primera = window.confirm(
+      `¿Eliminar la sede '${sede.nombre}'?\n\n` +
+      'La sede se eliminará del sistema. Si tiene usuarios, inventario, órdenes u otros registros asociados, la operación será rechazada.'
+    );
+    if (!primera) return;
+
+    const segunda = window.confirm(`Última confirmación: eliminar '${sede.nombre}' es irreversible.\n\n¿Continuar?`);
+    if (!segunda) return;
+
+    setEliminandoSedeId(sede.id);
+    setErrorGestionSedes(null);
+    try {
+      const res = await inventarioApi.sedes.eliminar(usuario, sede.id);
+      if (res.ok) {
+        setMensajeExito(`Sede '${res.data.nombre}' eliminada.`);
+        await cargarDatos();
+        window.dispatchEvent(new CustomEvent('farmacia:sedes-actualizadas'));
+        setTimeout(() => setMensajeExito(null), 4000);
+      } else {
+        setErrorGestionSedes(res.error || 'Error al eliminar la sede.');
+      }
+    } catch (err) {
+      setErrorGestionSedes('Error de conexión al eliminar la sede.');
+    } finally {
+      setEliminandoSedeId(null);
     }
   }
 
@@ -243,8 +348,24 @@ export default function Usuarios({ usuario }) {
         </div>
 
         <div className="header-actions">
+          <button
+            type="button"
+            className="btn-secundario"
+            onClick={abrirModalGestionSedes}
+            title="Ver y eliminar sedes registradas"
+          >
+            Gestionar Sedes
+          </button>
+          <button
+            type="button"
+            className="btn-secundario"
+            onClick={abrirModalCrearSede}
+            title="Crear una nueva sede en el sistema"
+          >
+            <span aria-hidden="true">+</span> Crear Sede
+          </button>
           <button type="button" className="btn-primario" onClick={abrirModalCrear}>
-            <span aria-hidden="true">+</span> Nuevo Usuario
+            <span aria-hidden="true">+</span> Crear Usuario
           </button>
         </div>
       </div>
@@ -455,8 +576,134 @@ export default function Usuarios({ usuario }) {
                 >
                   Cancelar
                 </button>
+
                 <button type="submit" className="btn-primario" disabled={guardando}>
                   {guardando ? 'Guardando...' : (usuarioEditando ? 'Guardar Cambios' : 'Crear Usuario')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {modalGestionSedesAbierto && (
+        <div className="modal-overlay" style={{ zIndex: 1150 }} onClick={() => setModalGestionSedesAbierto(false)}>
+          <div className="modal-card modal-md" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header-row">
+              <h3>Gestionar Sedes</h3>
+              <button
+                type="button"
+                className="modal-close-x"
+                onClick={() => setModalGestionSedesAbierto(false)}
+                title="Cerrar"
+              >
+                ×
+              </button>
+            </div>
+
+            {errorGestionSedes && <div className="aviso-error">{errorGestionSedes}</div>}
+
+            {sedes.length === 0 ? (
+              <div className="tabla-vacia">No hay sedes registradas.</div>
+            ) : (
+              <div className="table-responsive">
+                <table className="tabla">
+                  <thead>
+                    <tr>
+                      <th>Sede</th>
+                      <th>Ciudad</th>
+                      <th className="tabla-acciones">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sedes.map((s) => (
+                      <tr key={s.id}>
+                        <td><strong>{s.nombre}</strong></td>
+                        <td className="celda-texto-suave">{s.ciudad || <em className="celda-vacia">—</em>}</td>
+                        <td className="acciones">
+                          <button
+                            type="button"
+                            className="btn-peligro btn-tabla"
+                            disabled={eliminandoSedeId === s.id}
+                            onClick={() => handleEliminarSede(s)}
+                            title="Eliminar sede (solo si no tiene registros asociados)"
+                          >
+                            {eliminandoSedeId === s.id ? 'Eliminando...' : 'Eliminar'}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <div className="form-actions form-actions-modal">
+              <button type="button" className="btn-secundario" onClick={() => setModalGestionSedesAbierto(false)}>
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalSedeAbierto && (
+        <div className="modal-overlay" style={{ zIndex: 1200 }} onClick={() => setModalSedeAbierto(false)}>
+          <div className="modal-card modal-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header-row">
+              <h3>Crear Nueva Sede</h3>
+              <button
+                type="button"
+                className="modal-close-x"
+                onClick={() => setModalSedeAbierto(false)}
+                title="Cerrar"
+              >
+                ×
+              </button>
+            </div>
+
+            <form onSubmit={handleGuardarSede}>
+              {errorModalSede && <div className="aviso-error">{errorModalSede}</div>}
+
+              <div className="form-grid">
+                <div className="form-field">
+                  <label className="form-label" htmlFor="sede-nombre">Nombre de la Sede *</label>
+                  <input
+                    id="sede-nombre"
+                    className="form-input"
+                    type="text"
+                    required
+                    value={formularioSede.nombre}
+                    onChange={(e) => setFormularioSede({ ...formularioSede, nombre: e.target.value })}
+                    placeholder="Ej: Sede Cali"
+                    autoFocus
+                  />
+                </div>
+
+                <div className="form-field">
+                  <label className="form-label" htmlFor="sede-ciudad">Ciudad</label>
+                  <input
+                    id="sede-ciudad"
+                    className="form-input"
+                    type="text"
+                    value={formularioSede.ciudad}
+                    onChange={(e) => setFormularioSede({ ...formularioSede, ciudad: e.target.value })}
+                    placeholder="Ej: Cali"
+                  />
+                </div>
+              </div>
+
+              <div className="form-actions form-actions-modal">
+                <button
+                  type="button"
+                  className="btn-secundario"
+                  onClick={() => setModalSedeAbierto(false)}
+                  disabled={guardandoSede}
+                >
+                  Cancelar
+                </button>
+                <button type="submit" className="btn-primario" disabled={guardandoSede}>
+                  {guardandoSede ? 'Guardando...' : 'Crear Sede'}
                 </button>
               </div>
             </form>

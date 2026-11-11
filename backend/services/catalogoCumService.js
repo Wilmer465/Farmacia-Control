@@ -3,6 +3,7 @@ const { getDb } = require('../database/connection');
 const auditoriaRepository = require('../repositories/auditoriaRepository');
 const permisoService = require('./permisoService');
 const { AUDIT_ACTIONS } = require('../../shared/constants');
+const barcodeService = require('./barcodeService');
 
 const INVIMA_CUM_URL = 'https://www.datos.gov.co/resource/i7cb-raxc.json';
 const CHUNK_SIZE = 5000;
@@ -60,22 +61,63 @@ function generarHashFila(row) {
     row.atc_descripcion,
     row.gtin,
     row.gtin_empaque_logistico,
-    row.gtin_empaque_venta
+    row.gtin_empaque_venta,
+    row.ium,
+    row.importador
   ].filter(v => v != null && v !== '').join('|');
   return crypto.createHash('sha256').update(camposClave).digest('hex');
 }
 
 function mapearRegistroINVIMA(item, versionCatalogo) {
+  const filas = Array.isArray(item.filas) ? item.filas : [item];
+  const valoresRol = (rol) => [...new Set(filas
+    .filter((fila) => String(fila.tiporol || '').toUpperCase().includes(rol))
+    .map((fila) => fila.nombrerol).filter(Boolean))].sort((a, b) => a.localeCompare(b)).join('; ') || null;
+  const activos = [...new Set(filas.map((fila) => fila.principioactivo).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b));
+  const concentracionesNormalizadas = [...new Set(filas.map((fila) => {
+    if (!fila.cantidad || !fila.unidadmedida) return null;
+    const unidadReferencia = fila.unidadreferencia ? `/${fila.unidadreferencia}` : '';
+    return `${fila.cantidad} ${fila.unidadmedida}${unidadReferencia}`;
+  }).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const concentracion = /^\d+(?:[.,]\d+)?\s*\S+/.test(item.concentracion || '')
+    ? item.concentracion
+    : concentracionesNormalizadas.join(' + ') || item.concentracion || null;
+  const fuenteUrl = INVIMA_CUM_URL;
+  const fechaVerificacion = new Date().toISOString();
+  const valoresCampo = {
+    producto: item.producto,
+    descripcioncomercial: item.descripcioncomercial,
+    principio_activo: activos.join(' + '),
+    concentracion,
+    forma_farmaceutica: item.formafarmaceutica,
+    via_administracion: item.viaadministracion,
+    unidad_medida: item.unidadmedida,
+    cantidad_presentacion: item.cantidadcum,
+    registro_sanitario: item.registrosanitario,
+    fecha_expedicion_registro: item.fechaexpedicion,
+    fecha_vencimiento_registro: item.fechavencimiento,
+    estado_registro: item.estadoregistro,
+    estado_cum: item.estadocum,
+    titular: item.titular,
+    fabricante: valoresRol('FABRICANTE'),
+    importador: valoresRol('IMPORTADOR'),
+    atc_codigo: item.atc,
+    atc_descripcion: item.descripcionatc,
+    ium: item.ium
+  };
+  const proveniencia = Object.fromEntries(Object.entries(valoresCampo).filter(([, valor]) => valor)
+    .map(([campo]) => [campo, { fuente: 'INVIMA_DATOS_ABIERTOS', fuente_url: fuenteUrl, fecha_verificacion: fechaVerificacion, estado: 'VERIFICADO' }]));
   return {
-    expediente: item.expediente ? Number(item.expediente) : null,
+    expediente: (item.expedientecum || item.expediente) ? Number(item.expedientecum || item.expediente) : null,
     consecutivocum: item.consecutivocum ? Number(item.consecutivocum) : null,
-    cum: item.expediente && item.consecutivocum
-      ? `${item.expediente}-${item.consecutivocum}`
+    cum: (item.expedientecum || item.expediente) && item.consecutivocum
+      ? `${item.expedientecum || item.expediente}-${item.consecutivocum}`
       : null,
     producto: item.producto || '',
     descripcioncomercial: item.descripcioncomercial || null,
-    principio_activo: item.principioactivo || null,
-    concentracion: item.concentracion || null,
+    principio_activo: activos.join(' + ') || null,
+    concentracion,
     forma_farmaceutica: item.formafarmaceutica || null,
     via_administracion: item.viaadministracion || null,
     unidad_medida: item.unidadmedida || null,
@@ -86,15 +128,18 @@ function mapearRegistroINVIMA(item, versionCatalogo) {
     registro_sanitario: item.registrosanitario || null,
     fecha_expedicion_registro: item.fechaexpedicion || null,
     fecha_vencimiento_registro: item.fechavencimiento || null,
-    estado_registro: item.estadoregistro || null,
-    estado_cum: item.estadocum || null,
+    estado_registro: item.estadoregistro ? item.estadoregistro.toUpperCase() : null,
+    estado_cum: item.estadocum ? item.estadocum.toUpperCase() : null,
     fecha_activo: item.fechaactivo || null,
     fecha_inactivo: item.fechainactivo || null,
     titular: item.titular || null,
-    laboratorio: item.laboratorio || null,
-    fabricante: item.fabricante || null,
-    pais_fabricante: item.paisfabricante || null,
-    condicion_venta: item.condicionventa || null,
+    laboratorio: valoresRol('FABRICANTE'),
+    fabricante: valoresRol('FABRICANTE'),
+    pais_fabricante: null,
+    importador: valoresRol('IMPORTADOR'),
+    ium: item.ium || null,
+    proveniencia_json: JSON.stringify(proveniencia),
+    condicion_venta: null,
     tipo_producto: item.tipoproducto || null,
     atc_codigo: item.atc || null,
     atc_descripcion: item.descripcionatc || null,
@@ -122,10 +167,9 @@ async function descargarCatalogoCompleto() {
   let allData = [];
   let offset = 0;
   let hasMore = true;
-  let chunkNum = 0;
 
   while (hasMore) {
-    const url = `${INVIMA_CUM_URL}?$limit=${CHUNK_SIZE}&$offset=${offset}`;
+    const url = `${INVIMA_CUM_URL}?$limit=${CHUNK_SIZE}&$offset=${offset}&$order=expedientecum,consecutivocum,principioactivo,tiporol,nombrerol,ium`;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
@@ -143,10 +187,9 @@ async function descargarCatalogoCompleto() {
         break;
       }
       
-      allData = allData.concat(chunk);
+      allData.push(...chunk);
       offset += CHUNK_SIZE;
       hasMore = chunk.length === CHUNK_SIZE;
-      chunkNum++;
       progresoActualizacion.descargados = offset;
       if (cancelarActualizacionFlag) {
         throw new CatalogoCumError('Actualización cancelada por el usuario');
@@ -163,10 +206,12 @@ async function descargarCatalogoCompleto() {
   return allData;
 }
 
-function importarATemporal(db, registros, versionCatalogo) {
-  db.exec(`DROP TABLE IF EXISTS catalogo_cum_temp`);
+function importarATemporal(db, registros) {
+  // El staging es exclusivo de esta conexión. Una tabla persistente dejaba sus
+  // páginas en freelist al borrarse, inflando cada SQLite local tras actualizar.
+  db.exec(`DROP TABLE IF EXISTS temp.catalogo_cum_temp`);
   db.exec(`
-    CREATE TABLE catalogo_cum_temp (
+    CREATE TEMP TABLE catalogo_cum_temp (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       expediente INTEGER,
       consecutivocum INTEGER,
@@ -197,6 +242,9 @@ function importarATemporal(db, registros, versionCatalogo) {
       gtin TEXT,
       gtin_empaque_logistico TEXT,
       gtin_empaque_venta TEXT,
+      ium TEXT,
+      importador TEXT,
+      proveniencia_json TEXT,
       fuente TEXT,
       version_catalogo TEXT,
       fecha_importacion TEXT,
@@ -213,7 +261,7 @@ function importarATemporal(db, registros, versionCatalogo) {
       estado_cum, fecha_activo, fecha_inactivo, titular, laboratorio,
       fabricante, pais_fabricante, condicion_venta, tipo_producto,
       atc_codigo, atc_descripcion, gtin, gtin_empaque_logistico, gtin_empaque_venta,
-      fuente, version_catalogo, fecha_importacion, hash_fila
+      fuente, version_catalogo, fecha_importacion, hash_fila, ium, importador, proveniencia_json
     ) VALUES (
       @expediente, @consecutivocum, @cum, @producto, @descripcioncomercial,
       @principio_activo, @concentracion, @forma_farmaceutica, @via_administracion,
@@ -222,7 +270,7 @@ function importarATemporal(db, registros, versionCatalogo) {
       @estado_cum, @fecha_activo, @fecha_inactivo, @titular, @laboratorio,
       @fabricante, @pais_fabricante, @condicion_venta, @tipo_producto,
       @atc_codigo, @atc_descripcion, @gtin, @gtin_empaque_logistico, @gtin_empaque_venta,
-      @fuente, @version_catalogo, @fecha_importacion, @hash_fila
+      @fuente, @version_catalogo, @fecha_importacion, @hash_fila, @ium, @importador, @proveniencia_json
     )
   `);
 
@@ -235,7 +283,7 @@ function importarATemporal(db, registros, versionCatalogo) {
   insertTx(registros);
 }
 
-function compararYMerge(db, versionCatalogo) {
+function compararYMerge(db) {
   const resultado = {
     nuevos: 0,
     actualizados: 0,
@@ -244,6 +292,13 @@ function compararYMerge(db, versionCatalogo) {
   };
 
   const mergeTx = db.transaction(() => {
+    const sinCambios = db.prepare(`
+      SELECT COUNT(*) as cnt FROM catalogo_cum c
+      JOIN catalogo_cum_temp t ON c.cum = t.cum
+      WHERE c.hash_fila = t.hash_fila AND c.fuente = 'INVIMA'
+    `).get();
+    resultado.sinCambios = sinCambios?.cnt || 0;
+
     // 1. Insertar nuevos (CUM no existe en tabla principal)
     const insertados = db.prepare(`
       INSERT INTO catalogo_cum (
@@ -254,6 +309,7 @@ function compararYMerge(db, versionCatalogo) {
         estado_cum, fecha_activo, fecha_inactivo, titular, laboratorio,
         fabricante, pais_fabricante, condicion_venta, tipo_producto,
         atc_codigo, atc_descripcion, gtin, gtin_empaque_logistico, gtin_empaque_venta,
+        ium, importador, proveniencia_json,
         fuente, version_catalogo, fecha_importacion, hash_fila, creado_en, actualizado_en
       )
       SELECT 
@@ -264,6 +320,7 @@ function compararYMerge(db, versionCatalogo) {
         t.estado_cum, t.fecha_activo, t.fecha_inactivo, t.titular, t.laboratorio,
         t.fabricante, t.pais_fabricante, t.condicion_venta, t.tipo_producto,
         t.atc_codigo, t.atc_descripcion, t.gtin, t.gtin_empaque_logistico, t.gtin_empaque_venta,
+        t.ium, t.importador, t.proveniencia_json,
         t.fuente, t.version_catalogo, t.fecha_importacion, t.hash_fila,
         datetime('now'), datetime('now')
       FROM catalogo_cum_temp t
@@ -301,19 +358,22 @@ function compararYMerge(db, versionCatalogo) {
         gtin = t.gtin,
         gtin_empaque_logistico = t.gtin_empaque_logistico,
         gtin_empaque_venta = t.gtin_empaque_venta,
+        ium = t.ium,
+        importador = t.importador,
+        proveniencia_json = t.proveniencia_json,
         version_catalogo = t.version_catalogo,
         fecha_importacion = t.fecha_importacion,
         hash_fila = t.hash_fila,
         actualizado_en = datetime('now')
       FROM catalogo_cum_temp t
       WHERE catalogo_cum.cum = t.cum
-        AND catalogo_cum.hash_fila != t.hash_fila
+        AND catalogo_cum.hash_fila IS NOT t.hash_fila
         AND catalogo_cum.fuente = 'INVIMA'
     `).run();
     resultado.actualizados = actualizados.changes;
 
     // 3. Marcar como HISTORICO los que están en INVIMA como INACTIVO pero tenemos como ACTIVO
-    const historicos = db.prepare(`
+    db.prepare(`
       UPDATE catalogo_cum SET
         estado_cum = 'HISTORICO',
         actualizado_en = datetime('now')
@@ -325,16 +385,8 @@ function compararYMerge(db, versionCatalogo) {
     `).run();
     // No contamos como error, es transición de estado normal
 
-    // 4. Contar sin cambios
-    const sinCambios = db.prepare(`
-      SELECT COUNT(*) as cnt FROM catalogo_cum c
-      JOIN catalogo_cum_temp t ON c.cum = t.cum
-      WHERE c.hash_fila = t.hash_fila AND c.fuente = 'INVIMA'
-    `).get();
-    resultado.sinCambios = sinCambios?.cnt || 0;
-
-    // 5. Limpiar tabla temporal
-    db.exec(`DROP TABLE catalogo_cum_temp`);
+    // 4. Limpiar tabla temporal
+    db.exec(`DROP TABLE temp.catalogo_cum_temp`);
   });
 
   mergeTx();
@@ -371,7 +423,7 @@ function registrarActualizacion(db, usuarioId, versionCatalogo, hashArchivo, sta
 }
 
 async function actualizarCatalogo(usuarioSesion, opciones = {}) {
-  const { forzar = false, usuarioId = usuarioSesion?.id } = opciones;
+  const { forzar = false, usuarioId = usuarioSesion?.id, descargar = descargarCatalogoCompleto } = opciones;
   const db = getDb();
   const versionCatalogo = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
   const errores = [];
@@ -395,7 +447,7 @@ async function actualizarCatalogo(usuarioSesion, opciones = {}) {
     // 1. Descargar
     progresoActualizacion.paso = 'descargando';
     console.log('[catalogoCum] Descargando desde datos.gov.co...');
-    datosDescargados = await descargarCatalogoCompleto();
+    datosDescargados = await descargar();
     progresoActualizacion.registros = datosDescargados.length;
     progresoActualizacion.total = datosDescargados.length;
     console.log(`[catalogoCum] Descargados ${datosDescargados.length} registros`);
@@ -405,9 +457,10 @@ async function actualizarCatalogo(usuarioSesion, opciones = {}) {
     }
 
     // Calcular hash del archivo para detectar si ya tenemos esta versión
-    const contenidoHash = crypto.createHash('sha256')
-      .update(JSON.stringify(datosDescargados))
-      .digest('hex');
+    const huellasFilas = datosDescargados.map((fila) => crypto.createHash('sha256')
+      .update(JSON.stringify(Object.keys(fila).sort().map((campo) => [campo, fila[campo]])))
+      .digest('hex')).sort();
+    const contenidoHash = crypto.createHash('sha256').update(huellasFilas.join('')).digest('hex');
     hashArchivo = contenidoHash.substring(0, 32);
 
     // Verificar si ya importamos esta versión
@@ -430,16 +483,26 @@ async function actualizarCatalogo(usuarioSesion, opciones = {}) {
     progresoActualizacion.paso = 'mapeando';
     console.log('[catalogoCum] Mapeando y validando registros...');
     const registrosValidos = [];
-    const seenCum = new Set();
+    const porCum = new Map();
     let duplicados = 0;
-    for (const item of datosDescargados) {
+    for (const [indice, item] of datosDescargados.entries()) {
+      const expediente = item.expedientecum || item.expediente;
+      const consecutivo = item.consecutivocum;
+      const claveCum = expediente && consecutivo ? `${String(expediente).trim()}-${String(consecutivo).trim()}` : null;
+      if (!claveCum) {
+        errores.push({ fila: indice + 1, errores: ['expedientecum/expediente o consecutivocum ausente'] });
+        continue;
+      }
+      if (!porCum.has(claveCum)) porCum.set(claveCum, { ...item, expedientecum: expediente, filas: [] });
+      porCum.get(claveCum).filas.push(item);
+      for (const campo of ['ium', 'producto', 'descripcioncomercial', 'registrosanitario', 'estadoregistro', 'fechavencimiento', 'fechaexpedicion', 'estadocum', 'fechaactivo', 'fechainactivo', 'concentracion', 'unidadmedida', 'formafarmaceutica', 'viaadministracion', 'atc', 'descripcionatc', 'cantidadcum', 'cantidad', 'unidadreferencia', 'unidad', 'titular']) {
+        if (!porCum.get(claveCum)[campo] && item[campo]) porCum.get(claveCum)[campo] = item[campo];
+      }
+    }
+    duplicados = datosDescargados.length - porCum.size - errores.length;
+    for (const item of porCum.values()) {
       try {
         const registro = mapearRegistroINVIMA(item, versionCatalogo);
-        if (registro.cum && seenCum.has(registro.cum)) {
-          duplicados++;
-          continue;
-        }
-        if (registro.cum) seenCum.add(registro.cum);
         registro.hash_fila = generarHashFila(registro);
         const { valido, errores: errs } = validarRegistro(registro);
         if (valido) {
@@ -451,33 +514,39 @@ async function actualizarCatalogo(usuarioSesion, opciones = {}) {
         errores.push({ item, error: e.message });
       }
     }
-    console.log(`[catalogoCum] ${registrosValidos.length} válidos, ${errores.length} con errores, ${duplicados} duplicados omitidos`);
+    console.log(`[catalogoCum] ${registrosValidos.length} válidos, ${errores.length} con errores, ${duplicados} filas repetidas consolidadas`);
+
+    if (!registrosValidos.length) {
+      throw new CatalogoCumError('La fuente no contiene registros válidos; se conserva el catálogo anterior.');
+    }
 
     // 3. Importar a temporal
     progresoActualizacion.paso = 'importando';
     console.log('[catalogoCum] Importando a tabla temporal...');
-    importarATemporal(db, registrosValidos, versionCatalogo);
+      importarATemporal(db, registrosValidos);
 
     // 4. Merge (UPSERT)
     progresoActualizacion.paso = 'fusionando';
     console.log('[catalogoCum] Fusionando con catálogo principal...');
-    const stats = compararYMerge(db, versionCatalogo);
-    stats.descargados = datosDescargados.length;
-
-    // 5. Registrar actualización
-    const resultado = registrarActualizacion(db, usuarioId, versionCatalogo, hashArchivo, stats, errores);
-
-    // 6. Auditoría
-    auditoriaRepository.registrar({
-      usuario_id: usuarioId,
-      rol: usuarioSesion.rol_nombre,
-      sede_id: usuarioSesion.sede_id,
-      accion: AUDIT_ACTIONS.CATALOGO_CUM_ACTUALIZAR,
-      modulo: 'CATALOGO_CUM',
-      registro_afectado: `catalogo:${versionCatalogo}`,
-      resultado,
-      valores_nuevos: { version: versionCatalogo, ...stats, errores: errores.length }
-    });
+    const resultadoActualizacion = db.transaction(() => {
+      const stats = compararYMerge(db);
+      stats.descargados = datosDescargados.length;
+      stats.cumConsolidados = registrosValidos.length;
+      stats.filasConsolidadas = duplicados;
+      const resultado = registrarActualizacion(db, usuarioId, versionCatalogo, hashArchivo, stats, errores);
+      auditoriaRepository.registrar({
+        usuario_id: usuarioId,
+        rol: usuarioSesion.rol_nombre,
+        sede_id: usuarioSesion.sede_id,
+        accion: AUDIT_ACTIONS.CATALOGO_CUM_ACTUALIZAR,
+        modulo: 'CATALOGO_CUM',
+        registro_afectado: `catalogo:${versionCatalogo}`,
+        resultado,
+        valores_nuevos: { version: versionCatalogo, ...stats, errores: errores.length }
+      });
+      return { stats, resultado };
+    })();
+    const { stats, resultado } = resultadoActualizacion;
 
     console.log('[catalogoCum] Actualización completada:', stats);
 
@@ -499,7 +568,7 @@ async function actualizarCatalogo(usuarioSesion, opciones = {}) {
       registrarActualizacion(db, usuarioId, versionCatalogo, hashArchivo, 
         { descargados: datosDescargados.length, nuevos: 0, actualizados: 0, sinCambios: 0 },
         [{ error: err.message }]);
-    } catch (_) {}
+    } catch {}
 
     progresoActualizacion.activo = false;
     progresoActualizacion.paso = 'error';
@@ -539,38 +608,36 @@ function obtenerEstadoCatalogo() {
 
 function buscarPorGTIN(gtin) {
   if (!gtin) return null;
+  const gtinNormalizado = barcodeService.normalizarGTIN(gtin);
+  const gtinOriginal = barcodeService.limpiarCodigo(gtin);
+  // Mantener dos parámetros en cada IN aunque ambos códigos coincidan.
+  const codigos = [gtinNormalizado, gtinOriginal];
   const db = getDb();
-  // Buscar en empaques primero (más específico)
-  let resultado = db.prepare(`
-    SELECT e.*, c.* FROM catalogo_empaques e
+  const resultados = db.prepare(`
+    SELECT c.*, e.nivel AS nivel_empaque, e.nivel AS nivel_encontrado,
+      'empaque' AS fuente_busqueda, 0 AS prioridad
+    FROM catalogo_empaques e
     JOIN catalogo_cum c ON c.id = e.catalogo_cum_id
-    WHERE e.gtin = ?
-  `).get(gtin);
-  
-  if (resultado) {
-    return { ...resultado, fuente_busqueda: 'empaque', nivel_encontrado: resultado.nivel };
-  }
-
-  // Buscar en GTIN principal del catálogo
-  resultado = db.prepare(`
-    SELECT *, 'catalogo' as fuente_busqueda, 0 as nivel_encontrado FROM catalogo_cum WHERE gtin = ?
-  `).get(gtin);
-  
-  if (resultado) return resultado;
-
-  // Buscar en GTIN empaque logístico
-  resultado = db.prepare(`
-    SELECT *, 'catalogo_logistico' as fuente_busqueda, 1 as nivel_encontrado FROM catalogo_cum WHERE gtin_empaque_logistico = ?
-  `).get(gtin);
-  
-  if (resultado) return resultado;
-
-  // Buscar en GTIN empaque venta
-  resultado = db.prepare(`
-    SELECT *, 'catalogo_venta' as fuente_busqueda, 2 as nivel_encontrado FROM catalogo_cum WHERE gtin_empaque_venta = ?
-  `).get(gtin);
-  
-  return resultado;
+    WHERE e.gtin IN (?, ?)
+    UNION ALL
+    SELECT c.*, NULL AS nivel_empaque, 3 AS nivel_encontrado,
+      'catalogo' AS fuente_busqueda, 1 AS prioridad
+    FROM catalogo_cum c WHERE c.gtin IN (?, ?)
+    UNION ALL
+    SELECT c.*, NULL AS nivel_empaque, 1 AS nivel_encontrado,
+      'catalogo_logistico' AS fuente_busqueda, 2 AS prioridad
+    FROM catalogo_cum c WHERE c.gtin_empaque_logistico IN (?, ?)
+    UNION ALL
+    SELECT c.*, NULL AS nivel_empaque, 2 AS nivel_encontrado,
+      'catalogo_venta' AS fuente_busqueda, 3 AS prioridad
+    FROM catalogo_cum c WHERE c.gtin_empaque_venta IN (?, ?)
+    ORDER BY prioridad, id
+  `).all(
+    ...codigos, ...codigos, ...codigos, ...codigos
+  );
+  const unicos = [...new Map(resultados.map((fila) => [fila.id, fila])).values()];
+  if (unicos.length > 1) return { ambigua: true, candidatos: unicos };
+  return unicos[0] || null;
 }
 
 function buscarPorCUM(cum) {
@@ -588,18 +655,41 @@ function buscarPorProducto(texto, limite = 20) {
       LIMIT ?
     `).all(limite);
   }
+  const consulta = texto.trim();
+  if (!consulta) return [];
+  const limiteSeguro = Math.max(1, Math.min(Number(limite) || 20, 100));
+  const ftsDisponible = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'catalogo_cum_fts'").get();
+  // El tokenizador trigram encuentra substrings (incluidas concentraciones y
+  // presentaciones). Términos cortos o SQLite sin FTS5 conservan el camino LIKE.
+  if (ftsDisponible && [...consulta].length >= 3) {
+    const frase = `"${consulta.replace(/"/g, '""')}"`;
+    try {
+      return db.prepare(`
+        SELECT c.* FROM catalogo_cum_fts f
+        JOIN catalogo_cum c ON c.id = f.rowid
+        WHERE catalogo_cum_fts MATCH ?
+        ORDER BY CASE WHEN c.producto LIKE ? THEN 0 ELSE 1 END, c.producto
+        LIMIT ?
+      `).all(frase, `${consulta.replace(/[%_]/g, '\\$&')}%`, limiteSeguro);
+    } catch (error) {
+      if (!/no such table|no such module|fts5|malformed MATCH/i.test(error.message)) throw error;
+    }
+  }
   // Escapar wildcards % y _ para que se traten literalmente
-  const textoEscapado = texto.replace(/[%_]/g, '\\$&');
+  const textoEscapado = consulta.replace(/[%_]/g, '\\$&');
   const like = `%${textoEscapado}%`;
   const startsWith = `${textoEscapado}%`;
   return db.prepare(`
     SELECT * FROM catalogo_cum
-    WHERE producto LIKE ? ESCAPE '\\' OR principio_activo LIKE ? ESCAPE '\\' OR registro_sanitario LIKE ? ESCAPE '\\'
+    WHERE producto LIKE ? ESCAPE '\\' OR descripcioncomercial LIKE ? ESCAPE '\\'
+      OR principio_activo LIKE ? ESCAPE '\\' OR fabricante LIKE ? ESCAPE '\\'
+      OR laboratorio LIKE ? ESCAPE '\\' OR concentracion LIKE ? ESCAPE '\\'
+      OR forma_farmaceutica LIKE ? ESCAPE '\\' OR registro_sanitario LIKE ? ESCAPE '\\'
     ORDER BY
       CASE WHEN producto LIKE ? ESCAPE '\\' THEN 0 ELSE 1 END,
       producto
     LIMIT ?
-  `).all(like, like, like, startsWith, limite);
+  `).all(like, like, like, like, like, like, like, like, startsWith, limiteSeguro);
 }
 
 function crearRegistroManual(usuarioSesion, data) {
@@ -790,5 +880,8 @@ module.exports = {
   obtenerDocumento,
   obtenerProgreso,
   cancelarActualizacion,
-  CatalogoCumError
+  CatalogoCumError,
+  mapearRegistroINVIMA,
+  validarRegistro,
+  descargarCatalogoCompleto
 };

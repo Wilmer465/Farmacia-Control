@@ -17,7 +17,10 @@ const cloudSyncController = require('./controllers/cloudSyncController');
 const usuarioController = require('./controllers/usuarioController');
 const catalogoCumController = require('./controllers/catalogoCumController');
 const recepcionController = require('./controllers/recepcionController');
-const firmaPadController = require('./controllers/firmaPadController');
+const bridgePrerequisitesController = require('./controllers/bridgePrerequisitesController');
+const IPC_CHANNELS = require('../electron/bridgePrerequisitesChannel');
+// Facturación desactivada: sin registros/handlers.
+// const facturacionController = require('./controllers/facturacionController');
 const { sincronizarEnSegundoPlano } = require('./services/cloudSyncService');
 const sedeService = require('./services/sedeService');
 const sessionService = require('./services/sessionService');
@@ -68,14 +71,25 @@ ipcMain.handle('auth:logout', conSyncDespuesDeCambio('auth:logout', conValidacio
     return medicamentoController.listar();
   }));
 
-  ipcMain.handle('sedes:listar', conValidacionSesion(() => {
+  ipcMain.handle('sedes:listar', () => {
     try {
       return { ok: true, data: sedeService.listar() };
     } catch (err) {
       console.error('[ipcHandlers] sedes:listar error:', err);
       return { ok: false, error: 'Error interno. Intente nuevamente.' };
     }
-  }));
+  });
+  /* FIN_SEDES_LISTAR */
+
+
+  ipcMain.handle('sedes:eliminar', conSyncDespuesDeCambio('sedes:eliminar', conValidacionSesion((usuarioSesion, id) => {
+    try {
+      return { ok: true, data: sedeService.eliminar(usuarioSesion, id) };
+    } catch (err) {
+      console.error('[ipcHandlers] sedes:eliminar error:', err);
+      return { ok: false, error: err.message || 'Error interno al eliminar la sede.' };
+    }
+  })));
 
   ipcMain.handle('medicamentos:crear', conSyncDespuesDeCambio('medicamentos:crear', conValidacionSesion((usuarioSesion, data) => {
     return medicamentoController.crear(usuarioSesion, data);
@@ -152,6 +166,8 @@ ipcMain.handle('auth:logout', conSyncDespuesDeCambio('auth:logout', conValidacio
   ipcMain.handle('receptores:actualizar', conSyncDespuesDeCambio('receptores:actualizar', conValidacionSesion((usuarioSesion, id, data) => {
     return receptorController.actualizar(usuarioSesion, id, data);
   })));
+
+  // Facturación desactivada: no registra canales ni almacena datos.
 
   ipcMain.handle('solicitudesEliminacion:listar', conValidacionSesion((usuarioSesion, filtros) => {
     return solicitudEliminacionController.listar(usuarioSesion, filtros);
@@ -367,6 +383,12 @@ ipcMain.handle('backups:restaurar', conSyncDespuesDeCambio('backups:restaurar', 
   ipcMain.handle('firmaPad:capturar', conValidacionSesion((usuarioSesion, datos) => {
     return firmaPadController.capturar(usuarioSesion, datos);
   }));
+
+  // Consulta estática sin argumentos: todas las rutas se resuelven en main.
+  ipcMain.handle(
+    IPC_CHANNELS.VERIFICAR_PRERREQUISITOS_PUENTES,
+    bridgePrerequisitesController.crearHandler()
+  );
 }
 
 module.exports = { registerIpcHandlers };

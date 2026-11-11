@@ -7,6 +7,7 @@ const ordenService = require('../../backend/services/ordenService');
 const despachoService = require('../../backend/services/despachoService');
 const cloudSyncService = require('../../backend/services/cloudSyncService');
 const { getDb } = require('../../backend/database/connection');
+const { marcarEvidenciasInternas } = require('../helpers/dispatchEvidenceFixture');
 
 // Firma mock realista (ver backend/validators/firmaValidator.js).
 const FIRMA_TEST = 'data:image/png;base64,' + 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='.repeat(4);
@@ -60,6 +61,8 @@ describe('FASE 8 y 9 — Operación Offline y Resiliencia en Fallas de Sincroniz
       huella_registrada: 1,
       items: [{ medicamento_id: med.id, cantidad_unidades_solicitada: 40 }]
     });
+    // Precondición interna de esta prueba offline; no representa resultado físico.
+    marcarEvidenciasInternas(db, orden.id);
 
     // 4. Despachar offline
     const despacho = despachoService.crear(sesionSuperadmin, {

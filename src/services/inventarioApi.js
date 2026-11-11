@@ -5,7 +5,9 @@ export const inventarioApi = {
     actualizar: (usuario, id, data) => window.api.medicamentos.actualizar(usuario, id, data)
   },
   sedes: {
-    listar: (usuario) => window.api.sedes.listar(usuario)
+    listar: (usuario) => window.api.sedes.listar(usuario),
+    crear: (usuario, data) => window.api.sedes.crear(usuario, data),
+    eliminar: (usuario, id) => window.api.sedes.eliminar(usuario, id)
   },
   lotes: {
     listar: (usuario, filtros) => window.api.lotes.listar(usuario, filtros),
@@ -34,6 +36,7 @@ export const inventarioApi = {
     guardar: (usuario, data) => window.api.receptores.guardar(usuario, data),
     actualizar: (usuario, id, data) => window.api.receptores.actualizar(usuario, id, data)
   },
+  // facturacion: desactivada (sin registros/canales)
   solicitudesEliminacion: {
     listar: (usuario, filtros) => window.api.solicitudesEliminacion.listar(usuario, filtros),
     crear: (usuario, data) => window.api.solicitudesEliminacion.crear(usuario, data),
@@ -94,5 +97,8 @@ export const inventarioApi = {
   firmaPad: {
     detectar: (usuario) => window.api.firmaPad.detectar(usuario),
     capturar: (usuario, datos) => window.api.firmaPad.capturar(usuario, datos)
+  },
+  puentes: {
+    verificarPrerrequisitos: () => window.api.puentes.verificarPrerrequisitos()
   }
 };

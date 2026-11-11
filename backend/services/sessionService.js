@@ -52,7 +52,8 @@ function resolverUsuarioDesdeSesion(usuarioSesion) {
     throw new SesionError('La cuenta no está activa.');
   }
 
-  const { password_hash, ...seguro } = usuario;
+  const seguro = { ...usuario };
+  delete seguro.password_hash;
   return { ...seguro, session_token: token };
 }
 

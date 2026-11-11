@@ -58,6 +58,9 @@ async function procesarEscaneo(usuarioSesion, codigoBarras) {
   if (!parseado.ok) {
     return { ok: false, error: parseado.error, codigo: codigoBarras };
   }
+  if (parseado.data.valido === false) {
+    return { ok: false, error: parseado.data.advertencia || 'El código de barras no es válido.', codigo: codigoBarras };
+  }
   
   const { gtin, lote: loteCodigo, vencimiento: vencimientoCodigo, serial } = parseado.data;
   
@@ -68,9 +71,47 @@ async function procesarEscaneo(usuarioSesion, codigoBarras) {
   
   if (gtin) {
     catalogo = catalogoCumService.buscarPorGTIN(gtin);
+    if (catalogo?.ambigua) {
+      return {
+        ok: true,
+        codigoOriginal: codigoBarras,
+        gtin,
+        parseado: parseado.data,
+        catalogo: null,
+        candidatos: catalogo.candidatos.map(({ id, cum, producto, principio_activo, concentracion, forma_farmaceutica, registro_sanitario }) => ({ id, cum, producto, principio_activo, concentracion, forma_farmaceutica, registro_sanitario })),
+        codigo_ambiguo: true,
+        requiere_seleccion_manual: true,
+        requiere_registro_manual: false
+      };
+    }
     if (catalogo) {
       fuenteBusqueda = catalogo.fuente_busqueda || 'catalogo';
       empaque = obtenerInfoEmpaque(catalogo.id, catalogo.nivel_encontrado, gtin);
+    }
+  }
+
+  if (gtin && !catalogo) {
+    const db = getDb();
+    const pendientePrevio = db.prepare('SELECT id FROM catalogo_codigos_pendientes WHERE gtin = ?').get(gtin);
+    db.prepare(`
+      INSERT INTO catalogo_codigos_pendientes (gtin, codigo_original, usuario_id)
+      VALUES (?, ?, ?)
+      ON CONFLICT(gtin) DO UPDATE SET
+        ultimo_escaneo = datetime('now'),
+        cantidad_escaneos = catalogo_codigos_pendientes.cantidad_escaneos + 1,
+        codigo_original = excluded.codigo_original
+    `).run(gtin, String(codigoBarras).slice(0, 256), usuarioSesion?.id || null);
+    if (!pendientePrevio) {
+      auditoriaRepository.registrar({
+        usuario_id: usuarioSesion?.id,
+        rol: usuarioSesion?.rol_nombre,
+        sede_id: usuarioSesion?.sede_id,
+        accion: AUDIT_ACTIONS.CATALOGO_CODIGO_PENDIENTE,
+        modulo: 'CATALOGO_CUM',
+        registro_afectado: `gtin:${gtin}`,
+        resultado: 'PENDIENTE',
+        valores_nuevos: { gtin, estado: 'PENDIENTE_CATALOGO' }
+      });
     }
   }
   
@@ -78,6 +119,7 @@ async function procesarEscaneo(usuarioSesion, codigoBarras) {
   const respuesta = {
     ok: true,
     codigoOriginal: codigoBarras,
+    gtin,
     parseado: parseado.data,
     catalogo: catalogo ? {
       id: catalogo.id,
@@ -106,7 +148,8 @@ async function procesarEscaneo(usuarioSesion, codigoBarras) {
     vencimiento_detectado: vencimientoCodigo || null,
     serial_detectado: serial || null,
     fuente_busqueda: fuenteBusqueda,
-    requiere_registro_manual: !catalogo
+    requiere_registro_manual: !catalogo,
+    estado_codigo: catalogo ? 'ENCONTRADO_LOCAL' : 'PENDIENTE_CATALOGO'
   };
   
   // 4. Si tiene empaque, calcular equivalencias
@@ -130,8 +173,7 @@ async function registrarRecepcion(usuarioSesion, datos) {
     lote,
     fecha_vencimiento,
     cantidad,              // Cantidad en el nivel escaneado (ej: 3 cajas logísticas)
-    sede_id,
-    observaciones
+    sede_id
   } = datos;
 
   permisoService.verificarEscrituraInventario(usuarioSesion);

@@ -115,6 +115,21 @@ export default function Recepcion({ usuario, sedeActiva, onNavigate }) {
     }
   };
 
+  const seleccionarCandidatoCatalogo = async (cum) => {
+    const respuesta = await inventarioApi.catalogoCum.buscarPorCUM(usuario, cum);
+    if (!respuesta.ok || !respuesta.data) {
+      setError(respuesta.error || 'No se pudo verificar el medicamento seleccionado.');
+      return;
+    }
+    setResultadoEscaneo((actual) => ({
+      ...actual,
+      catalogo: respuesta.data,
+      codigo_ambiguo: false,
+      requiere_seleccion_manual: false,
+      requiere_registro_manual: false
+    }));
+  };
+
   const handleRegistrar = async (e) => {
     e.preventDefault();
     if (!resultadoEscaneo) { setError('Primero escanee un código'); return; }
@@ -262,14 +277,26 @@ export default function Recepcion({ usuario, sedeActiva, onNavigate }) {
               
               {resultadoEscaneo.requiere_registro_manual && (
                 <div className="aviso-advertencia">
-                   Producto no encontrado en catálogo INVIMA. 
+                  Código desconocido guardado en pendientes locales. Sin conexión, el catálogo queda disponible para búsqueda posterior.
                   <a href="#catalogo" onClick={e => { e.preventDefault(); alert('Use el módulo Catálogo CUM → Registrar Manual'); }}>Registrar manualmente en Catálogo CUM</a>
+                </div>
+              )}
+              {resultadoEscaneo.codigo_ambiguo && (
+                <div className="aviso-advertencia" role="status">
+                  El código coincide con varios productos. Seleccione el registro correcto para continuar:
+                  <ul>{resultadoEscaneo.candidatos.map((candidato) => (
+                    <li key={candidato.cum}>
+                      <button type="button" onClick={() => seleccionarCandidatoCatalogo(candidato.cum)}>
+                        {candidato.producto} — {candidato.cum} — {candidato.registro_sanitario || 'Sin registro'}
+                      </button>
+                    </li>
+                  ))}</ul>
                 </div>
               )}
             </div>
           )}
 
-          {resultadoEscaneo && !resultadoEscaneo.requiere_registro_manual && (
+          {resultadoEscaneo && !resultadoEscaneo.requiere_registro_manual && !resultadoEscaneo.codigo_ambiguo && (
             <div className="panel-card formulario-recepcion">
               <h3> Registrar Recepción</h3>
               <form onSubmit={handleRegistrar}>

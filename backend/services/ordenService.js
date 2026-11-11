@@ -1,6 +1,5 @@
 const ordenRepository = require('../repositories/ordenRepository');
 const medicamentoRepository = require('../repositories/medicamentoRepository');
-const loteRepository = require('../repositories/loteRepository');
 const auditoriaRepository = require('../repositories/auditoriaRepository');
 const permisoService = require('./permisoService');
 const receptorService = require('./receptorService');
@@ -16,7 +15,7 @@ function medicamentosDesdeDb(valor) {
   try {
     const parsed = JSON.parse(valor);
     return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
-  } catch (_) {
+  } catch {
     return [];
   }
 }
@@ -52,9 +51,8 @@ function obtener(usuarioSesion, id) {
 function crear(usuarioSesion, {
   items, sede_id, tipo_destino = 'LOCAL', destino_detalle = null,
   receptor_nombre, receptor_documento, receptor_telefono, receptor_correo,
-  firma_data, huella_registrada,
+  firma_data,
   documento_adjunto_nombre, documento_adjunto_data, documento_adjunto_tipo,
-  numero_factura, factura_electronica
 } = {}) {
   permisoService.verificarGestionOrdenes(usuarioSesion);
 
@@ -77,10 +75,9 @@ function crear(usuarioSesion, {
   // La firma debe ser un trazo real del pad, no cualquier string truthy.
   const { esFirmaValida } = require('../validators/firmaValidator');
   const firma = esFirmaValida(firma_data) ? firma_data : null;
-  const huella = Boolean(huella_registrada);
-  const numeroFactura = numero_factura || null;
-  const facturaElectronica = factura_electronica || null;
-
+  // El estado legado enviado por el renderer solo era una declaración/captura;
+  // no acredita identidad contra una plantilla enrolada. Mantenerlo en cero.
+  const huella = false;
   // Documentación de quien recibe: la identidad (nombre y documento) siempre es
   // obligatoria. La firma y la huella son obligatorias para entregas locales y
   // quedan "pendientes" en los envíos a municipio/vereda.
@@ -135,7 +132,7 @@ function crear(usuarioSesion, {
     const receptorExistente = (() => {
       try {
         return receptorService.buscarPorDocumento(receptorDocumento);
-      } catch (_) {
+      } catch {
         return null;
       }
     })();
@@ -243,7 +240,7 @@ function cancelar(usuarioSesion, id, { motivo } = {}) {
 // Solo aplica a órdenes abiertas (PENDIENTE o PARCIAL); COMPLETADA/CANCELADA no se modifican.
 function actualizarDocumentacion(usuarioSesion, id, {
   receptor_nombre, receptor_documento, receptor_telefono, receptor_correo,
-  firma_data, huella_registrada,
+  firma_data,
   documento_adjunto_nombre, documento_adjunto_data, documento_adjunto_tipo
 } = {}) {
   // Modificar la documentación de una orden requiere autorización de Superadmin o Administrador de sede.
@@ -269,7 +266,9 @@ function actualizarDocumentacion(usuarioSesion, id, {
   const correo = (receptor_correo || '').trim() || null;
   const { esFirmaValida: esFirmaValidaDoc } = require('../validators/firmaValidator');
   const firma = esFirmaValidaDoc(firma_data) ? firma_data : null;
-  const huella = Boolean(huella_registrada);
+  // Ignorar el booleano del renderer; la verificación confiable tiene su propio
+  // campo interno y solo puede establecerla un verificador biométrico autorizado.
+  const huella = false;
 
   const faltantes = [];
   const pendientes = [];

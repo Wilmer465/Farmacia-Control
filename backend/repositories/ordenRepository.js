@@ -239,6 +239,7 @@ function actualizarDocumentacion(id, {
     UPDATE ordenes SET
       receptor_nombre = ?, receptor_documento = ?, receptor_telefono = ?, receptor_correo = ?,
       firma_data = ?, huella_registrada = ?,
+      firma_wacom_verificada = 0, huella_identidad_verificada = 0,
       documento_adjunto_nombre = ?, documento_adjunto_data = ?, documento_adjunto_tipo = ?,
       documentacion_completa = ?, elementos_faltantes = ?,
       fecha_actualizacion = datetime('now')

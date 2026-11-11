@@ -8,7 +8,7 @@ module.exports = {
         ALTER TABLE ordenes ADD COLUMN tipo_destino TEXT NOT NULL DEFAULT 'LOCAL';
         ALTER TABLE ordenes ADD COLUMN destino_detalle TEXT;
       `);
-    } catch (e) {
+    } catch {
       // Columnas ya creadas
     }
 
@@ -17,7 +17,7 @@ module.exports = {
         ALTER TABLE entregas ADD COLUMN tipo_destino TEXT NOT NULL DEFAULT 'LOCAL';
         ALTER TABLE entregas ADD COLUMN destino_detalle TEXT;
       `);
-    } catch (e) {
+    } catch {
       // Columnas ya creadas
     }
   }

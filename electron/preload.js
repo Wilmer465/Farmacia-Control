@@ -13,7 +13,9 @@ contextBridge.exposeInMainWorld('api', {
     actualizar: (usuarioSesion, id, data) => ipcRenderer.invoke('medicamentos:actualizar', usuarioSesion, id, data)
   },
   sedes: {
-    listar: (usuarioSesion) => ipcRenderer.invoke('sedes:listar', usuarioSesion)
+    listar: (usuarioSesion) => ipcRenderer.invoke('sedes:listar', usuarioSesion),
+    crear: (usuarioSesion, data) => ipcRenderer.invoke('sedes:crear', usuarioSesion, data),
+    eliminar: (usuarioSesion, id) => ipcRenderer.invoke('sedes:eliminar', usuarioSesion, id)
   },
   lotes: {
     listar: (usuarioSesion, filtros) => ipcRenderer.invoke('lotes:listar', usuarioSesion, filtros),
@@ -42,6 +44,7 @@ contextBridge.exposeInMainWorld('api', {
     guardar: (usuarioSesion, data) => ipcRenderer.invoke('receptores:guardar', usuarioSesion, data),
     actualizar: (usuarioSesion, id, data) => ipcRenderer.invoke('receptores:actualizar', usuarioSesion, id, data)
   },
+  // facturacion: desactivada (sin registros/canales)
   solicitudesEliminacion: {
     listar: (usuarioSesion, filtros) => ipcRenderer.invoke('solicitudesEliminacion:listar', usuarioSesion, filtros),
     crear: (usuarioSesion, data) => ipcRenderer.invoke('solicitudesEliminacion:crear', usuarioSesion, data),
@@ -102,5 +105,8 @@ contextBridge.exposeInMainWorld('api', {
   firmaPad: {
     detectar: (usuarioSesion) => ipcRenderer.invoke('firmaPad:detectar', usuarioSesion),
     capturar: (usuarioSesion, datos) => ipcRenderer.invoke('firmaPad:capturar', usuarioSesion, datos)
+  },
+  puentes: {
+    verificarPrerrequisitos: () => ipcRenderer.invoke('puentes:verificarPrerrequisitos')
   }
 });

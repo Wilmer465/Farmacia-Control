@@ -27,3 +27,4 @@ native/stu-bridge/bin/
 native/zk-bridge/bin/
 
 .vscode/
+data/farmacia.db

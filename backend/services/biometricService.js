@@ -54,7 +54,7 @@ const MENSAJES = {
   TIMEOUT_DEDO: 'Sin dedo en el lector dentro del plazo. Intente de nuevo.',
   LECTOR_OCUPADO: 'Ya hay una captura de huella en curso. Espere a que termine.',
   HELPER_NO_ENCONTRADO:
-    'Puente del lector no compilado. Ejecute: npm run compilar:zk-bridge',
+    'Puente del lector no compilado. Ejecute: pnpm run compilar:zk-bridge',
   TIMEOUT_LOCAL: 'El puente del lector no respondió a tiempo.',
   RESPUESTA_INVALIDA: 'Respuesta inválida del puente del lector.',
   ERROR_SDK: 'Error del lector biométrico.'
@@ -107,7 +107,9 @@ class BiometricService {
         tamanoPlantilla: respuesta.tamanoPlantilla ?? null,
         duracionSeg: respuesta.duracionSeg ?? null,
         timestamp: new Date().toISOString(),
-        mensaje: 'Huella capturada en lector ZK9500.'
+        verificada: false,
+        estado: 'CAPTURA_SIN_VERIFICAR',
+        mensaje: 'Captura recibida; la identidad no fue verificada contra un enrolamiento.'
       };
     } catch (err) {
       const codigo = (err && err.codigo) || 'ERROR_SDK';

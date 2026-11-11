@@ -6,6 +6,12 @@ const { AUDIT_ACTIONS, ROLES, ESTADOS_REGISTRO } = require('../../shared/constan
 
 class UsuarioError extends Error {}
 
+function sinHashContrasena(usuario) {
+  const seguro = { ...usuario };
+  delete seguro.password_hash;
+  return seguro;
+}
+
 function verificarAccesoWilmer(usuarioSesion) {
   if (!usuarioSesion) {
     throw new UsuarioError('Sesión requerida.');
@@ -66,8 +72,7 @@ function crear(usuarioSesion, datos) {
     valores_nuevos: { id: nuevo.id, username: nuevo.username, rol: nuevo.rol_nombre }
   });
 
-  const { password_hash: _, ...seguro } = nuevo;
-  return seguro;
+  return sinHashContrasena(nuevo);
 }
 
 function actualizar(usuarioSesion, id, datos) {
@@ -121,8 +126,7 @@ function actualizar(usuarioSesion, id, datos) {
     valores_nuevos: { nombre: actualizado.nombre, rol_id: actualizado.rol_id, estado: actualizado.estado }
   });
 
-  const { password_hash: _, ...seguro } = actualizado;
-  return seguro;
+  return sinHashContrasena(actualizado);
 }
 
 const ESTADOS_CAMBIABLES = [ESTADOS_REGISTRO.ACTIVO, ESTADOS_REGISTRO.INACTIVO];
@@ -151,8 +155,7 @@ function cambiarEstado(usuarioSesion, id, nuevoEstado) {
     resultado: 'EXITO'
   });
 
-  const { password_hash: _, ...seguro } = actualizado;
-  return seguro;
+  return sinHashContrasena(actualizado);
 }
 
 // ELIMINACIÓN DEFINITIVA DE UN TRABAJADOR.
@@ -229,8 +232,7 @@ function eliminarDefinitivo(usuarioSesion, id) {
 
   const eliminado = tx();
 
-  const { password_hash: _, ...seguro } = eliminado;
-  return seguro;
+  return sinHashContrasena(eliminado);
 }
 
 module.exports = {

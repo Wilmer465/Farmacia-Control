@@ -3,7 +3,9 @@ const recepcionService = require('../services/recepcionService');
 async function procesarEscaneo(usuarioSesion, codigoBarras) {
   try {
     const resultado = await recepcionService.procesarEscaneo(usuarioSesion, codigoBarras);
-    return resultado;
+    // El renderer consume el contrato `{ ok, data }` usado por los controladores.
+    // El servicio ya incluye `ok`; solo se envuelven los resultados exitosos.
+    return resultado.ok ? { ok: true, data: resultado } : resultado;
   } catch (err) {
     return { ok: false, error: err.message };
   }

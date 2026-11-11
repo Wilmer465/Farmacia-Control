@@ -6,7 +6,7 @@ const rootDir = path.join(__dirname, '..');
 // Cargar variables de entorno desde .env (no versionado) para Supabase
 require('dotenv').config({ path: path.join(rootDir, '.env') });
 
-const env = { ...process.env };
+const env = { ...process.env, NODE_ENV: process.env.NODE_ENV || 'development' };
 delete env.ELECTRON_RUN_AS_NODE;
 
 // Rebuild native modules (better-sqlite3) for Electron's ABI (v128)
@@ -21,7 +21,7 @@ const sqliteDir = path.join(rootDir, 'node_modules', 'better-sqlite3');
   });
   if (!fs.existsSync(path.join(sqliteDir, 'build', 'Release', 'better_sqlite3.node'))) {
     console.error('[start-electron] prebuild-install failed, falling back to electron-builder...');
-    spawnSync('npm', ['run', 'rebuild:electron'], {
+    spawnSync('pnpm', ['run', 'rebuild:electron'], {
       env,
       stdio: 'inherit',
       cwd: rootDir,
