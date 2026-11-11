@@ -17,6 +17,7 @@ const cloudSyncController = require('./controllers/cloudSyncController');
 const usuarioController = require('./controllers/usuarioController');
 const catalogoCumController = require('./controllers/catalogoCumController');
 const recepcionController = require('./controllers/recepcionController');
+const firmaPadController = require('./controllers/firmaPadController');
 const bridgePrerequisitesController = require('./controllers/bridgePrerequisitesController');
 const IPC_CHANNELS = require('../electron/bridgePrerequisitesChannel');
 // Facturación desactivada: sin registros/handlers.
