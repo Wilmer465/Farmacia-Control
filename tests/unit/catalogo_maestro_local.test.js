@@ -105,6 +105,35 @@ describe('Catálogo maestro local INVIMA', () => {
     assert.equal(Object.hasOwn(JSON.parse(producto.proveniencia_json), 'ium'), false);
   });
 
+  test('la actualización INVIMA conserva GTIN y empaques enriquecidos manualmente', async () => {
+    await catalogoCumService.actualizarCatalogo(sesion, { descargar: async () => [filasFixture[0]] });
+    const catalogo = db.prepare('SELECT id FROM catalogo_cum WHERE cum = ?').get('90001-1');
+    const empaque = catalogoCumService.crearEmpaque(sesion, {
+      catalogo_cum_id: catalogo.id,
+      nivel: 2,
+      gtin: '7709999999999',
+      descripcion: 'Caja enriquecida manualmente',
+      contenido_cantidad: 10,
+      contenido_unidad: 'TABLETA',
+      factor_conversion: 10,
+      es_principal: true
+    });
+
+    const resultado = await catalogoCumService.actualizarCatalogo(sesion, {
+      forzar: true,
+      descargar: async () => [{ ...filasFixture[0], producto: 'MARCA ACTUALIZADA' }]
+    });
+
+    assert.equal(resultado.actualizados, 1);
+    const producto = db.prepare('SELECT gtin_empaque_venta FROM catalogo_cum WHERE id = ?').get(catalogo.id);
+    const empaquePersistido = db.prepare('SELECT gtin, descripcion FROM catalogo_empaques WHERE id = ?').get(empaque.id);
+    assert.equal(producto.gtin_empaque_venta, '7709999999999');
+    assert.deepEqual(empaquePersistido, {
+      gtin: '7709999999999',
+      descripcion: 'Caja enriquecida manualmente'
+    });
+  });
+
   test('el catálogo de referencia queda fuera del allowlist de sincronización en nube', () => {
     assert.equal(cloudSyncService.SYNC_TABLES.includes('catalogo_cum'), false);
     assert.equal(cloudSyncService.SYNC_TABLES.includes('catalogo_empaques'), false);
