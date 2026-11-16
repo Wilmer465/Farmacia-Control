@@ -1,9 +1,14 @@
 const ordenService = require('../services/ordenService');
 const permisoService = require('../services/permisoService');
+const { DocumentoInvalidoError } = require('../../shared/documentPolicy');
 
 function manejarError(err) {
   if (err instanceof ordenService.ValidationError) return { ok: false, error: err.message };
   if (err instanceof permisoService.PermisoError) return { ok: false, error: err.message };
+  // Un adjunto rechazado por la política de documentos es un error funcional
+  // del operador, no un fallo interno. Se devuelve el mensaje saneado de la
+  // política (tipo, tamaño, contenido o formato) para que sepa qué corregir.
+  if (err instanceof DocumentoInvalidoError) return { ok: false, error: err.message };
   console.error('[ordenController] error inesperado:', err);
   return { ok: false, error: 'Error interno. Intente nuevamente.' };
 }

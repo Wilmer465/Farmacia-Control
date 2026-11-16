@@ -92,7 +92,7 @@ export default function DocumentacionReceptor({ exenta, onChange, valoresInicial
     setConsultandoDiagnosticoPuentes(true);
     setDiagnosticoPuentes(null);
     setErrorDiagnosticoPuentes(null);
-    inventarioApi.puentes.verificarPrerrequisitos()
+    inventarioApi.puentes.verificarPrerrequisitos(usuarioSesion)
       .then((res) => {
         if (!vigente) return;
         if (res?.ok && res.data) {
@@ -113,14 +113,14 @@ export default function DocumentacionReceptor({ exenta, onChange, valoresInicial
         if (vigente) setConsultandoDiagnosticoPuentes(false);
       });
     return () => { vigente = false; };
-  }, [exenta]);
+  }, [exenta, usuarioSesion]);
 
   async function handleRevisarPrerrequisitosPuentes() {
     setConsultandoDiagnosticoPuentes(true);
     setErrorDiagnosticoPuentes(null);
     setDiagnosticoPuentes(null);
     try {
-      const res = await inventarioApi.puentes.verificarPrerrequisitos();
+      const res = await inventarioApi.puentes.verificarPrerrequisitos(usuarioSesion);
       if (res?.ok && res.data) setDiagnosticoPuentes(res.data);
       else {
         setDiagnosticoPuentes(null);

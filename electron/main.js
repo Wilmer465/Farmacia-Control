@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, session } = require('electron');
+const { app, BrowserWindow, dialog, session, shell } = require('electron');
 const path = require('path');
 const { registerIpcHandlers } = require('../backend/ipcHandlers');
 const { iniciarServidorHttp } = require('../backend/server');
@@ -7,8 +7,12 @@ const { mantenimientoAlCerrar, resolveDbPath, closeDb, getDb } = require('../bac
 const { prepareDatabase, validateDatabase } = require('../backend/database/startupRecovery');
 const { iniciarPlanificadorAutoBackup } = require('../backend/services/backupService');
 const { iniciarPlanificadorCloudSync, detenerPlanificadorCloudSync } = require('../backend/services/cloudSyncService');
+const { crearContentSecurityPolicy } = require('../shared/contentSecurityPolicy');
+const { crearPoliticaNavegacion } = require('./navigationPolicy');
 
 const isDev = process.env.NODE_ENV === 'development';
+const rendererIndexPath = path.join(__dirname, '..', 'dist', 'renderer', 'index.html');
+const politicaNavegacion = crearPoliticaNavegacion({ isDev, rendererIndexPath });
 const tieneInstancia = app.requestSingleInstanceLock();
 let estadoArranque = 'PREPARING';
 
@@ -19,6 +23,58 @@ app.commandLine.appendSwitch('enable-gpu-rasterization');
 app.commandLine.appendSwitch('enable-zero-copy');
 app.commandLine.appendSwitch('ignore-gpu-blocklist');
 app.commandLine.appendSwitch('disable-http-cache', 'false');
+
+function aplicarPoliticasDeSesion() {
+  const sesion = session.defaultSession;
+
+  // La app no usa cámara, micrófono, geolocalización ni notificaciones. Denegar
+  // todo por defecto evita que una XSS futura obtenga permisos del sistema.
+  sesion.setPermissionRequestHandler((_webContents, _permiso, callback) => callback(false));
+  sesion.setPermissionCheckHandler(() => false);
+
+  const csp = crearContentSecurityPolicy({ isDev });
+  sesion.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [csp]
+      }
+    });
+  });
+}
+
+// Se aplica a cualquier webContents (ventana principal, futuras ventanas y
+// devtools) para que ninguna ruta nueva evite la política por omisión.
+function protegerWebContents(contents) {
+  contents.setWindowOpenHandler(({ url }) => {
+    if (politicaNavegacion.esAperturaExternaPermitida(url)) {
+      shell.openExternal(url).catch((err) => {
+        console.error('[main] No se pudo abrir el enlace externo:', err.message);
+      });
+    } else {
+      console.warn('[main] Apertura de ventana bloqueada:', url);
+    }
+    return { action: 'deny' };
+  });
+
+  const bloquearNavegacion = (event, url) => {
+    // El propio panel de DevTools usa su esquema interno. No es alcanzable
+    // desde el renderer, así que se deja pasar solo ese esquema.
+    if (typeof url === 'string' && url.startsWith('devtools://')) return;
+    if (!politicaNavegacion.esNavegacionPermitida(url)) {
+      console.warn('[main] Navegación bloqueada:', url);
+      event.preventDefault();
+    }
+  };
+
+  contents.on('will-navigate', bloquearNavegacion);
+  contents.on('will-redirect', bloquearNavegacion);
+  contents.on('will-attach-webview', (event) => event.preventDefault());
+}
+
+app.on('web-contents-created', (_event, contents) => {
+  protegerWebContents(contents);
+});
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -33,6 +89,13 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
+      webviewTag: false,
+      nodeIntegrationInWorker: false,
+      nodeIntegrationInSubFrames: false,
+      devTools: isDev,
+      navigateOnDragDrop: false,
       spellcheck: false, // Desactivar corrector ortográfico para ahorrar CPU/RAM
       backgroundThrottling: true // Permitir throttling en segundo plano: menos CPU
     }
@@ -61,29 +124,17 @@ function createWindow() {
   });
 
   // CSP estricta en producción; en desarrollo permite 'unsafe-inline' y 'unsafe-eval' para HMR de Vite
-  const csp = isDev
-    ? "default-src 'self' 'unsafe-inline' data:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' ws: http://localhost:5173; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
-    : "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
-
-  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-    callback({
-      responseHeaders: {
-        ...details.responseHeaders,
-        'Content-Security-Policy': [csp]
-      }
-    });
-  });
-
   if (isDev) {
     win.loadURL('http://localhost:5173');
     win.webContents.openDevTools();
   } else {
-    win.loadFile(path.join(__dirname, '..', 'dist', 'renderer', 'index.html'));
+    win.loadFile(rendererIndexPath);
   }
 }
 
 app.whenReady().then(async () => {
   if (!tieneInstancia) return;
+  aplicarPoliticasDeSesion();
   // Migraciones y seed corren aquí, DENTRO de Electron, usando el mismo módulo
   // nativo (better-sqlite3) que ya está compilado para este proceso. Nunca deben
   // correrse por fuera con `node` normal: ese binario usa otra versión de ABI

@@ -126,7 +126,14 @@ function fingerprintSchema(db) {
   return crypto.createHash('sha256').update(JSON.stringify(schema)).digest('hex');
 }
 
-function validateDatabase(filePath, { requireComplete = false, fullIntegrity = requireComplete } = {}) {
+function validateDatabase(filePath, {
+  requireComplete = false,
+  fullIntegrity = requireComplete,
+  requiredTables = null,
+  expectedMigrations = null,
+  expectedSchemaSha256 = null,
+  expectedUserVersion = null
+} = {}) {
   let db;
   try {
     db = new Database(filePath, { readonly: true, fileMustExist: true, timeout: 10000 });
@@ -138,12 +145,39 @@ function validateDatabase(filePath, { requireComplete = false, fullIntegrity = r
     }
     const foreignKeys = db.pragma('foreign_key_check');
     if (foreignKeys.length) throw new Error(`SQLite reportó ${foreignKeys.length} violación(es) de clave foránea.`);
+
+    if (Array.isArray(requiredTables) && requiredTables.length) {
+      const existentes = new Set(
+        db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((fila) => fila.name)
+      );
+      const faltantes = requiredTables.filter((nombre) => !existentes.has(nombre));
+      if (faltantes.length) {
+        throw new Error(`La base no contiene ${faltantes.length} tabla(s) requerida(s) por la aplicación.`);
+      }
+    }
+
     const migrations = obtenerEstadoMigraciones(db);
     if (requireComplete && migrations.pending.length) {
       throw new Error('La base validada todavía tiene migraciones pendientes.');
     }
+    if (Array.isArray(expectedMigrations)) {
+      const aplicadas = migrations.applied;
+      if (aplicadas.length !== expectedMigrations.length || aplicadas.some((nombre, indice) => nombre !== expectedMigrations[indice])) {
+        throw new Error('El registro de migraciones no coincide con el manifiesto del respaldo.');
+      }
+    }
+
     const userVersion = Number(db.pragma('user_version', { simple: true }));
-    return { ok: true, migrations, userVersion, schemaSha256: fingerprintSchema(db) };
+    if (expectedUserVersion !== null && expectedUserVersion !== undefined && Number(expectedUserVersion) !== userVersion) {
+      throw new Error('La versión de usuario no coincide con el manifiesto del respaldo.');
+    }
+
+    const schemaSha256 = fingerprintSchema(db);
+    if (expectedSchemaSha256 && expectedSchemaSha256 !== schemaSha256) {
+      throw new Error('La huella del esquema no coincide con el manifiesto del respaldo.');
+    }
+
+    return { ok: true, migrations, userVersion, schemaSha256 };
   } finally {
     if (db && db.open) db.close();
   }
@@ -277,15 +311,44 @@ async function restaurarCursorAnterior(manifest, snapshotPath, cursorPath) {
   }
 }
 
-async function restoreDatabase({ databasePath, cursorPath, sourceBackupPath, activeDb = null, closeActiveDb = closeDb, promote = promoteWithReplaceFile } = {}) {
+async function restoreDatabase({
+  databasePath,
+  cursorPath,
+  sourceBackupPath,
+  activeDb = null,
+  closeActiveDb = closeDb,
+  promote = promoteWithReplaceFile,
+  requireComplete = false,
+  requiredTables = null,
+  expectedSha256 = null,
+  expectedMigrations = null,
+  expectedSchemaSha256 = null,
+  expectedUserVersion = null,
+  beforePromote = null
+} = {}) {
   if (!databasePath || !path.isAbsolute(databasePath) || !sourceBackupPath || !path.isAbsolute(sourceBackupPath)) {
     throw new Error('Se requieren rutas absolutas para restaurar SQLite.');
   }
   if (process.platform !== 'win32') throw new Error('La restauración segura solo está habilitada en Windows.');
   if (!fs.existsSync(databasePath) || !fs.existsSync(sourceBackupPath)) throw new Error('No existe la base activa o el respaldo seleccionado.');
 
-  const targetValidation = validateDatabase(sourceBackupPath, { requireComplete: false, fullIntegrity: true });
-  if (!targetValidation.ok) throw new Error('El respaldo no pasó las validaciones SQLite.');
+  // El hash esperado se fija ANTES de abrir el respaldo y se reutiliza al copiar
+  // el staging. Si el archivo cambia entre la validación y la copia, la
+  // comparación posterior falla y no se promueve nada.
+  const hashReal = await sha256File(sourceBackupPath);
+  if (expectedSha256 && hashReal !== expectedSha256) {
+    throw new Error('El respaldo no coincide con la huella autenticada.');
+  }
+  const targetHash = expectedSha256 || hashReal;
+  const sourceValidation = validateDatabase(sourceBackupPath, {
+    requireComplete,
+    fullIntegrity: true,
+    requiredTables,
+    expectedMigrations,
+    expectedSchemaSha256,
+    expectedUserVersion
+  });
+  if (!sourceValidation.ok) throw new Error('El respaldo no pasó las validaciones SQLite.');
   const sourceDb = activeDb || getDb();
 
   const directory = path.dirname(databasePath);
@@ -340,13 +403,50 @@ async function restoreDatabase({ databasePath, cursorPath, sourceBackupPath, act
     if (!validateDatabase(rollbackPath, { requireComplete: false, fullIntegrity: true }).ok) {
       throw new Error('La copia previa no pasó la validación completa de SQLite.');
     }
-    const targetHash = await sha256File(sourceBackupPath);
+    const hashAntesDeCopiar = await sha256File(sourceBackupPath);
+    if (hashAntesDeCopiar !== targetHash) {
+      throw new Error('El respaldo cambió durante la restauración; no se usará una copia distinta de la validada.');
+    }
     fs.copyFileSync(sourceBackupPath, stagePath, fs.constants.COPYFILE_EXCL);
     syncFile(stagePath);
     stageSha256 = await sha256File(stagePath);
-    if (stageSha256 !== targetHash || !validateDatabase(stagePath, { requireComplete: false, fullIntegrity: true }).ok) {
+    if (stageSha256 !== targetHash || !validateDatabase(stagePath, {
+      requireComplete,
+      fullIntegrity: true,
+      requiredTables,
+      expectedMigrations,
+      expectedSchemaSha256,
+      expectedUserVersion
+    }).ok) {
       throw new Error('El staging de restauración no coincide con el respaldo validado.');
     }
+
+    // El callback corre sobre el staging, antes de promover. Así la auditoría de
+    // éxito forma parte del contenido promovido y el hash del journal sigue
+    // siendo coherente con la base activa. Si el callback falla, no se sustituye
+    // nada y la base activa permanece intacta.
+    if (typeof beforePromote === 'function') {
+      await beforePromote({ stagePath, databasePath, sourceBackupPath, sourceSha256: targetHash });
+      for (const suffix of ['-wal', '-shm']) {
+        const companion = `${stagePath}${suffix}`;
+        if (!fs.existsSync(companion)) continue;
+        if (fileSize(companion) > 0) throw new Error(`El staging conserva ${suffix} no vacío después de la preparación.`);
+        fs.unlinkSync(companion);
+      }
+      syncFile(stagePath);
+      stageSha256 = await sha256File(stagePath);
+      if (!validateDatabase(stagePath, {
+        requireComplete,
+        fullIntegrity: true,
+        requiredTables,
+        expectedMigrations,
+        expectedSchemaSha256,
+        expectedUserVersion
+      }).ok) {
+        throw new Error('El staging preparado no pasó la validación final.');
+      }
+    }
+
     const manifest = {
       format: 1, operationId, operationType: 'MANUAL_RESTORE', backupSha256: originalSha256,
       stageSha256, cursorAction: 'RESET', cursorExisted, cursorSnapshotSha256
@@ -371,7 +471,14 @@ async function restoreDatabase({ databasePath, cursorPath, sourceBackupPath, act
     if (!fs.existsSync(promotionBackupPath) || (await sha256File(promotionBackupPath)) !== originalSha256) {
       throw new Error('La promoción no conservó una copia exacta de la base anterior.');
     }
-    if ((await sha256File(databasePath)) !== stageSha256 || !validateDatabase(databasePath, { requireComplete: false, fullIntegrity: true }).ok) {
+    if ((await sha256File(databasePath)) !== stageSha256 || !validateDatabase(databasePath, {
+      requireComplete,
+      fullIntegrity: true,
+      requiredTables,
+      expectedMigrations,
+      expectedSchemaSha256,
+      expectedUserVersion
+    }).ok) {
       throw new Error('La base restaurada no coincide con el staging validado.');
     }
     if (cursorExisted) {
@@ -397,7 +504,7 @@ async function restoreDatabase({ databasePath, cursorPath, sourceBackupPath, act
       }
     }
     try {
-      if (journalState === 'PROMOTING' && originalSha256 && stageSha256 &&
+      if (['PROMOTING', 'CURSOR_RESET'].includes(journalState) && originalSha256 && stageSha256 &&
           fs.existsSync(databasePath) && (await sha256File(databasePath)) === stageSha256) {
         let rollbackSource = null;
         for (const candidate of [promotionBackupPath, rollbackPath]) {

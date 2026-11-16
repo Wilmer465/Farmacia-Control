@@ -17,10 +17,31 @@ function verificarAccesoCreacionSede (usuarioSesion) {
   }
 }
 
-// Lista pública de sedes: se usa para que el SUPERADMIN (visión global)
-// elija la sede activa sobre la cual realizar sus gestiones.
+// Lista completa de sedes. Solo debe usarse desde rutas que ya verificaron
+// visión global; el canal IPC expone `listarParaUsuario`.
 function listar () {
   return sedeRepository.findAll();
+}
+
+// El SUPERADMIN necesita la lista completa para elegir la sede activa. Los demás
+// roles solo ven su propia sede: el nombre y la existencia de las demás sedes no
+// son necesarios para operar y no deben filtrarse por IPC.
+function listarParaUsuario (usuarioSesion) {
+  if (!usuarioSesion) {
+    throw new SedeError('Sesión requerida.');
+  }
+
+  const rol = usuarioSesion.rol_nombre || usuarioSesion.rolNombre;
+  if (rol === ROLES.SUPERADMIN) {
+    return listar();
+  }
+
+  if (usuarioSesion.sede_id === null || usuarioSesion.sede_id === undefined) {
+    return [];
+  }
+
+  const sede = sedeRepository.findById(usuarioSesion.sede_id);
+  return sede ? [sede] : [];
 }
 
 function crear (usuarioSesion, datos) {
@@ -106,4 +127,4 @@ function eliminar (usuarioSesion, id) {
   return { id: sedeId, nombre: sede.nombre };
 }
 
-module.exports = { SedeError, listar, crear, eliminar };
+module.exports = { SedeError, listar, listarParaUsuario, crear, eliminar };

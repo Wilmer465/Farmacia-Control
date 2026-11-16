@@ -20,11 +20,11 @@ export default function Auditoria({ usuario, sedeActiva }) {
   useEffect(() => {
     if (!esSuperadmin) return;
     let cancelado = false;
-    inventarioApi.sedes.listar().then((res) => {
+    inventarioApi.sedes.listar(usuario).then((res) => {
       if (!cancelado && res.ok) setSedes(res.data || []);
     });
     return () => { cancelado = true; };
-  }, [esSuperadmin]);
+  }, [esSuperadmin, usuario]);
 
   useEffect(() => {
     if (!esSuperadmin) return;

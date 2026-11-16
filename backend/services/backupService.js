@@ -5,11 +5,28 @@ const Database = require('better-sqlite3');
 const { getDb, resolveDbPath, closeDb } = require('../database/connection');
 const { restoreDatabase } = require('../database/startupRecovery');
 const { adquirirPausaSincronizacionParaMantenimiento } = require('./cloudSyncService');
+const {
+  TABLAS_REQUERIDAS,
+  crearManifiestoRespaldo,
+  leerManifiesto,
+  validarContenidoRespaldo,
+  rutaManifiesto,
+  setClaveManifiestoPath
+} = require('./backupManifest');
 const auditoriaRepository = require('../repositories/auditoriaRepository');
 const permisoService = require('./permisoService');
 const { AUDIT_ACTIONS, ROLES } = require('../../shared/constants');
 
 class ValidationError extends Error {}
+
+class RespaldoInvalidoError extends ValidationError {
+  constructor(codigo, mensaje, causa = null) {
+    super(mensaje);
+    this.name = 'RespaldoInvalidoError';
+    this.codigo = codigo;
+    this.causa = causa;
+  }
+}
 
 function verificarAccesoRespaldos(usuarioSesion) {
   if (!usuarioSesion || ![ROLES.SUPERADMIN, ROLES.ADMIN].includes(usuarioSesion.rol_nombre)) {
@@ -68,6 +85,14 @@ function validarIntegridad(rutaArchivo) {
   }
 }
 
+function motivoNoRestaurable(err) {
+  const texto = String(err && err.message ? err.message : '');
+  if (/no tiene manifiesto/i.test(texto)) return 'Sin manifiesto de autenticidad.';
+  if (/firma|clave|autenticidad/i.test(texto)) return 'Autenticidad no verificada.';
+  if (/huella|tamaño|coincide/i.test(texto)) return 'El contenido no coincide con su manifiesto.';
+  return 'No verificable con la clave local.';
+}
+
 async function listar(usuarioSesion, filtros = {}) {
   verificarAccesoRespaldos(usuarioSesion);
 
@@ -80,15 +105,26 @@ async function listar(usuarioSesion, filtros = {}) {
   const listado = await Promise.all(archivosDb.map(async (nombre) => {
     const rutaCompleta = path.join(dir, nombre);
     const stats = await fsp.stat(rutaCompleta);
-    const match = nombre.match(/_sede_(\d+)/);
-    const sedeIdArchivo = match ? Number(match[1]) : null;
+    let manifiesto = null;
+    let motivo = null;
+    try {
+      manifiesto = leerManifiesto(rutaCompleta, nombre);
+    } catch (err) {
+      // Un archivo sin manifiesto válido no es restaurable. Se muestra solo a
+      // SUPERADMIN para que pueda auditarlo/sustituirlo, nunca se ofrece como
+      // si fuera una copia auténtica.
+      motivo = motivoNoRestaurable(err);
+    }
 
     return {
       nombre,
       fecha: stats.mtime.toISOString(),
       tamanoBytes: stats.size,
-      esAutomatico: nombre.includes('_auto_'),
-      sedeId: sedeIdArchivo
+      esAutomatico: manifiesto ? manifiesto.automatico : nombre.includes('_auto_'),
+      sedeId: manifiesto ? manifiesto.sedeId : sedeDeArchivoRespaldo(nombre),
+      alcance: manifiesto ? manifiesto.alcance : null,
+      restaurable: Boolean(manifiesto),
+      motivoNoRestaurable: motivo
     };
   }));
 
@@ -96,9 +132,11 @@ async function listar(usuarioSesion, filtros = {}) {
   // hashes y auditoría), así que un ADMIN de sede solo ve los de su sede.
   // Los `_global` (sedeId null, incluidos todos los automáticos) son exclusivos
   // de SUPERADMIN (visión global). Mostrarlos a ADMIN era escalación cross-sede.
+  // Para un ADMIN solo cuentan los manifiestos verificados: el nombre del
+  // archivo no acredita la sede de origen.
   const filtrados = listado.filter((b) => {
     if (sedeEfectiva !== null && sedeEfectiva !== undefined) {
-      return b.sedeId === Number(sedeEfectiva);
+      return b.restaurable && b.alcance === 'SEDE' && Number(b.sedeId) === Number(sedeEfectiva);
     }
     return true;
   });
@@ -185,6 +223,33 @@ function limpiarCompanionFiles(destino) {
   }
 }
 
+// `db.backup()` puede dejar un `-wal` propio con páginas pendientes (por
+// ejemplo, cuando la base activa acabó de escribir auditoría o el mantenimiento
+// de `optimize`/`incremental_vacuum` generó frames). Un respaldo con companion
+// con contenido no es una copia autónoma y, si se aceptara, podría restaurarse
+// sin las últimas páginas o con un WAL ajeno. Se abre la copia, se consolida en
+// el `.db` y se pasa a journal DELETE; recién entonces se firma la huella.
+function consolidarRespaldo(rutaArchivo) {
+  const conexion = new Database(rutaArchivo);
+  try {
+    conexion.pragma('busy_timeout = 5000');
+    const modo = conexion.pragma('journal_mode = DELETE', { simple: true });
+    if (String(modo).toLowerCase() !== 'delete') {
+      throw new Error('No se pudo consolidar el respaldo en un archivo SQLite autónomo.');
+    }
+    for (const sufijo of ['-wal', '-shm']) {
+      const ruta = `${rutaArchivo}${sufijo}`;
+      if (!fs.existsSync(ruta)) continue;
+      if (fs.statSync(ruta).size > 0) {
+        throw new Error('El respaldo conserva archivos auxiliares SQLite con contenido.');
+      }
+      fs.unlinkSync(ruta);
+    }
+  } finally {
+    if (conexion.open) conexion.close();
+  }
+}
+
 async function crear(usuarioSesion, opciones = {}) {
   const esAutomatico = typeof opciones === 'boolean' ? opciones : Boolean(opciones?.esAutomatico);
   const sedeIdSolicitada = typeof opciones === 'object' ? opciones?.sedeId : null;
@@ -231,10 +296,71 @@ async function crear(usuarioSesion, opciones = {}) {
 
   await db.backup(destino);
 
+  let errorConsolidacion = null;
+  try {
+    consolidarRespaldo(destino);
+  } catch (err) {
+    errorConsolidacion = err;
+  }
   limpiarCompanionFiles(destino);
 
-  const integridad = validarIntegridad(destino);
+  const integridad = errorConsolidacion
+    ? { ok: false, detalle: errorConsolidacion.message }
+    : validarIntegridad(destino);
   const stats = fs.statSync(destino);
+
+  let manifiesto = null;
+  let errorManifiesto = null;
+  if (integridad.ok) {
+    try {
+      manifiesto = await crearManifiestoRespaldo(destino, {
+        nombre,
+        automatico: esAutomatico,
+        sedeId: sedeEfectiva ?? null,
+        sedeNombre: sedeEfectiva ? sedeNombre : null
+      });
+    } catch (err) {
+      errorManifiesto = err;
+    }
+  }
+
+  // Si no se pudo verificar o firmar el respaldo, se elimina. Un .db sin
+  // manifiesto válido no sería restaurable por diseño y dejarlo en la carpeta
+  // solo confundiría al operador.
+  if (!integridad.ok || errorManifiesto) {
+    if (errorManifiesto) {
+      console.error('[backupService] No se pudo firmar el respaldo:', errorManifiesto.message);
+    }
+    try { fs.rmSync(destino, { force: true }); } catch { /* limpieza best-effort */ }
+    try { fs.rmSync(rutaManifiesto(destino), { force: true }); } catch { /* idem */ }
+
+    if (!esAutomatico && usuarioSesion) {
+      try {
+        auditoriaRepository.registrar({
+          usuario_id: usuarioSesion.id,
+          rol: usuarioSesion.rol_nombre,
+          sede_id: sedeEfectiva ?? usuarioSesion.sede_id ?? null,
+          accion: AUDIT_ACTIONS.CREAR_RESPALDO,
+          modulo: 'RESPALDOS',
+          registro_afectado: nombre,
+          resultado: 'FALLIDO',
+          valores_nuevos: {
+            nombre,
+            automatico: esAutomatico,
+            sede_id: sedeEfectiva ?? usuarioSesion.sede_id ?? null,
+            motivo: integridad.ok ? 'SIN_FIRMA' : 'INTEGRIDAD'
+          }
+        });
+      } catch (errAuditoria) {
+        console.error('[backupService] No se pudo auditar el fallo de creación:', errAuditoria.message);
+      }
+    }
+
+    if (!integridad.ok) {
+      throw new ValidationError('No se pudo crear un respaldo íntegro. El archivo fue descartado.');
+    }
+    throw new ValidationError('No se pudo firmar el respaldo para verificar su autenticidad. El archivo fue descartado.');
+  }
 
   // Para respaldos automáticos, no hay usuario real; no registrar en auditoría para evitar FK constraint
   if (!esAutomatico && usuarioSesion) {
@@ -249,22 +375,26 @@ async function crear(usuarioSesion, opciones = {}) {
       accion: AUDIT_ACTIONS.CREAR_RESPALDO,
       modulo: 'RESPALDOS',
       registro_afectado: nombre,
-      resultado: integridad.ok ? 'EXITO' : 'FALLIDO',
-      valores_nuevos: { nombre, integridad: integridad.ok, automatico: esAutomatico, sede_id: sedeId }
+      resultado: 'EXITO',
+      valores_nuevos: {
+        nombre,
+        integridad: true,
+        automatico: esAutomatico,
+        sede_id: sedeId,
+        firma: manifiesto.claveId
+      }
     });
-  }
-
-  if (!integridad.ok) {
-    throw new ValidationError('El respaldo se creó pero falló la validación de integridad.');
   }
 
   return {
     nombre,
     fecha: stats.mtime.toISOString(),
     tamanoBytes: stats.size,
-    integridad: integridad.ok,
+    integridad: true,
     esAutomatico,
-    sedeId: sedeEfectiva
+    sedeId: sedeEfectiva,
+    restaurable: true,
+    firma: manifiesto.claveId
   };
 }
 
@@ -273,28 +403,126 @@ function sedeDeArchivoRespaldo(nombreArchivo) {
   return match ? Number(match[1]) : null;
 }
 
-function verificarPermisoRestaurar(usuarioSesion, nombreArchivo) {
-  verificarAccesoRespaldos(usuarioSesion);
-  // El archivo contiene la BD entera: un ADMIN solo puede restaurar respaldos
-  // de su propia sede; los `_global` (automáticos incluidos) son de SUPERADMIN.
-  const sedeEfectiva = permisoService.resolverSedeEfectiva(usuarioSesion, null);
-  if (sedeEfectiva !== null && sedeEfectiva !== undefined) {
-    const sedeArchivo = sedeDeArchivoRespaldo(nombreArchivo);
-    if (sedeArchivo === null || Number(sedeArchivo) !== Number(sedeEfectiva)) {
-      throw new permisoService.PermisoError('Solo puede restaurar respaldos de su propia sede.');
-    }
+// Los respaldos válidos los genera este mismo servicio:
+// farmacia_backup[_auto]_global_AAAAMMDD_HHMMSS.db
+// farmacia_backup[_auto]_sede_<nombre>_AAAAMMDD_HHMMSS.db
+// Restaurar cualquier otro archivo de la carpeta permitiría introducir una BD
+// ajena al flujo de respaldos (p. ej. copiada manualmente) y confiar en ella.
+const PATRON_NOMBRE_RESPALDO = /^farmacia_backup(?:_auto)?_(?:global|sede_[A-Za-z0-9_áéíóúñÁÉÍÓÚÑ]+)_\d{8}_\d{6}\.db$/;
+
+function nombreRespaldoSeguro(nombreArchivo) {
+  if (!nombreArchivo || typeof nombreArchivo !== 'string') return null;
+  const base = path.basename(nombreArchivo);
+  return base && !base.includes('..') ? base.slice(0, 200) : null;
+}
+
+function auditarRestauracion(usuarioSesion, nombreArchivo, resultado, valores = {}) {
+  try {
+    auditoriaRepository.registrar({
+      usuario_id: usuarioSesion?.id ?? null,
+      rol: usuarioSesion?.rol_nombre ?? null,
+      sede_id: usuarioSesion?.sede_id ?? null,
+      accion: AUDIT_ACTIONS.RESTAURAR_RESPALDO,
+      modulo: 'RESPALDOS',
+      registro_afectado: nombreRespaldoSeguro(nombreArchivo),
+      resultado,
+      valores_nuevos: valores
+    });
+  } catch (err) {
+    // La auditoría nunca debe ocultar el resultado real de la restauración.
+    console.error('[backupService] No se pudo registrar la auditoría de restauración:', err.message);
   }
 }
 
+function auditarExitoEnStaging(stagePath, usuarioSesion, nombreArchivo, manifiesto) {
+  const db = new Database(stagePath);
+  try {
+    // El staging se abre en modo DELETE para que la escritura de auditoría no
+    // deje un -wal con contenido; después el proceso normal vuelve a WAL.
+    db.pragma('journal_mode = DELETE');
+    db.pragma('foreign_keys = ON');
+    const usuarioExiste = usuarioSesion?.id
+      ? db.prepare('SELECT 1 FROM usuarios WHERE id = ?').get(usuarioSesion.id)
+      : null;
+    auditoriaRepository.registrarConConexion(db, {
+      usuario_id: usuarioExiste ? usuarioSesion.id : null,
+      rol: usuarioSesion?.rol_nombre ?? null,
+      sede_id: usuarioSesion?.sede_id ?? null,
+      accion: AUDIT_ACTIONS.RESTAURAR_RESPALDO,
+      modulo: 'RESPALDOS',
+      registro_afectado: nombreArchivo,
+      resultado: 'EXITO',
+      valores_nuevos: {
+        nombre: nombreArchivo,
+        alcance: manifiesto.alcance,
+        sede_id: manifiesto.sedeId,
+        usuario_id_original: usuarioSesion?.id ?? null,
+        firma: manifiesto.claveId
+      }
+    });
+  } finally {
+    db.close();
+  }
+}
+
+// El nombre del archivo no acredita la sede: la sede se toma del manifiesto
+// firmado. Un ADMIN solo puede restaurar copias de su propia sede; los
+// respaldos globales siguen siendo exclusivos de SUPERADMIN.
+function verificarPermisoRestaurar(usuarioSesion, manifiesto) {
+  verificarAccesoRespaldos(usuarioSesion);
+  const sedeEfectiva = permisoService.resolverSedeEfectiva(usuarioSesion, null);
+  if (sedeEfectiva === null || sedeEfectiva === undefined) return;
+  if (manifiesto.alcance !== 'SEDE' || Number(manifiesto.sedeId) !== Number(sedeEfectiva)) {
+    throw new permisoService.PermisoError('Solo puede restaurar respaldos de su propia sede.');
+  }
+}
+
+function mensajeRechazoRespaldo(err) {
+  const texto = String(err && err.message ? err.message : '');
+  if (/SQLITE_NOTADB|not a database|malformed|disk image|no such table|no such column|SQLITE_CORRUPT/i.test(texto)) {
+    return 'El archivo no es una base de datos SQLite válida o está dañado. No se restauró.';
+  }
+  if (/no tiene manifiesto|manifiesto.*(corrupto|formato|tamaño|objeto|inválid|fecha)/i.test(texto)) {
+    return 'El respaldo no tiene un manifiesto de autenticidad válido. No se restauró.';
+  }
+  if (/firma|clave|autenticidad/i.test(texto)) {
+    return 'No se pudo verificar la autenticidad del respaldo. No se restauró.';
+  }
+  // El esquema se evalúa antes que la coincidencia genérica de tamaño/huella:
+  // los errores de migraciones y de huella de esquema contienen "no coincide" y
+  // deben explicarse como incompatibilidad, no como corrupción del contenido.
+  if (/migraciones|esquema|versión de usuario|tabla/i.test(texto)) {
+    return 'El respaldo no es compatible con el esquema de esta versión. No se restauró.';
+  }
+  if (/huella|tamaño|coincide/i.test(texto)) {
+    return 'El contenido del respaldo no coincide con su registro de autenticidad. No se restauró.';
+  }
+  return 'El respaldo no superó la validación de seguridad. No se restauró.';
+}
+
 async function restaurar(usuarioSesion, nombreArchivo) {
-  verificarPermisoRestaurar(usuarioSesion, nombreArchivo);
+  try {
+    verificarAccesoRespaldos(usuarioSesion);
+  } catch (err) {
+    // Un intento de restauración sin rol suficiente también es un evento
+    // auditable: deja rastro del usuario y del archivo solicitado sin ejecutar
+    // ninguna operación sobre la base activa.
+    auditarRestauracion(usuarioSesion, nombreArchivo, 'FALLIDO', { motivo: 'SIN_PERMISO' });
+    throw err;
+  }
 
   if (!nombreArchivo || typeof nombreArchivo !== 'string') {
+    auditarRestauracion(usuarioSesion, null, 'FALLIDO', { motivo: 'NOMBRE_INVALIDO' });
     throw new ValidationError('Nombre de respaldo inválido.');
   }
   const nombreLimpio = path.basename(nombreArchivo);
   if (nombreLimpio !== nombreArchivo || nombreLimpio.includes('..') || nombreLimpio.length === 0) {
+    auditarRestauracion(usuarioSesion, null, 'FALLIDO', { motivo: 'NOMBRE_INVALIDO' });
     throw new ValidationError('Nombre de respaldo inválido.');
+  }
+  if (!PATRON_NOMBRE_RESPALDO.test(nombreLimpio)) {
+    auditarRestauracion(usuarioSesion, nombreLimpio, 'FALLIDO', { motivo: 'FORMATO_NOMBRE' });
+    throw new ValidationError('El archivo no tiene el formato de un respaldo generado por la aplicación.');
   }
 
   const dir = carpetaRespaldos();
@@ -304,11 +532,31 @@ async function restaurar(usuarioSesion, nombreArchivo) {
   const dirResuelto = path.resolve(dir);
   const rutaResuelta = path.resolve(rutaRespaldo);
   if (!rutaResuelta.startsWith(dirResuelto + path.sep) && rutaResuelta !== dirResuelto) {
+    auditarRestauracion(usuarioSesion, null, 'FALLIDO', { motivo: 'RUTA_INVALIDA' });
     throw new ValidationError('Nombre de respaldo inválido (intento de path traversal).');
   }
 
   if (!fs.existsSync(rutaRespaldo)) {
+    auditarRestauracion(usuarioSesion, nombreLimpio, 'FALLIDO', { motivo: 'NO_EXISTE' });
     throw new ValidationError('El respaldo indicado no existe.');
+  }
+
+  // Validar autenticidad, tamaño, huella y esquema ANTES de pausar la
+  // sincronización o tocar la base activa. Cualquier fallo aquí deja la BD
+  // exactamente como estaba.
+  let manifiesto;
+  try {
+    manifiesto = leerManifiesto(rutaRespaldo, nombreLimpio);
+    verificarPermisoRestaurar(usuarioSesion, manifiesto);
+    await validarContenidoRespaldo(rutaRespaldo, manifiesto);
+  } catch (err) {
+    if (err instanceof permisoService.PermisoError) {
+      auditarRestauracion(usuarioSesion, nombreLimpio, 'FALLIDO', { motivo: 'PERMISO' });
+      throw err;
+    }
+    const mensaje = mensajeRechazoRespaldo(err);
+    auditarRestauracion(usuarioSesion, nombreLimpio, 'FALLIDO', { motivo: 'VALIDACION' });
+    throw new RespaldoInvalidoError('RESPALDO_RECHAZADO', mensaje, err);
   }
 
   const dbPath = resolveDbPath();
@@ -320,20 +568,28 @@ async function restaurar(usuarioSesion, nombreArchivo) {
       cursorPath: syncState,
       sourceBackupPath: rutaRespaldo,
       activeDb: getDb(),
-      closeActiveDb: closeDb
+      closeActiveDb: closeDb,
+      requiredTables: TABLAS_REQUERIDAS,
+      expectedSha256: manifiesto.sha256,
+      expectedMigrations: manifiesto.esquema.migraciones,
+      expectedSchemaSha256: manifiesto.esquema.sha256,
+      expectedUserVersion: manifiesto.esquema.userVersion,
+      beforePromote: async ({ stagePath }) => {
+        // La auditoría de éxito entra en el staging antes de promover: si esta
+        // escritura falla, el rollback conserva la base activa y no se promueve
+        // un respaldo sin registro de la operación.
+        auditarExitoEnStaging(stagePath, usuarioSesion, nombreLimpio, manifiesto);
+      }
     });
 
-    auditoriaRepository.registrar({
-      usuario_id: usuarioSesion.id,
-      rol: usuarioSesion.rol_nombre,
-      sede_id: usuarioSesion.sede_id,
-      accion: AUDIT_ACTIONS.RESTAURAR_RESPALDO,
-      modulo: 'RESPALDOS',
-      registro_afectado: nombreArchivo,
-      resultado: 'EXITO'
-    });
-
-    return { restaurado: true, nombre: nombreArchivo };
+    return { restaurado: true, nombre: nombreLimpio };
+  } catch (err) {
+    auditarRestauracion(usuarioSesion, nombreLimpio, 'FALLIDO', { motivo: 'FALLO_RESTAURACION' });
+    throw new RespaldoInvalidoError(
+      'FALLO_RESTAURACION',
+      'No se pudo completar la restauración. No se reinició la aplicación.',
+      err
+    );
   } finally {
     reanudarSincronizacion();
   }
@@ -507,6 +763,8 @@ module.exports = {
   iniciarPlanificadorAutoBackup,
   verificarYEjecutarAutoBackup,
   setDirectorioRespaldos,
+  setClaveManifiestoPath,
   tamanoTotalEnDisco,
-  ValidationError
+  ValidationError,
+  RespaldoInvalidoError
 };

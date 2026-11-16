@@ -1,7 +1,6 @@
 const { getDb } = require('../database/connection');
 
-function registrar({ usuario_id, rol, sede_id, accion, modulo, registro_afectado, resultado, valores_anteriores, valores_nuevos }) {
-  const db = getDb();
+function registrarConConexion(db, { usuario_id, rol, sede_id, accion, modulo, registro_afectado, resultado, valores_anteriores, valores_nuevos }) {
   db.prepare(`
     INSERT INTO auditoria
       (usuario_id, rol, sede_id, accion, modulo, registro_afectado, resultado, valores_anteriores, valores_nuevos)
@@ -17,6 +16,11 @@ function registrar({ usuario_id, rol, sede_id, accion, modulo, registro_afectado
     valores_anteriores ? JSON.stringify(valores_anteriores) : null,
     valores_nuevos ? JSON.stringify(valores_nuevos) : null
   );
+}
+
+function registrar(datos) {
+  const db = getDb();
+  registrarConConexion(db, datos);
 }
 
 function findAll({ sedeId, modulo, fechaInicio, fechaFin, limite } = {}) {
@@ -55,4 +59,4 @@ function findAll({ sedeId, modulo, fechaInicio, fechaFin, limite } = {}) {
   `).all(params);
 }
 
-module.exports = { registrar, findAll };
+module.exports = { registrar, registrarConConexion, findAll };

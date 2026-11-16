@@ -263,8 +263,9 @@ test('window.api expone solo la consulta sin reenviar argumentos del renderer', 
   };
   const context = { require: fakeRequire, module: { exports: {} }, exports: {} };
   vm.runInNewContext(source, context, { filename: 'preload.js' });
-  await api.puentes.verificarPrerrequisitos(String.raw`C:\otra-ruta.dll`);
-  assert.deepEqual(calls, [[IPC_CHANNELS.VERIFICAR_PRERREQUISITOS_PUENTES]]);
+  const sesion = { session_token: 'token-de-prueba' };
+  await api.puentes.verificarPrerrequisitos(sesion, String.raw`C:\otra-ruta.dll`);
+  assert.deepEqual(calls, [[IPC_CHANNELS.VERIFICAR_PRERREQUISITOS_PUENTES, sesion]]);
   assert.deepEqual(Object.keys(api.puentes), ['verificarPrerrequisitos']);
 });
 

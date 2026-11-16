@@ -94,19 +94,25 @@ describe('FASE 4 (bis) — Respaldos: respuestas serializables por IPC', () => {
   let db;
   let sesionWilmer;
   let dirTemporal;
+  let dirClaveTemporal;
 
   beforeEach(() => {
     db = createTestDb();
     sesionWilmer = authService.login('wilmer', 'Wilmer465*');
     dirTemporal = fs.mkdtempSync(path.join(os.tmpdir(), 'respaldos-test-'));
+    dirClaveTemporal = fs.mkdtempSync(path.join(os.tmpdir(), 'respaldos-clave-'));
     // Sin este override el servicio escribiria en data/backups y `restaurar`
     // sobrescribiria la base de desarrollo real.
     backupService.setDirectorioRespaldos(dirTemporal);
+    // La clave HMAC del manifiesto vive fuera de la carpeta de respaldos.
+    backupService.setClaveManifiestoPath(path.join(dirClaveTemporal, 'backup-signing.key'));
   });
 
   afterEach(() => {
     backupService.setDirectorioRespaldos(null);
+    backupService.setClaveManifiestoPath(null);
     fs.rmSync(dirTemporal, { recursive: true, force: true });
+    fs.rmSync(dirClaveTemporal, { recursive: true, force: true });
     teardownTestDb();
   });
 

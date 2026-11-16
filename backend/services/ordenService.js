@@ -5,6 +5,7 @@ const permisoService = require('./permisoService');
 const receptorService = require('./receptorService');
 const { validarItemsOrden } = require('../validators/ordenValidator');
 const { AUDIT_ACTIONS, ROLES } = require('../../shared/constants');
+const { normalizarAdjuntoOrden } = require('../../shared/documentPolicy');
 
 class ValidationError extends Error {}
 
@@ -68,6 +69,13 @@ function crear(usuarioSesion, {
   if (!valido) throw new ValidationError(errores.join(' '));
 
   const esMunicipioVereda = tipo_destino === 'MUNICIPIO_VEREDA';
+  // El archivo adjunto lo elige el renderer y puede ser manipulado por IPC:
+  // se exige data URL base64, firma binaria real y tamaño acotado.
+  const adjunto = normalizarAdjuntoOrden({
+    nombre: documento_adjunto_nombre,
+    data: documento_adjunto_data,
+    tipo: documento_adjunto_tipo
+  });
   const receptorNombre = (receptor_nombre || '').trim() || null;
   const receptorDocumento = (receptor_documento || '').trim() || null;
   const receptorTelefono = (receptor_telefono || '').trim() || null;
@@ -121,9 +129,9 @@ function crear(usuarioSesion, {
       nombre: receptorNombre,
       telefono: receptorTelefono,
       correo_electronico: receptorCorreo,
-      documento_adjunto_nombre,
-      documento_adjunto_data,
-      documento_adjunto_tipo
+      documento_adjunto_nombre: adjunto.nombre,
+      documento_adjunto_data: adjunto.data,
+      documento_adjunto_tipo: adjunto.tipo
     };
     if (!esMunicipioVereda) {
       d.firma_guardada = firma;
@@ -167,9 +175,9 @@ function crear(usuarioSesion, {
       receptor_correo: receptorCorreo,
       firma_data: esMunicipioVereda ? null : firma,
       huella_registrada: esMunicipioVereda ? 0 : (huella ? 1 : 0),
-      documento_adjunto_nombre,
-      documento_adjunto_data,
-      documento_adjunto_tipo,
+      documento_adjunto_nombre: adjunto.nombre,
+      documento_adjunto_data: adjunto.data,
+      documento_adjunto_tipo: adjunto.tipo,
       documentacion_completa: documentacionCompleta ? 1 : 0,
       elementos_faltantes: elementosFaltantes.length ? JSON.stringify(elementosFaltantes) : null
     });
@@ -260,6 +268,11 @@ function actualizarDocumentacion(usuarioSesion, id, {
   }
 
   const esMunicipioVereda = orden.tipo_destino === 'MUNICIPIO_VEREDA';
+  const adjunto = normalizarAdjuntoOrden({
+    nombre: documento_adjunto_nombre,
+    data: documento_adjunto_data,
+    tipo: documento_adjunto_tipo
+  });
   const nombre = (receptor_nombre || '').trim() || null;
   const documento = (receptor_documento || '').trim() || null;
   const telefono = (receptor_telefono || '').trim() || null;
@@ -290,9 +303,9 @@ function actualizarDocumentacion(usuarioSesion, id, {
         nombre,
         telefono,
         correo_electronico: correo,
-        documento_adjunto_nombre,
-        documento_adjunto_data,
-        documento_adjunto_tipo
+        documento_adjunto_nombre: adjunto.nombre,
+        documento_adjunto_data: adjunto.data,
+        documento_adjunto_tipo: adjunto.tipo
       };
       if (!esMunicipioVereda) {
         datosReceptor.firma_guardada = firma;
@@ -311,9 +324,9 @@ function actualizarDocumentacion(usuarioSesion, id, {
     receptor_correo: correo,
     firma_data: esMunicipioVereda ? null : firma,
     huella_registrada: esMunicipioVereda ? 0 : (huella ? 1 : 0),
-    documento_adjunto_nombre,
-    documento_adjunto_data,
-    documento_adjunto_tipo,
+    documento_adjunto_nombre: adjunto.nombre,
+    documento_adjunto_data: adjunto.data,
+    documento_adjunto_tipo: adjunto.tipo,
     documentacion_completa: documentacionCompleta ? 1 : 0,
     elementos_faltantes: elementosFaltantes.length ? JSON.stringify(elementosFaltantes) : null
   });

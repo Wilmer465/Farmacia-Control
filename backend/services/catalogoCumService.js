@@ -4,6 +4,7 @@ const auditoriaRepository = require('../repositories/auditoriaRepository');
 const permisoService = require('./permisoService');
 const { AUDIT_ACTIONS } = require('../../shared/constants');
 const barcodeService = require('./barcodeService');
+const { normalizarDocumentoAdjunto } = require('../../shared/documentPolicy');
 
 const INVIMA_CUM_URL = 'https://www.datos.gov.co/resource/i7cb-raxc.json';
 const CHUNK_SIZE = 5000;
@@ -646,18 +647,27 @@ function buscarPorCUM(cum) {
   return db.prepare(`SELECT * FROM catalogo_cum WHERE cum = ?`).get(cum);
 }
 
+function normalizarLimiteBusqueda(limite = 20) {
+  const numero = Number(limite);
+  if (!Number.isFinite(numero)) return 20;
+  return Math.max(1, Math.min(Math.trunc(numero), 100));
+}
+
 function buscarPorProducto(texto, limite = 20) {
   const db = getDb();
-  if (!texto) {
+  const limiteSeguro = normalizarLimiteBusqueda(limite);
+  if (texto === null || texto === undefined || texto === '') {
     return db.prepare(`
-      SELECT * FROM catalogo_cum 
+      SELECT * FROM catalogo_cum
       ORDER BY actualizado_en DESC, creado_en DESC
       LIMIT ?
-    `).all(limite);
+    `).all(limiteSeguro);
   }
-  const consulta = texto.trim();
+  if (typeof texto !== 'string') {
+    throw new CatalogoCumError('El texto de búsqueda es inválido.');
+  }
+  const consulta = texto.trim().slice(0, 200);
   if (!consulta) return [];
-  const limiteSeguro = Math.max(1, Math.min(Number(limite) || 20, 100));
   const ftsDisponible = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'catalogo_cum_fts'").get();
   // El tokenizador trigram encuentra substrings (incluidas concentraciones y
   // presentaciones). Términos cortos o SQLite sin FTS5 conservan el camino LIKE.
@@ -823,7 +833,17 @@ function adjuntarDocumento(usuarioSesion, cumId, data) {
   permisoService.verificarEsAdmin(usuarioSesion);
   const db = getDb();
 
-  const existe = db.prepare('SELECT id FROM catalogo_cum WHERE id = ?').get(cumId);
+  const cumIdSeguro = Number(cumId);
+  if (!Number.isInteger(cumIdSeguro) || cumIdSeguro <= 0) {
+    throw new CatalogoCumError('Registro CUM inválido.');
+  }
+
+  // El renderer puede manipular el IPC: tamaño, base64 y tipo real se validan
+  // aquí. Un `documento_adjunto_tipo: 'PDF'` no basta para aceptar bytes
+  // arbitrarios ni un SVG con script.
+  const documento = normalizarDocumentoAdjunto(data);
+
+  const existe = db.prepare('SELECT id FROM catalogo_cum WHERE id = ?').get(cumIdSeguro);
   if (!existe) throw new CatalogoCumError('Registro CUM no encontrado');
 
   db.prepare(`
@@ -834,13 +854,13 @@ function adjuntarDocumento(usuarioSesion, cumId, data) {
         actualizado_en = datetime('now')
     WHERE id = ?
   `).run(
-    data.documento_adjunto_nombre || null,
-    data.documento_adjunto_data || null,
-    data.documento_adjunto_tipo || null,
-    cumId
+    documento.nombre,
+    documento.base64,
+    documento.tipo,
+    cumIdSeguro
   );
 
-  const actualizado = db.prepare('SELECT * FROM catalogo_cum WHERE id = ?').get(cumId);
+  const actualizado = db.prepare('SELECT * FROM catalogo_cum WHERE id = ?').get(cumIdSeguro);
 
   auditoriaRepository.registrar({
     usuario_id: usuarioSesion.id,
@@ -848,11 +868,11 @@ function adjuntarDocumento(usuarioSesion, cumId, data) {
     sede_id: usuarioSesion.sede_id,
     accion: AUDIT_ACTIONS.CATALOGO_CUM_DOCUMENTO,
     modulo: 'CATALOGO_CUM',
-    registro_afectado: `catalogo:${cumId}`,
+    registro_afectado: `catalogo:${cumIdSeguro}`,
     resultado: 'EXITO',
     valores_nuevos: {
-      documento_adjunto_nombre: data.documento_adjunto_nombre || null,
-      documento_adjunto_tipo: data.documento_adjunto_tipo || null
+      documento_adjunto_nombre: documento.nombre,
+      documento_adjunto_tipo: documento.tipo
     }
   });
 
@@ -861,11 +881,15 @@ function adjuntarDocumento(usuarioSesion, cumId, data) {
 
 function obtenerDocumento(usuarioSesion, cumId) {
   permisoService.verificarEsAdmin(usuarioSesion);
+  const cumIdSeguro = Number(cumId);
+  if (!Number.isInteger(cumIdSeguro) || cumIdSeguro <= 0) {
+    throw new CatalogoCumError('Registro CUM inválido.');
+  }
   const db = getDb();
   return db.prepare(`
     SELECT documento_adjunto_nombre, documento_adjunto_data, documento_adjunto_tipo
     FROM catalogo_cum WHERE id = ?
-  `).get(cumId);
+  `).get(cumIdSeguro) || null;
 }
 
 module.exports = {
@@ -874,6 +898,7 @@ module.exports = {
   buscarPorGTIN,
   buscarPorCUM,
   buscarPorProducto,
+  normalizarLimiteBusqueda,
   crearRegistroManual,
   crearEmpaque,
   adjuntarDocumento,

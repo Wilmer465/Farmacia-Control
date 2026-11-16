@@ -58,11 +58,11 @@ export default function Respaldos({ usuario, sedeActiva }) {
   useEffect(() => {
     if (!esSuperadmin) return;
     let cancelado = false;
-    inventarioApi.sedes.listar().then((res) => {
+    inventarioApi.sedes.listar(usuario).then((res) => {
       if (!cancelado && res.ok) setSedes(res.data || []);
     });
     return () => { cancelado = true; };
-  }, [esSuperadmin]);
+  }, [esSuperadmin, usuario]);
 
   useEffect(() => {
     if (!esSuperadmin) return;
@@ -375,18 +375,35 @@ export default function Respaldos({ usuario, sedeActiva }) {
                     <span className="pill estado-gris" style={{ fontSize: '0.74rem' }}>🌐 Global</span>
                   )}
                 </td>
-                <td><strong>{r.nombre}</strong></td>
+                <td>
+                  <strong>{r.nombre}</strong>
+                  {r.restaurable === false && r.motivoNoRestaurable && (
+                    <div style={{ fontSize: '0.75rem', color: 'var(--texto-secundario, #667085)' }}>
+                      {r.motivoNoRestaurable}
+                    </div>
+                  )}
+                </td>
                 <td>{new Date(r.fecha).toLocaleString()}</td>
                 <td><span className="mono-tag">{formatearTamano(r.tamanoBytes)}</span></td>
                 <td>
-                  <button
-                    className="btn-peligro"
-                    disabled={restaurando === r.nombre}
-                    onClick={() => handleRestaurar(r.nombre)}
-                    title="Restaurar base de datos a este punto"
-                  >
-                    {restaurando === r.nombre ? 'Restaurando...' : '⚠️ Restaurar'}
-                  </button>
+                  {r.restaurable === false ? (
+                    <span
+                      className="pill estado-gris"
+                      style={{ fontSize: '0.72rem' }}
+                      title={r.motivoNoRestaurable || 'Sin manifiesto de autenticidad válido.'}
+                    >
+                      🔒 No restaurable
+                    </span>
+                  ) : (
+                    <button
+                      className="btn-peligro"
+                      disabled={restaurando === r.nombre}
+                      onClick={() => handleRestaurar(r.nombre)}
+                      title="Restaurar base de datos a este punto"
+                    >
+                      {restaurando === r.nombre ? 'Restaurando...' : '⚠️ Restaurar'}
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}

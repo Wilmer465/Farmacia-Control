@@ -283,26 +283,21 @@ export default function CatalogoCUM({ usuario, sedeActiva }) {
 
   async function handleVerDocumento(item) {
     setDocError(null);
-    const base64 = item.documento_adjunto_data || '';
-    
-    // Validar que el base64 no esté vacío y sea válido
-    if (!base64 || base64.trim() === '') {
-      setDocError('El documento adjunto está vacío o corrupto.');
+    if (!item || !item.id) {
+      setDocError('El registro no tiene un identificador válido.');
       return;
     }
-    
-    // Validación básica de base64
+
     try {
-      atob(base64);
+      // El proceso main valida el documento y lo abre con el visor del sistema.
+      // El renderer ya no construye data URLs ni usa window.open.
+      const res = await inventarioApi.catalogoCum.mostrarDocumento(usuario, item.id);
+      if (!res?.ok) {
+        setDocError(res?.error || 'No se pudo abrir el documento adjunto.');
+      }
     } catch {
-      setDocError('El documento adjunto tiene un formato inválido (base64 corrupto).');
-      return;
+      setDocError('No se pudo abrir el documento adjunto.');
     }
-    
-    const esPdf = item.documento_adjunto_tipo === 'PDF';
-    const mimeType = esPdf ? 'application/pdf' : 'image/*';
-    const dataUrl = `data:${mimeType};base64,${base64}`;
-    window.open(dataUrl, '_blank');
   }
 
   async function handleQuitarDocumento(item) {

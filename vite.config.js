@@ -13,8 +13,7 @@ export default defineConfig({
       output: {
         // Separar React core en su propio chunk (cacheado por el navegador)
         manualChunks: {
-          'react-vendor': ['react', 'react-dom'],
-          'router': ['react-router-dom']
+          'react-vendor': ['react', 'react-dom']
         }
       }
     },
@@ -31,6 +30,6 @@ export default defineConfig({
   },
   // Optimizar dependencias en dev
   optimizeDeps: {
-    include: ['react', 'react-dom', 'react-router-dom']
+    include: ['react', 'react-dom']
   }
 });

@@ -86,6 +86,7 @@ export const inventarioApi = {
     crearEmpaque: (usuario, data) => window.api.catalogoCum.crearEmpaque(usuario, data),
     adjuntarDocumento: (usuario, id, data) => window.api.catalogoCum.adjuntarDocumento(usuario, id, data),
     obtenerDocumento: (usuario, id) => window.api.catalogoCum.obtenerDocumento(usuario, id),
+    mostrarDocumento: (usuario, id) => window.api.catalogoCum.mostrarDocumento(usuario, id),
     progresoActualizacion: (usuario) => window.api.catalogoCum.progresoActualizacion(usuario),
     cancelarActualizacion: (usuario) => window.api.catalogoCum.cancelarActualizacion(usuario)
   },
@@ -99,6 +100,6 @@ export const inventarioApi = {
     capturar: (usuario, datos) => window.api.firmaPad.capturar(usuario, datos)
   },
   puentes: {
-    verificarPrerrequisitos: () => window.api.puentes.verificarPrerrequisitos()
+    verificarPrerrequisitos: (usuario) => window.api.puentes.verificarPrerrequisitos(usuario)
   }
 };

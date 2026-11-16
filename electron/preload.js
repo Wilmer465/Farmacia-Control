@@ -1,8 +1,17 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+function congelarProfundo(objeto) {
+  if (!objeto || typeof objeto !== 'object' || Object.isFrozen(objeto)) return objeto;
+  Object.freeze(objeto);
+  for (const valor of Object.values(objeto)) {
+    congelarProfundo(valor);
+  }
+  return objeto;
+}
+
 // El renderer (React) NUNCA toca Node ni el backend directamente.
 // Solo puede invocar estos canales explícitos, cada uno mapeado 1:1 a un handler IPC.
-contextBridge.exposeInMainWorld('api', {
+const api = {
   auth: {
     login: (credenciales) => ipcRenderer.invoke('auth:login', credenciales),
     logout: (usuarioSesion) => ipcRenderer.invoke('auth:logout', usuarioSesion)
@@ -94,6 +103,7 @@ contextBridge.exposeInMainWorld('api', {
     crearEmpaque: (usuarioSesion, data) => ipcRenderer.invoke('catalogoCum:crearEmpaque', usuarioSesion, data),
      adjuntarDocumento: (usuarioSesion, id, data) => ipcRenderer.invoke('catalogoCum:adjuntarDocumento', usuarioSesion, id, data),
      obtenerDocumento: (usuarioSesion, id) => ipcRenderer.invoke('catalogoCum:obtenerDocumento', usuarioSesion, id),
+     mostrarDocumento: (usuarioSesion, id) => ipcRenderer.invoke('catalogoCum:mostrarDocumento', usuarioSesion, id),
      progresoActualizacion: (usuarioSesion) => ipcRenderer.invoke('catalogoCum:progresoActualizacion', usuarioSesion),
      cancelarActualizacion: (usuarioSesion) => ipcRenderer.invoke('catalogoCum:cancelarActualizacion', usuarioSesion)
    },
@@ -107,6 +117,8 @@ contextBridge.exposeInMainWorld('api', {
     capturar: (usuarioSesion, datos) => ipcRenderer.invoke('firmaPad:capturar', usuarioSesion, datos)
   },
   puentes: {
-    verificarPrerrequisitos: () => ipcRenderer.invoke('puentes:verificarPrerrequisitos')
+    verificarPrerrequisitos: (usuarioSesion) => ipcRenderer.invoke('puentes:verificarPrerrequisitos', usuarioSesion)
   }
-});
+};
+
+contextBridge.exposeInMainWorld('api', congelarProfundo(api));

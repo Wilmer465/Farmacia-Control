@@ -228,7 +228,7 @@ export default function Ordenes({ usuario, sedeActiva, params, onClearParams }) 
       {/* Formulario desplegable */}
       {puedeGestionar && mostrarFormOrden && (
         <div className="form-collapsible-wrapper">
-          <OrdenForm medicamentos={medicamentosEnSede} onCrear={handleCrear} error={error} />
+          <OrdenForm medicamentos={medicamentosEnSede} onCrear={handleCrear} error={error} usuarioSesion={usuario} />
         </div>
       )}
 

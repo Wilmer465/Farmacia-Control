@@ -74,7 +74,7 @@ export default function Usuarios({ usuario }) {
       const [resUsers, resRoles, resSedes] = await Promise.all([
         inventarioApi.usuarios.listar(usuario),
         inventarioApi.usuarios.listarRoles(usuario),
-        inventarioApi.sedes.listar()
+        inventarioApi.sedes.listar(usuario)
       ]);
 
       if (resUsers.ok) setUsuarios(resUsers.data || []);

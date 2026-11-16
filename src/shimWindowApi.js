@@ -215,6 +215,7 @@
       crearEmpaque: () => fail('Servicio no disponible fuera de Electron'),
       adjuntarDocumento: () => fail('Servicio no disponible fuera de Electron'),
       obtenerDocumento: () => fail('Servicio no disponible fuera de Electron'),
+      mostrarDocumento: () => fail('Servicio no disponible fuera de Electron'),
       progresoActualizacion: () => ok({ completado: 100 }),
       cancelarActualizacion: () => fail('Servicio no disponible fuera de Electron'),
     },

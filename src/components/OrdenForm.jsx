@@ -3,7 +3,7 @@ import DocumentacionReceptor from './DocumentacionReceptor.jsx';
 
 const lineaVacia = { medicamento_id: '', cantidad_unidades_solicitada: '' };
 
-export default function OrdenForm({ medicamentos, onCrear, error }) {
+export default function OrdenForm({ medicamentos, onCrear, error, usuarioSesion = null }) {
   const [items, setItems] = useState([{ ...lineaVacia }]);
   const [tipoDestino, setTipoDestino] = useState('LOCAL'); // 'LOCAL' | 'MUNICIPIO_VEREDA'
   const [destinoDetalle, setDestinoDetalle] = useState('');
@@ -183,6 +183,7 @@ export default function OrdenForm({ medicamentos, onCrear, error }) {
       <DocumentacionReceptor
         key={resetDoc}
         exenta={esMunicipioVereda}
+        usuarioSesion={usuarioSesion}
         onChange={setDoc}
       />
 
