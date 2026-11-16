@@ -7,9 +7,11 @@ const { restoreDatabase } = require('../database/startupRecovery');
 const { adquirirPausaSincronizacionParaMantenimiento } = require('./cloudSyncService');
 const {
   TABLAS_REQUERIDAS,
+  ESTADO_CLAVE,
   crearManifiestoRespaldo,
   leerManifiesto,
   validarContenidoRespaldo,
+  detectarEstadoClave,
   rutaManifiesto,
   setClaveManifiestoPath
 } = require('./backupManifest');
@@ -32,6 +34,20 @@ function verificarAccesoRespaldos(usuarioSesion) {
   if (!usuarioSesion || ![ROLES.SUPERADMIN, ROLES.ADMIN].includes(usuarioSesion.rol_nombre)) {
     throw new permisoService.PermisoError('Solo el Superadmin y el Administrador de sede pueden gestionar respaldos.');
   }
+}
+
+// Comprueba que la clave de firma de respaldos esté disponible ANTES de tocar
+// cualquier archivo: sin clave válida (estado LOST/CORRUPT/UNDECRYPTABLE) se
+// bloquea la creación antes de db.backup(), checkpoint o cualquier operación
+// que cree o modifique archivos.
+function verificarClaveDisponible({ carpetaRespaldos, electron, rutaClave } = {}) {
+  const estado = detectarEstadoClave({ rutaClave, carpetaRespaldos, electron });
+  if (estado.estado !== ESTADO_CLAVE.EXISTING) {
+    throw new ValidationError(
+      `No se puede firmar el respaldo: la clave de firma no está disponible (estado: ${estado.estado}). ${estado.motivo}`
+    );
+  }
+  return estado;
 }
 
 // `carpetaRespaldos()` y `rutaConfigAutoBackup()` se derivan de resolveDbPath(),
@@ -250,14 +266,49 @@ function consolidarRespaldo(rutaArchivo) {
   }
 }
 
+// `crear` es el flujo MANUAL expuesto por IPC. Siempre requiere una sesión de
+// usuario válida y valida los permisos: el renderer no puede pasar
+// `esAutomatico: true` ni un booleano para eludir la autorización. La creación
+// automática es interna y se hace con `crearRespaldoAutomatico`, privada de
+// este módulo y usada solo por el planificador.
 async function crear(usuarioSesion, opciones = {}) {
-  const esAutomatico = typeof opciones === 'boolean' ? opciones : Boolean(opciones?.esAutomatico);
-  const sedeIdSolicitada = typeof opciones === 'object' ? opciones?.sedeId : null;
+  if (!usuarioSesion) {
+    throw new ValidationError('Sesión de usuario requerida para crear un respaldo.');
+  }
+  verificarAccesoRespaldos(usuarioSesion);
 
-  if (!esAutomatico) {
-    verificarAccesoRespaldos(usuarioSesion);
+  // La clave de firma debe estar disponible ANTES de cualquier operación que
+  // toque archivos (checkpoint, backup, etc.). Si falta o está corrupta, se
+  // bloquea aquí sin crear ni modificar nada.
+  const dirRespaldos = carpetaRespaldos();
+  verificarClaveDisponible({ carpetaRespaldos: dirRespaldos, electron: opciones?.electron });
+
+  const sedeIdSolicitada = opciones && typeof opciones === 'object' ? opciones?.sedeId : null;
+
+  // db.backup() copia el archivo COMPLETO de la base de datos (todas las sedes,
+  // tablas y auditoría). No hay aislamiento real de datos por sede en la copia:
+  // un respaldo etiquetado como SEDE contendría datos de todas las sedes, no
+  // solo de la del ADMIN. Hasta que exista aislamiento real de datos, un ADMIN
+  // no puede generar un respaldo etiquetado como SEDE (su único alcance posible
+  // como administrador de sede). No se maquilla el alcance solo en el manifiesto.
+  const sedeEfectiva = permisoService.resolverSedeEfectiva(usuarioSesion, sedeIdSolicitada);
+  if (usuarioSesion.rol_nombre === ROLES.ADMIN && sedeEfectiva !== null) {
+    throw new ValidationError(
+      'No se puede crear un respaldo de alcance SEDE: la copia contiene toda la base de datos y no hay aislamiento real de datos por sede.'
+    );
   }
 
+  // esAutomatico es siempre false: el alcance se deriva de la sesión, nunca de
+  // lo que envíe el renderer.
+  return crearRespaldo(usuarioSesion, sedeIdSolicitada, false, opciones?.electron);
+}
+
+// Núcleo de creación de respaldo compartido por el flujo manual (sesión +
+// permisos validados) y por el planificador automático (sesión nula, alcance
+// global). `esAutomatico` es un parámetro de confianza: nunca se lee de opciones
+// ni se acepta del renderer. `electron` se inyecta en pruebas; en producción se
+// resuelve vía dependenciasElectron() dentro de backupManifest.
+async function crearRespaldo(usuarioSesion, sedeIdSolicitada, esAutomatico, electron) {
   const db = getDb();
   try {
     db.pragma('wal_checkpoint(FULL)');
@@ -317,7 +368,8 @@ async function crear(usuarioSesion, opciones = {}) {
         nombre,
         automatico: esAutomatico,
         sedeId: sedeEfectiva ?? null,
-        sedeNombre: sedeEfectiva ? sedeNombre : null
+        sedeNombre: sedeEfectiva ? sedeNombre : null,
+        electron
       });
     } catch (err) {
       errorManifiesto = err;
@@ -398,6 +450,13 @@ async function crear(usuarioSesion, opciones = {}) {
   };
 }
 
+// Creación automática interna (privada). Sin sesión de usuario, sin comprobación
+// de permisos y alcance global. Solo la usa el planificador de este módulo.
+async function crearRespaldoAutomatico(opciones = {}) {
+  const sedeIdSolicitada = opciones && typeof opciones === 'object' ? opciones?.sedeId : null;
+  return crearRespaldo(null, sedeIdSolicitada, true);
+}
+
 function sedeDeArchivoRespaldo(nombreArchivo) {
   const match = String(nombreArchivo || '').match(/_sede_(\d+)/);
   return match ? Number(match[1]) : null;
@@ -465,16 +524,23 @@ function auditarExitoEnStaging(stagePath, usuarioSesion, nombreArchivo, manifies
   }
 }
 
-// El nombre del archivo no acredita la sede: la sede se toma del manifiesto
-// firmado. Un ADMIN solo puede restaurar copias de su propia sede; los
-// respaldos globales siguen siendo exclusivos de SUPERADMIN.
+// Un respaldo SEDE es una copia completa de la base de datos: restaurarlo
+// revierte datos de TODAS las sedes, por lo que está bloqueado para cualquier
+// rol, incluido SUPERADMIN. Los respaldos GLOBAL solo pueden restaurarlos
+// SUPERADMIN. Esta comprobación ocurre antes de pausar la sincronización,
+// cerrar conexiones o tocar cualquier archivo (ver `restaurar`).
 function verificarPermisoRestaurar(usuarioSesion, manifiesto) {
   verificarAccesoRespaldos(usuarioSesion);
-  const sedeEfectiva = permisoService.resolverSedeEfectiva(usuarioSesion, null);
-  if (sedeEfectiva === null || sedeEfectiva === undefined) return;
-  if (manifiesto.alcance !== 'SEDE' || Number(manifiesto.sedeId) !== Number(sedeEfectiva)) {
-    throw new permisoService.PermisoError('Solo puede restaurar respaldos de su propia sede.');
+  if (manifiesto.alcance === 'SEDE') {
+    throw new permisoService.PermisoError('No se pueden restaurar respaldos de alcance SEDE: contienen la base de datos completa de todas las sedes.');
   }
+  if (manifiesto.alcance === 'GLOBAL') {
+    if (usuarioSesion.rol_nombre !== ROLES.SUPERADMIN) {
+      throw new permisoService.PermisoError('Solo el Superadmin puede restaurar respaldos de alcance GLOBAL.');
+    }
+    return;
+  }
+  throw new permisoService.PermisoError('Alcance de respaldo no válido.');
 }
 
 function mensajeRechazoRespaldo(err) {
@@ -723,7 +789,7 @@ async function verificarYEjecutarAutoBackup() {
   let nombre = null;
   try {
     console.log('[backupService] 🚀 Ejecutando respaldo automático programado...');
-    const res = await crear(null, true);
+    const res = await crearRespaldoAutomatico();
     nombre = res.nombre;
   } catch (err) {
     console.error('[backupService] ❌ Error en respaldo automático:', err);
@@ -764,6 +830,7 @@ module.exports = {
   verificarYEjecutarAutoBackup,
   setDirectorioRespaldos,
   setClaveManifiestoPath,
+  verificarClaveDisponible,
   tamanoTotalEnDisco,
   ValidationError,
   RespaldoInvalidoError

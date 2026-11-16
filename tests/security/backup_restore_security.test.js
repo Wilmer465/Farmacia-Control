@@ -22,6 +22,7 @@ const {
   sha256File
 } = require('../../backend/database/startupRecovery');
 const backupService = require('../../backend/services/backupService');
+const backupController = require('../../backend/controllers/backupController');
 const backupManifest = require('../../backend/services/backupManifest');
 const authService = require('../../backend/services/authService');
 const { registerIpcHandlers } = require('../../backend/ipcHandlers');
@@ -55,6 +56,8 @@ function crearEntorno(t, prefijo = 'restore-seguridad') {
   fs.mkdirSync(claveDir, { recursive: true });
   backupService.setDirectorioRespaldos(respaldosDir);
   backupService.setClaveManifiestoPath(path.join(claveDir, 'backup-signing.key'));
+  // Clave válida de 32 bytes para que crearManifiestoRespaldo pueda firmar.
+  fs.writeFileSync(path.join(claveDir, 'backup-signing.key'), crypto.randomBytes(32));
 
   t.after(() => {
     backupService.setDirectorioRespaldos(null);
@@ -269,24 +272,56 @@ describe('V-4.2-01 — restauración de respaldos autenticados', () => {
     assert.equal(contarTabla('marcador_ajeno'), 0);
   });
 
-  test('un ADMIN solo restaura respaldos de su sede; el global sigue bloqueado', async (t) => {
-    crearEntorno(t);
+  test('un ADMIN no puede crear respaldos SEDE (sin aislamiento real) ni restaurarlos; GLOBAL solo SUPERADMIN', async (t) => {
+    const entorno = crearEntorno(t);
     const superadmin = authService.login('wilmer', 'Wilmer465*');
     const admin = sesionAdmin(getDb());
 
-    const global = await backupService.crear(superadmin, {});
+    // Un ADMIN no puede generar un respaldo etiquetado como SEDE: db.backup()
+    // copia toda la base de datos y no hay aislamiento real de datos por sede.
     await assert.rejects(
-      () => backupService.restaurar(admin, global.nombre),
-      /Solo puede restaurar respaldos de su propia sede/i
+      () => backupService.crear(admin, {}),
+      /no hay aislamiento real de datos por sede/i
+    );
+    await assert.rejects(
+      () => backupService.crear(admin, { sedeId: 1 }),
+      /no hay aislamiento real de datos por sede/i
     );
 
-    const deSede = await backupService.crear(admin, {});
-    const listado = await backupService.listar(admin, {});
-    assert.ok(listado.some((b) => b.nombre === deSede.nombre && b.sedeId === 1 && b.restaurable));
+    // SUPERADMIN puede crear un respaldo GLOBAL y uno SEDE de una sede.
+    const global = await backupService.crear(superadmin, {});
+    assert.equal(global.sedeId, null);
+    assert.ok(global.nombre.includes('_global'));
 
-    const resultado = await backupService.restaurar(admin, deSede.nombre);
+    const deSede = await backupService.crear(superadmin, { sedeId: 1 });
+    assert.equal(deSede.sedeId, 1);
+    assert.ok(deSede.nombre.includes('_sede_'));
+
+    // ADMIN no puede restaurar GLOBAL.
+    await assert.rejects(
+      () => backupService.restaurar(admin, global.nombre),
+      /Solo el Superadmin puede restaurar respaldos de alcance GLOBAL/i
+    );
+
+    // ADMIN no puede restaurar SEDE aunque sea de su propia sede.
+    await assert.rejects(
+      () => backupService.restaurar(admin, deSede.nombre),
+      /No se pueden restaurar respaldos de alcance SEDE/i
+    );
+
+    // SUPERADMIN tampoco puede restaurar SEDE (copia completa de todas las sedes).
+    await assert.rejects(
+      () => backupService.restaurar(superadmin, deSede.nombre),
+      /No se pueden restaurar respaldos de alcance SEDE/i
+    );
+
+    // La base activa no se modificó por los rechazos.
+    assert.equal(contarSede('Sede Principal'), 1);
+
+    // Solo SUPERADMIN restaura un respaldo GLOBAL.
+    const resultado = await backupService.restaurar(superadmin, global.nombre);
     assert.equal(resultado.restaurado, true);
-    assert.equal(ultimaAuditoria('RESTAURAR_RESPALDO', 'EXITO').sede_id, 1);
+    assert.equal(ultimaAuditoria('RESTAURAR_RESPALDO', 'EXITO').usuario_id, superadmin.id);
   });
 
   test('si el manifiesto no se puede firmar, el respaldo se descarta', async (t) => {
@@ -470,5 +505,132 @@ describe('V-4.2-02 — reinicio solo después de una restauración exitosa', () 
     assert.equal(llamadas.exit, 0);
     assert.equal(contarSede('Sede Activa Sin Reinicio'), 1);
     assert.equal(contarTabla('marcador_ajeno'), 0);
+  });
+});
+
+describe('AC-4.2-01 — creación de respaldos: sin bypass de esAutomatico', () => {
+  test('enviar esAutomatico: true no crea una copia automática ni elude permisos', async (t) => {
+    const entorno = crearEntorno(t);
+    const superadmin = authService.login('wilmer', 'Wilmer465*');
+
+    const creado = await backupService.crear(superadmin, { esAutomatico: true });
+    assert.equal(creado.esAutomatico, false, 'esAutomatico debe ignorarse del renderer');
+    assert.equal(creado.sedeId, null, 'sedeId del renderer no se acepta; superadmin sin sede genera GLOBAL');
+    assert.ok(creado.nombre.includes('_global'), 'debe ser un respaldo global, nunca de sede');
+    assert.ok(!creado.nombre.includes('_auto_'), 'no debe ser automático');
+
+    // No queda un archivo automático firmado sin auditoría.
+    const archivos = fs.readdirSync(entorno.respaldosDir).filter((nombre) => nombre.endsWith('.db'));
+    assert.ok(!archivos.some((nombre) => nombre.includes('_auto_')), 'no se creó copia automática');
+
+    const auditoria = ultimaAuditoria('CREAR_RESPALDO', 'EXITO');
+    assert.ok(auditoria);
+    assert.equal(auditoria.usuario_id, superadmin.id);
+    assert.equal(auditoria.sede_id, null);
+    assert.match(auditoria.valores_nuevos, /"automatico":false/);
+  });
+
+  test('crear sin sesión de usuario es rechazado', async (t) => {
+    crearEntorno(t);
+    await assert.rejects(
+      () => backupService.crear(null, {}),
+      /Sesión de usuario requerida/
+    );
+  });
+
+  test('un ADMIN no puede forzar un respaldo global solicitando sedeId nula', async (t) => {
+    const entorno = crearEntorno(t);
+    const admin = sesionAdmin(getDb());
+
+    // Un ADMIN no puede generar ningún respaldo manual (su único alcance posible
+    // sería SEDE, y no hay aislamiento real de datos por sede).
+    await assert.rejects(
+      () => backupService.crear(admin, { sedeId: null }),
+      /no hay aislamiento real de datos por sede/i
+    );
+  });
+
+  test('un SUPERADMIN puede crear un respaldo global manual sin sede', async (t) => {
+    const entorno = crearEntorno(t);
+    const superadmin = authService.login('wilmer', 'Wilmer465*');
+
+    const creado = await backupService.crear(superadmin, {});
+    assert.equal(creado.sedeId, null);
+    assert.ok(creado.nombre.includes('_global'));
+    assert.equal(creado.esAutomatico, false);
+  });
+
+  test('backups:crear por el controlador ignora esAutomatico del renderer', async (t) => {
+    const entorno = crearEntorno(t);
+    const superadmin = authService.login('wilmer', 'Wilmer465*');
+
+    const respuesta = await backupController.crear(superadmin, { esAutomatico: true });
+    assert.equal(respuesta.ok, true);
+    assert.equal(respuesta.data.esAutomatico, false);
+    assert.equal(respuesta.data.sedeId, null);
+    assert.ok(respuesta.data.nombre);
+  });
+});
+
+describe('AC-4.2-02 — restauración por alcance: SEDE bloqueada, GLOBAL solo SUPERADMIN', () => {
+  test('un ADMIN no puede restaurar un respaldo SEDE aunque sea de su propia sede', async (t) => {
+    const entorno = crearEntorno(t);
+    const superadmin = authService.login('wilmer', 'Wilmer465*');
+    const admin = sesionAdmin(getDb());
+    await marcarBaseActiva('Sede Activa Antes De Rechazo Sede');
+
+    // El SEDE lo genera SUPERADMIN (el ADMIN ya no puede crear respaldos SEDE
+    // porque no hay aislamiento real de datos por sede).
+    const deSede = await backupService.crear(superadmin, { sedeId: 1 });
+    assert.equal(deSede.sedeId, 1);
+    const antes = contarSede('Sede Activa Antes De Rechazo Sede');
+
+    await assert.rejects(
+      () => backupService.restaurar(admin, deSede.nombre),
+      /No se pueden restaurar respaldos de alcance SEDE/i
+    );
+
+    // La base activa no se modificó: ni se pausó la sincronización, ni se cerraron
+    // conexiones, ni se tocaron archivos.
+    assert.equal(contarSede('Sede Activa Antes De Rechazo Sede'), antes);
+    assert.equal(contarTabla('marcador_ajeno'), 0);
+    assert.ok(ultimaAuditoria('RESTAURAR_RESPALDO', 'FALLIDO'));
+  });
+
+  test('un SUPERADMIN no puede restaurar un respaldo SEDE de otra sede', async (t) => {
+    const entorno = crearEntorno(t);
+    const superadmin = authService.login('wilmer', 'Wilmer465*');
+    await marcarBaseActiva('Sede Activa Antes De Rechazo Global');
+
+    const deSede = await backupService.crear(superadmin, { sedeId: 1 });
+    assert.equal(deSede.sedeId, 1);
+    const antes = contarSede('Sede Activa Antes De Rechazo Global');
+
+    await assert.rejects(
+      () => backupService.restaurar(superadmin, deSede.nombre),
+      /No se pueden restaurar respaldos de alcance SEDE/i
+    );
+    assert.equal(contarSede('Sede Activa Antes De Rechazo Global'), antes);
+    assert.equal(contarTabla('marcador_ajeno'), 0);
+  });
+
+  test('solo SUPERADMIN restaura un respaldo GLOBAL; el ADMIN es rechazado', async (t) => {
+    const entorno = crearEntorno(t);
+    const superadmin = authService.login('wilmer', 'Wilmer465*');
+    const admin = sesionAdmin(getDb());
+    await marcarBaseActiva('Sede Activa Antes De Global');
+
+    const global = await backupService.crear(superadmin, {});
+    const antes = contarSede('Sede Activa Antes De Global');
+
+    await assert.rejects(
+      () => backupService.restaurar(admin, global.nombre),
+      /Solo el Superadmin puede restaurar respaldos de alcance GLOBAL/i
+    );
+    assert.equal(contarSede('Sede Activa Antes De Global'), antes);
+
+    const resultado = await backupService.restaurar(superadmin, global.nombre);
+    assert.equal(resultado.restaurado, true);
+    assert.equal(ultimaAuditoria('RESTAURAR_RESPALDO', 'EXITO').usuario_id, superadmin.id);
   });
 });

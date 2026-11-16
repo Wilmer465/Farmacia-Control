@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, session, shell } = require('electron');
+const { app, BrowserWindow, dialog, session, shell, safeStorage } = require('electron');
 const path = require('path');
 const { registerIpcHandlers } = require('../backend/ipcHandlers');
 const { iniciarServidorHttp } = require('../backend/server');
@@ -6,6 +6,7 @@ const { seed } = require('../backend/database/seeds/seed');
 const { mantenimientoAlCerrar, resolveDbPath, closeDb, getDb } = require('../backend/database/connection');
 const { prepareDatabase, validateDatabase } = require('../backend/database/startupRecovery');
 const { iniciarPlanificadorAutoBackup } = require('../backend/services/backupService');
+const { inicializarClaveRespaldo } = require('../backend/services/backupManifest');
 const { iniciarPlanificadorCloudSync, detenerPlanificadorCloudSync } = require('../backend/services/cloudSyncService');
 const { crearContentSecurityPolicy } = require('../shared/contentSecurityPolicy');
 const { crearPoliticaNavegacion } = require('./navigationPolicy');
@@ -176,6 +177,33 @@ app.whenReady().then(async () => {
     return;
   }
 
+  // Inicializa la clave de firma de respaldos (AC-4.2-03) después de que
+  // Electron permite usar safeStorage y antes de habilitar operaciones de
+  // respaldo. Nunca genera clave si safeStorage no está disponible, ni
+  // clasifica la instalación como NEW sin evidencia de respaldos previos.
+  // Si la clave falta o está corrupta, se bloquean las operaciones de respaldo
+  // pero la aplicación sigue funcionando.
+  let claveRespaldoDisponible = true;
+  try {
+    const dirRespaldos = path.join(path.dirname(resolveDbPath()), 'backups');
+    if (
+      typeof safeStorage.isEncryptionAvailable === 'function' &&
+      safeStorage.isEncryptionAvailable()
+    ) {
+      inicializarClaveRespaldo({
+        electron: { app, safeStorage },
+        carpetaRespaldos: dirRespaldos
+      });
+    } else {
+      claveRespaldoDisponible = false;
+      console.warn('[main] safeStorage no disponible: no se inicializó la clave de respaldo; las operaciones de respaldo quedarán bloqueadas.');
+    }
+  } catch (err) {
+    claveRespaldoDisponible = false;
+    console.warn('[main] No se pudo inicializar la clave de respaldo:', err.message);
+    console.warn('[main] Las operaciones de respaldo quedan bloqueadas hasta que se disponga de una clave válida.');
+  }
+
   // Las pruebas de escritorio usan una SQLite sintética aislada y no deben
   // iniciar servicios de red o trabajos en segundo plano.
   if (process.env.NODE_ENV !== 'test') {
@@ -184,7 +212,11 @@ app.whenReady().then(async () => {
       console.error('[main] No se pudo iniciar la API HTTP de autenticacion:', err.message);
     }
 
-    iniciarPlanificadorAutoBackup();
+    // El planificador de respaldos solo arranca si hay una clave de firma
+    // disponible; de lo contrario las copias no podrían firmarse.
+    if (claveRespaldoDisponible) {
+      iniciarPlanificadorAutoBackup();
+    }
     iniciarPlanificadorCloudSync();
   }
   createWindow();

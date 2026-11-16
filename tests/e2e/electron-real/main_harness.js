@@ -322,9 +322,19 @@ async function escenarioRestoreAjeno() {
 }
 
 async function escenarioRestoreCorrupto() {
-  // Se genera un respaldo auténtico y luego se corrompe su contenido. Así el
-  // rechazo prueba la validación de huella, no la ausencia de manifiesto.
-  const creado = await backupService.crear(null, true);
+  // Se genera un respaldo auténtico mediante el mecanismo real de ejecución
+  // automática (verificarYEjecutarAutoBackup -> crearRespaldoAutomatico, privado
+  // de backupService). Nunca se expone crear(null, true) ni se salta la sesión.
+  const archivosAntes = new Set(fs.readdirSync(backupDir).filter((f) => f.endsWith('.db')));
+  fs.writeFileSync(
+    path.join(backupDir, 'backup_config.json'),
+    JSON.stringify({ habilitado: true, frecuencia: '1_HORA', ultimo_backup_auto: null }, null, 2),
+    'utf8'
+  );
+  await backupService.verificarYEjecutarAutoBackup();
+  const archivosDespues = fs.readdirSync(backupDir).filter((f) => f.endsWith('.db'));
+  const creado = { nombre: archivosDespues.find((f) => !archivosAntes.has(f)) };
+  if (!creado.nombre) throw new Error('El planificador automático no generó un respaldo.');
   const rutaCorrupta = path.join(backupDir, creado.nombre);
   fs.writeFileSync(rutaCorrupta, Buffer.from('esto no es una base sqlite valida'));
 

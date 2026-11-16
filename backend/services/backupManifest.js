@@ -13,6 +13,16 @@ const FORMATO_MANIFIESTO = 1;
 const TIPO_MANIFIESTO = 'RESPALDO_FARMACIA';
 const SUFIJO_MANIFIESTO = '.manifest.json';
 const MAX_MANIFIESTO_BYTES = 64 * 1024;
+const LONGITUD_CLAVE_BYTES = 32;
+
+// Estados del ciclo de vida de la clave de firma de respaldos (AC-4.2-03).
+const ESTADO_CLAVE = Object.freeze({
+  NEW: 'NEW', // no existe clave ni evidencia de respaldos previos: instalación nueva
+  EXISTING: 'EXISTING', // clave válida y recuperable
+  LOST: 'LOST', // falta la clave y existen respaldos o manifiestos previos
+  CORRUPT: 'CORRUPT', // existe el archivo de clave pero no es válido
+  UNDECRYPTABLE: 'UNDECRYPTABLE' // existe el archivo pero no se puede descifrar
+});
 
 // Tablas que deben existir en cualquier copia restaurable. No incluye tablas
 // opcionales ni índices: solo el núcleo estable desde las primeras migraciones.
@@ -39,6 +49,17 @@ function setClaveManifiestoPath(ruta) {
   rutaClaveOverride = ruta ? path.resolve(ruta) : null;
 }
 
+// Indica si en la carpeta dada hay respaldos (.db) o manifiestos previos (.manifest.json).
+// Se usa para decidir entre una instalación realmente nueva (NEW) y una clave perdida (LOST).
+function hayEvidenciaRespaldosPrevios(carpeta) {
+  if (!carpeta || !fs.existsSync(carpeta)) return false;
+  try {
+    return fs.readdirSync(carpeta).some((nombre) => nombre.endsWith('.db') || nombre.endsWith(SUFIJO_MANIFIESTO));
+  } catch {
+    return false;
+  }
+}
+
 function rutaManifiesto(rutaDb) {
   return `${rutaDb}${SUFIJO_MANIFIESTO}`;
 }
@@ -54,7 +75,8 @@ function serializarCanonico(valor) {
   return JSON.stringify(valor);
 }
 
-function dependenciasElectron() {
+function dependenciasElectron(electronInyectado = null) {
+  if (electronInyectado) return electronInyectado;
   try {
     const electron = require('electron');
     if (!electron || typeof electron !== 'object') return null;
@@ -82,9 +104,26 @@ function claveId(clave) {
   return crypto.createHash('sha256').update(clave).digest('hex').slice(0, 16);
 }
 
-function leerClave(ruta) {
-  const bytes = fs.readFileSync(ruta);
-  const electron = rutaClaveOverride ? null : dependenciasElectron();
+function leerClave(ruta, electronInyectado = null) {
+  let bytes;
+  try {
+    bytes = fs.readFileSync(ruta);
+  } catch {
+    throw new Error('No se pudo leer la clave local de autenticidad de respaldos.');
+  }
+
+  // Si se inyecta electron explícitamente (modo prueba), siempre se descifra
+  // con esa instancia, incluso con override de ruta. Esto permite probar el
+  // estado UNDECRYPTABLE a través de crear() sin tocar el comportamiento de
+  // producción (sin override, sin electron inyectado).
+  const electron = electronInyectado == null ? dependenciasElectron() : electronInyectado;
+
+  if (rutaClaveOverride) {
+    // Override (modo prueba/standalone): leer directamente sin safeStorage.
+    // La clave debe estar en texto plano (32 bytes) cuando hay override.
+    if (bytes.length !== LONGITUD_CLAVE_BYTES) throw new Error('La clave local de autenticidad de respaldos está corrupta.');
+    return bytes;
+  }
 
   if (electron) {
     if (typeof electron.safeStorage.isEncryptionAvailable !== 'function' || !electron.safeStorage.isEncryptionAvailable()) {
@@ -97,25 +136,27 @@ function leerClave(ruta) {
       throw new Error('No se pudo descifrar la clave local de autenticidad de respaldos.');
     }
     const clave = Buffer.from(String(texto || ''), 'base64');
-    if (clave.length !== 32) throw new Error('La clave local de autenticidad de respaldos está corrupta.');
+    if (clave.length !== LONGITUD_CLAVE_BYTES) throw new Error('La clave local de autenticidad de respaldos está corrupta.');
     return clave;
   }
 
-  if (bytes.length !== 32) throw new Error('La clave local de autenticidad de respaldos está corrupta.');
-  return bytes;
+  // Sin override y sin Electron: no hay forma segura de recuperar la clave.
+  throw new Error('No se puede recuperar la clave de respaldos fuera de Electron sin una ruta de clave explícita.');
 }
 
-function escribirClave(ruta, clave) {
+function escribirClave(ruta, clave, electronInyectado = null) {
   fs.mkdirSync(path.dirname(ruta), { recursive: true });
-  const electron = rutaClaveOverride ? null : dependenciasElectron();
+  const electron = electronInyectado === null ? dependenciasElectron() : electronInyectado;
   let bytes = clave;
-  if (electron) {
-    if (typeof electron.safeStorage.isEncryptionAvailable !== 'function' || !electron.safeStorage.isEncryptionAvailable()) {
+  // Con override de ruta (modo prueba/standalone) se guarda tal cual; en
+  // producción (sin override) se cifra con safeStorage del SO. Nunca se expone
+  // ni se persiste la clave en texto plano fuera de este entorno controlado.
+  if (!rutaClaveOverride) {
+    if (!electron || typeof electron.safeStorage.isEncryptionAvailable !== 'function' || !electron.safeStorage.isEncryptionAvailable()) {
       throw new Error('El sistema operativo no ofrece cifrado seguro para la clave de respaldos.');
     }
     bytes = electron.safeStorage.encryptString(clave.toString('base64'));
   }
-
   const fd = fs.openSync(ruta, 'wx', 0o600);
   try {
     fs.writeFileSync(fd, bytes);
@@ -125,18 +166,81 @@ function escribirClave(ruta, clave) {
   }
 }
 
-function obtenerClave({ crear = false } = {}) {
-  const ruta = rutaClaveManifiesto();
-  if (fs.existsSync(ruta)) return leerClave(ruta);
-  if (!crear) throw new Error('No existe la clave local de autenticidad de respaldos en este equipo.');
-
-  const clave = crypto.randomBytes(32);
-  try {
-    escribirClave(ruta, clave);
-  } catch (err) {
-    if (err.code !== 'EEXIST') throw err;
+function obtenerClave({ electron, rutaClave } = {}) {
+  const ruta = rutaClave || rutaClaveManifiesto();
+  if (!fs.existsSync(ruta)) {
+    throw new Error('No existe la clave local de autenticidad de respaldos en este equipo.');
   }
-  return leerClave(ruta);
+  return leerClave(ruta, electron);
+}
+
+// Detecta el estado de la clave de firma sin generar nada ni modificar archivos.
+// `carpetaRespaldos` permite distinguir una instalación realmente nueva (NEW) de
+// una clave perdida con respaldos previos (LOST). `electron` se inyecta en pruebas.
+function detectarEstadoClave({ rutaClave, carpetaRespaldos, electron } = {}) {
+  const ruta = rutaClave || rutaClaveManifiesto();
+  const existe = fs.existsSync(ruta);
+  const dir = carpetaRespaldos || path.dirname(ruta);
+  const hayEvidencia = hayEvidenciaRespaldosPrevios(dir);
+
+  if (!existe) {
+    return {
+      estado: hayEvidencia ? ESTADO_CLAVE.LOST : ESTADO_CLAVE.NEW,
+      motivo: hayEvidencia ? 'Falta la clave y existen respaldos o manifiestos previos.' : 'Instalación nueva sin evidencia de respaldos previos.',
+      rutaClave: ruta
+    };
+  }
+
+  try {
+    leerClave(ruta, electron);
+    return { estado: ESTADO_CLAVE.EXISTING, motivo: 'Clave válida y recuperable.', rutaClave: ruta };
+  } catch (err) {
+    const msg = String(err.message || '');
+    if (/descifrar|fuera de Electron/i.test(msg)) {
+      return { estado: ESTADO_CLAVE.UNDECRYPTABLE, motivo: msg, rutaClave: ruta };
+    }
+    return { estado: ESTADO_CLAVE.CORRUPT, motivo: msg, rutaClave: ruta };
+  }
+}
+
+// Genera una clave nueva SOLO cuando no existe ninguna (estado NEW). Nunca
+// sobrescribe ni elimina una clave existente. Se invoca de forma explícita en
+// la inicialización de una instalación realmente nueva.
+function generarClaveNueva({ electron, rutaClave } = {}) {
+  const ruta = rutaClave || rutaClaveManifiesto();
+  if (fs.existsSync(ruta)) {
+    throw new Error('Ya existe una clave local de respaldos. No se genera una nueva.');
+  }
+  const clave = crypto.randomBytes(LONGITUD_CLAVE_BYTES);
+  escribirClave(ruta, clave, electron);
+  return clave;
+}
+
+// Inicialización explícita de la clave de firma, invocada durante el arranque
+// de una instalación nueva, después de que Electron permita usar safeStorage.
+// Nunca se invoca dentro de crearManifiestoRespaldo.
+function inicializarClaveRespaldo({ electron, carpetaRespaldos, rutaClave } = {}) {
+  const estado = detectarEstadoClave({ rutaClave, carpetaRespaldos, electron });
+  if (estado.estado === ESTADO_CLAVE.NEW) {
+    // No se genera clave si safeStorage no esta disponible, aunque se use
+    // override de ruta: la clave debe estar protegida por el SO, nunca en texto
+    // plano sin cifrado.
+    const electronDep = electron === null ? dependenciasElectron() : electron;
+    if (
+      electronDep &&
+      typeof electronDep.safeStorage.isEncryptionAvailable === 'function' &&
+      !electronDep.safeStorage.isEncryptionAvailable()
+    ) {
+      throw new Error('No se puede inicializar la clave de respaldo: el sistema operativo no ofrece cifrado seguro para la clave de respaldos.');
+    }
+    const clave = generarClaveNueva({ electron, rutaClave });
+    return { estado: ESTADO_CLAVE.NEW, clave, motivo: 'Clave generada para una instalación nueva.' };
+  }
+  if (estado.estado === ESTADO_CLAVE.EXISTING) {
+    const clave = obtenerClave({ electron, rutaClave });
+    return { estado: ESTADO_CLAVE.EXISTING, clave, motivo: 'Clave existente recuperada.' };
+  }
+  throw new Error(`No se puede inicializar la clave de respaldo (estado: ${estado.estado}). ${estado.motivo}`);
 }
 
 function firmarManifiesto(manifiesto, clave) {
@@ -222,7 +326,7 @@ function verificarManifiesto(manifiesto, nombreArchivo, clave) {
   return true;
 }
 
-function leerManifiesto(rutaDb, nombreArchivo) {
+function leerManifiesto(rutaDb, nombreArchivo, { electron } = {}) {
   const ruta = rutaManifiesto(rutaDb);
   if (!fs.existsSync(ruta)) {
     throw new Error('El respaldo no tiene manifiesto de autenticidad.');
@@ -237,7 +341,7 @@ function leerManifiesto(rutaDb, nombreArchivo) {
   } catch {
     throw new Error('El manifiesto del respaldo está corrupto.');
   }
-  const clave = obtenerClave({ crear: false });
+  const clave = obtenerClave({ electron });
   verificarManifiesto(manifiesto, nombreArchivo, clave);
   return manifiesto;
 }
@@ -278,7 +382,8 @@ async function crearManifiestoRespaldo(rutaDb, {
   automatico = false,
   sedeId = null,
   sedeNombre = null,
-  creadoEn = new Date().toISOString()
+  creadoEn = new Date().toISOString(),
+  electron
 } = {}) {
   if (typeof nombre !== 'string' || !nombre.trim()) throw new Error('El nombre del respaldo es obligatorio.');
   if (sedeId !== null && (!Number.isInteger(sedeId) || sedeId < 1)) throw new Error('La sede del respaldo es inválida.');
@@ -286,7 +391,10 @@ async function crearManifiestoRespaldo(rutaDb, {
 
   eliminarCompanionVacio(rutaDb);
 
-  const clave = obtenerClave({ crear: true });
+  // La clave de firma solo se recupera; nunca se genera aquí. Si falta (archivo
+  // ausente o estado LOST/CORRUPT/UNDECRYPTABLE) se bloquea la creación del
+  // manifiesto sin tocar los respaldos existentes.
+  const clave = obtenerClave({ electron });
   const sha256 = await sha256File(rutaDb);
   const stats = fs.statSync(rutaDb);
   const validacion = validateDatabase(rutaDb, {
@@ -351,6 +459,8 @@ module.exports = {
   TIPO_MANIFIESTO,
   SUFIJO_MANIFIESTO,
   TABLAS_REQUERIDAS,
+  LONGITUD_CLAVE_BYTES,
+  ESTADO_CLAVE,
   setClaveManifiestoPath,
   rutaManifiesto,
   crearManifiestoRespaldo,
@@ -358,5 +468,8 @@ module.exports = {
   validarContenidoRespaldo,
   eliminarCompanionVacio,
   obtenerClave,
+  detectarEstadoClave,
+  generarClaveNueva,
+  inicializarClaveRespaldo,
   claveId
 };

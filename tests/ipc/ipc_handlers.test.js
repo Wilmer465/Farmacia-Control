@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const Database = require('better-sqlite3');
 const { createTestDb, teardownTestDb } = require('../helpers/testDb');
 const authService = require('../../backend/services/authService');
@@ -106,6 +107,8 @@ describe('FASE 4 (bis) — Respaldos: respuestas serializables por IPC', () => {
     backupService.setDirectorioRespaldos(dirTemporal);
     // La clave HMAC del manifiesto vive fuera de la carpeta de respaldos.
     backupService.setClaveManifiestoPath(path.join(dirClaveTemporal, 'backup-signing.key'));
+    // Clave válida de 32 bytes para que crearManifiestoRespaldo pueda firmar.
+    fs.writeFileSync(path.join(dirClaveTemporal, 'backup-signing.key'), crypto.randomBytes(32));
   });
 
   afterEach(() => {
